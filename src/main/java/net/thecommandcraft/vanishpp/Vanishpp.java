@@ -1,7 +1,6 @@
 package net.thecommandcraft.vanishpp;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -11,7 +10,8 @@ import java.util.UUID;
 
 public final class Vanishpp extends JavaPlugin {
 
-    private final Set<UUID> vanishedPlayers = new HashSet<>();
+    // No longer final, it will be loaded from the config in onEnable
+    private Set<UUID> vanishedPlayers;
     private ConfigManager configManager;
 
     @Override
@@ -20,15 +20,27 @@ public final class Vanishpp extends JavaPlugin {
         this.configManager = new ConfigManager(this);
         configManager.load();
 
-        // Register the /vanish command and pass an instance of this class
+        // Load vanished players from the config
+        this.vanishedPlayers = configManager.loadVanishedPlayers();
+        getLogger().info("Loaded " + vanishedPlayers.size() + " vanished players from config.");
+
+        // Register command
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
+
+        // You'll need this in the next step to handle players logging in
+        // getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
 
         getLogger().info("Vanish++ has been enabled!");
     }
 
     @Override
     public void onDisable() {
-        // Good practice to make sure everyone is visible on shutdown
+        // It's good practice to save one last time on shutdown.
+        if (configManager != null && vanishedPlayers != null) {
+            configManager.saveVanishedPlayers(vanishedPlayers);
+        }
+
+        // The rest of your onDisable is fine, it makes everyone visible for a clean server stop
         for (UUID uuid : vanishedPlayers) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
@@ -49,23 +61,27 @@ public final class Vanishpp extends JavaPlugin {
 
     public void vanish(Player player) {
         vanishedPlayers.add(player.getUniqueId());
+        // Save the updated list to the config
+        configManager.saveVanishedPlayers(vanishedPlayers);
 
-        // Hide the vanished player from all other players without the bypass permission
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
                 onlinePlayer.hidePlayer(this, player);
             }
         }
-        player.sendMessage(ChatColor.GOLD + "You are now vanished.");
+        // Use the message from the config
+        player.sendMessage(configManager.vanishMessage);
     }
 
     public void unvanish(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
+        // Save the updated list to the config
+        configManager.saveVanishedPlayers(vanishedPlayers);
 
-        // Show the player to everyone
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             onlinePlayer.showPlayer(this, player);
         }
-        player.sendMessage(ChatColor.GOLD + "You are no longer vanished.");
+        // Use the message from the config
+        player.sendMessage(configManager.unvanishMessage);
     }
 }

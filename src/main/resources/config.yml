@@ -9,3 +9,10 @@ messages:
   vanish: "&6You are now vanished."
   unvanish: "&6You are no longer vanished."
   no-permission: "&cYou do not have permission to use this command."
+
+# ----------------------------------- #
+#       Plugin Data Storage           #
+# ----------------------------------- #
+# This section is managed by the plugin. Please do not edit it manually.
+data:
+  vanished-players: []
