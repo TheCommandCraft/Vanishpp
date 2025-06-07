@@ -12,11 +12,18 @@ import java.util.UUID;
 public final class Vanishpp extends JavaPlugin {
 
     private final Set<UUID> vanishedPlayers = new HashSet<>();
+    private ConfigManager configManager;
 
     @Override
     public void onEnable() {
+        // Config Manager
+        this.configManager = new ConfigManager(this);
+        configManager.load();
+
         // Register the /vanish command and pass an instance of this class
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
+
+        getLogger().info("Vanish++ has been enabled!");
     }
 
     @Override
@@ -30,6 +37,10 @@ public final class Vanishpp extends JavaPlugin {
                 }
             }
         }
+    }
+
+    public ConfigManager getConfigManager() {
+        return configManager;
     }
 
     public boolean isVanished(Player player) {

@@ -1,0 +1,11 @@
+# ----------------------------------- #
+#       Vanish++ Configuration        #
+# ----------------------------------- #
+#
+# You can use standard Minecraft color codes with the '&' symbol.
+# For example: &c for red, &l for bold.
+
+messages:
+  vanish: "&6You are now vanished."
+  unvanish: "&6You are no longer vanished."
+  no-permission: "&cYou do not have permission to use this command."
