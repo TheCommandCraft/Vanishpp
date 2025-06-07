@@ -1,0 +1,11 @@
+Todo:
+    - Add that vanished players do not add to the playercount.
+    - Make vanishing display a fake join and leave message. (internally
+     so language doesn't mess up the effect)
+    - Fix that vanished players cannot trigger blocks like trapdoors or shriekers.
+    - Make trigger toggleable.
+    - Make vanished death messages or advancements or messages of any kind
+     triggered by the player be invisible to players without 'vanish.see'.
+
+Later:
+    - Make simple voice chat muted for players without 'vanish.see' if vanished.
