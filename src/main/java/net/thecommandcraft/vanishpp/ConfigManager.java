@@ -50,6 +50,15 @@ public class ConfigManager {
     }
 
     /**
+     * The main save method. This will be called on plugin disable.
+     * It saves all necessary data, like the vanished players list.
+     */
+    public void save() {
+        // Get the current list of vanished players from the main plugin class and save it.
+        saveVanishedPlayers(plugin.getVanishedPlayers());
+    }
+
+    /**
      * Loads the list of vanished player UUIDs from the config file.
      * @return A Set of UUIDs for players who should be vanished.
      */
@@ -82,9 +91,6 @@ public class ConfigManager {
         config.set("data.vanished-players", vanishedUUIDsAsStrings);
         plugin.saveConfig();
     }
-
-    // save() method can be removed or left empty if you don't use it for messages
-    public void save() {}
 
     private String translateColors(String text) {
         if (text == null) return "";

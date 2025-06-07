@@ -5,7 +5,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
@@ -44,19 +43,10 @@ public final class Vanishpp extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // It's good practice to save one last time on shutdown.
-        if (configManager != null && vanishedPlayers != null) {
-            configManager.saveVanishedPlayers(vanishedPlayers);
-        }
-
-        // The rest of your onDisable is fine, it makes everyone visible for a clean server stop
-        for (UUID uuid : vanishedPlayers) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                    onlinePlayer.showPlayer(this, player);
-                }
-            }
+        // Save the config one last time using our new method.
+        if (configManager != null) {
+            getLogger().info("Saving " + vanishedPlayers.size() + " vanished players to config...");
+            configManager.save();
         }
     }
 
