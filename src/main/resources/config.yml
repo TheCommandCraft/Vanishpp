@@ -13,6 +13,12 @@ messages:
   vanished-other: "&6You have vanished %player%."
   unvanished-other: "&6You have unvanished %player%."
 
+  ghost-on: "&bGhost mode enabled. You are now in spectator mode and hidden from normal players."
+  ghost-off: "&bGhost mode disabled. Returned to your original state."
+  ghost-fail-gamemode: "&cYou must be in survival, creative, or adventure mode to use /ghost."
+  ghost-fail-vanished: "&cYou cannot use /ghost while already vanished. Use /unvanish first."
+  vanish-fail-ghosted: "&cYou cannot use /vanish while in ghost mode. Use /ghost to exit."
+
   # Messages sent to players with the 'vanishpp.see' permission when a vanished player joins or leaves.
   # %player% is a placeholder for the player's name.
   silent-join: "&8[&7+&8] &7%player% has silently joined."

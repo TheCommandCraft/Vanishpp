@@ -20,19 +20,20 @@ public class VanishCommand implements CommandExecutor {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (args.length == 0) {
-            // Self-vanish
-            if (!(sender instanceof Player)) {
+            if (!(sender instanceof Player player)) {
                 sender.sendMessage("This command can only be used by players. Use /vanish <player> to target another player.");
                 return true;
             }
-            Player player = (Player) sender;
             if (!player.hasPermission("vanishpp.vanish")) {
                 player.sendMessage(configManager.noPermissionMessage);
                 return true;
             }
+            if (plugin.isGhosted(player)) {
+                player.sendMessage(configManager.vanishFailGhostedMessage);
+                return true;
+            }
             toggleVanish(player, sender);
         } else {
-            // Vanish others
             if (!sender.hasPermission("vanishpp.vanish.others")) {
                 sender.sendMessage(configManager.noPermissionMessage);
                 return true;
@@ -42,9 +43,12 @@ public class VanishCommand implements CommandExecutor {
                 sender.sendMessage(configManager.playerNotFoundMessage);
                 return true;
             }
+            if (plugin.isGhosted(target)) {
+                sender.sendMessage(configManager.vanishFailGhostedMessage.replace("You", target.getName()));
+                return true;
+            }
             toggleVanish(target, sender);
         }
-
         return true;
     }
 

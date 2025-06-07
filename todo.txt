@@ -1,5 +1,4 @@
 Todo:
-    - Add command /invisspectator or a better name for it that
 
 Later:
     - Make simple voice chat muted for players without 'vanish.see' if vanished.

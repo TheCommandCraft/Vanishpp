@@ -24,19 +24,11 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void onPaperServerListPing(PaperServerListPingEvent event) {
-        if (!plugin.getConfigManager().hideFromServerList) {
-            return;
-        }
-
-        event.getListedPlayers().removeIf(profile ->
-                plugin.getUnmodifiableVanishedPlayers().contains(profile.id())
-        );
-
+        if (!plugin.getConfigManager().hideFromServerList) return;
+        event.getListedPlayers().removeIf(profile -> plugin.getUnmodifiableVanishedPlayers().contains(profile.id()));
         int onlineVanishedCount = 0;
         for (UUID uuid : plugin.getUnmodifiableVanishedPlayers()) {
-            if (Bukkit.getPlayer(uuid) != null) {
-                onlineVanishedCount++;
-            }
+            if (Bukkit.getPlayer(uuid) != null) onlineVanishedCount++;
         }
         event.setNumPlayers(event.getNumPlayers() - onlineVanishedCount);
     }
@@ -46,7 +38,7 @@ public class PlayerListener implements Listener {
         Player joiningPlayer = event.getPlayer();
         Team vanishTeam = plugin.getVanishTeam();
 
-        // Hide other vanished players from the one joining
+        // Hide vanished players from the joining player
         for (UUID vanishedUUID : plugin.getUnmodifiableVanishedPlayers()) {
             Player vanishedPlayer = Bukkit.getPlayer(vanishedUUID);
             if (vanishedPlayer != null && vanishedPlayer.isOnline()) {
@@ -56,17 +48,22 @@ public class PlayerListener implements Listener {
             }
         }
 
-        // Handle the state of the joining player
+        // Hide ghosted players from the joining player
+        for (UUID ghostedUUID : plugin.getGhostedPlayerUUIDs()) {
+            Player ghostedPlayer = Bukkit.getPlayer(ghostedUUID);
+            if (ghostedPlayer != null && ghostedPlayer.isOnline()) {
+                if (!joiningPlayer.hasPermission("vanishpp.see")) {
+                    joiningPlayer.hidePlayer(plugin, ghostedPlayer);
+                }
+            }
+        }
+
         if (plugin.isVanished(joiningPlayer)) {
-            // Player is supposed to be vanished, re-apply effects silently
             plugin.applyVanishEffects(joiningPlayer);
             event.joinMessage(null);
-            String silentJoinMessage = plugin.getConfigManager().silentJoinMessage
-                    .replace("%player%", joiningPlayer.getName());
+            String silentJoinMessage = plugin.getConfigManager().silentJoinMessage.replace("%player%", joiningPlayer.getName());
             Bukkit.broadcast(Component.text(silentJoinMessage), "vanishpp.see");
         } else {
-            // Player is NOT supposed to be vanished. Defensively remove them from the
-            // team in case their state was changed while they were offline.
             if (vanishTeam != null && vanishTeam.hasEntry(joiningPlayer.getName())) {
                 vanishTeam.removeEntry(joiningPlayer.getName());
             }
@@ -76,15 +73,16 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player quittingPlayer = event.getPlayer();
+        if (plugin.isGhosted(quittingPlayer)) {
+            plugin.exitGhostMode(quittingPlayer);
+        }
         Team vanishTeam = plugin.getVanishTeam();
         if (vanishTeam != null && vanishTeam.hasEntry(quittingPlayer.getName())) {
             vanishTeam.removeEntry(quittingPlayer.getName());
         }
-
         if (plugin.isVanished(quittingPlayer)) {
             event.quitMessage(null);
-            String silentQuitMessage = plugin.getConfigManager().silentQuitMessage
-                    .replace("%player%", quittingPlayer.getName());
+            String silentQuitMessage = plugin.getConfigManager().silentQuitMessage.replace("%player%", quittingPlayer.getName());
             Bukkit.broadcast(Component.text(silentQuitMessage), "vanishpp.see");
         }
     }
@@ -92,13 +90,11 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
-
         if (plugin.isVanished(player)) {
             String format = plugin.getConfigManager().vanishedChatFormat
                     .replace("%prefix%", plugin.getConfigManager().vanishPrefix)
                     .replace("%player%", player.getDisplayName())
                     .replace("%message%", event.getMessage());
-
             event.setFormat(format);
             event.getRecipients().removeIf(recipient -> !recipient.hasPermission("vanishpp.see"));
         }
@@ -106,15 +102,9 @@ public class PlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (!plugin.getConfigManager().disableBlockTriggering) {
-            return;
-        }
-        if (event.getAction() != Action.PHYSICAL) {
-            return;
-        }
-        if (plugin.isVanished(event.getPlayer())) {
-            event.setCancelled(true);
-        }
+        if (!plugin.getConfigManager().disableBlockTriggering) return;
+        if (event.getAction() != Action.PHYSICAL) return;
+        if (plugin.isVanished(event.getPlayer())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -124,11 +114,7 @@ public class PlayerListener implements Listener {
             event.deathMessage(null);
             if (deathMessage != null) {
                 Bukkit.getConsoleSender().sendMessage(deathMessage);
-                for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                    if (onlinePlayer.hasPermission("vanishpp.see")) {
-                        onlinePlayer.sendMessage(deathMessage);
-                    }
-                }
+                Bukkit.broadcast(deathMessage, "vanishpp.see");
             }
         }
     }
@@ -140,11 +126,7 @@ public class PlayerListener implements Listener {
             event.message(null);
             if (advancementMessage != null) {
                 Bukkit.getConsoleSender().sendMessage(advancementMessage);
-                for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                    if (onlinePlayer.hasPermission("vanishpp.see")) {
-                        onlinePlayer.sendMessage(advancementMessage);
-                    }
-                }
+                Bukkit.broadcast(advancementMessage, "vanishpp.see");
             }
         }
     }
