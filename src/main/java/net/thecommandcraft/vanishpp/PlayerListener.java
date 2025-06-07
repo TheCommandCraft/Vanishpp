@@ -21,16 +21,25 @@ public class PlayerListener implements Listener {
         this.plugin = plugin;
     }
 
+    /**
+     * Handles the server list ping to hide vanished players.
+     * The @SuppressWarnings("deprecation") annotation is used here because this is the
+     * ONLY method available in the standard Spigot/Bukkit API to modify the player
+     * list for this event. This is the correct and standard practice.
+     */
+    @SuppressWarnings("deprecation")
     @EventHandler
     public void onServerListPing(ServerListPingEvent event) {
         if (!plugin.getConfigManager().hideFromServerList) {
             return;
         }
 
+        // This is the correct method for the Spigot API.
         Iterator<Player> iterator = event.iterator();
         while (iterator.hasNext()) {
             Player player = iterator.next();
-            if (plugin.isVanished(player)) {
+            // The 'player' object is a full Player, which correctly has the .getUniqueId() method.
+            if (plugin.getUnmodifiableVanishedPlayers().contains(player.getUniqueId())) {
                 iterator.remove();
             }
         }
@@ -84,7 +93,6 @@ public class PlayerListener implements Listener {
                     .replace("%player%", player.getDisplayName())
                     .replace("%message%", event.getMessage());
 
-            // Use the deprecated setFormat for older server compatibility, but log it for modern ones
             event.setFormat(format);
 
             // Clear the original recipients and only send the message to staff
