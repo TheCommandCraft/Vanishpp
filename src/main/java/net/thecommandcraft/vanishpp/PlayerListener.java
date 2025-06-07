@@ -10,6 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.*;
+import org.bukkit.scoreboard.Team;
 
 import java.util.UUID;
 
@@ -21,39 +22,31 @@ public class PlayerListener implements Listener {
         this.plugin = plugin;
     }
 
-    /**
-     * Handles the server list ping to hide vanished players from the list and count.
-     */
     @EventHandler
     public void onPaperServerListPing(PaperServerListPingEvent event) {
         if (!plugin.getConfigManager().hideFromServerList) {
             return;
         }
 
-        // Hide from player list sample
         event.getListedPlayers().removeIf(profile ->
                 plugin.getUnmodifiableVanishedPlayers().contains(profile.id())
         );
 
-        // Hide from player count
         int onlineVanishedCount = 0;
         for (UUID uuid : plugin.getUnmodifiableVanishedPlayers()) {
-            if (Bukkit.getPlayer(uuid) != null) { // Check if the vanished player is online
+            if (Bukkit.getPlayer(uuid) != null) {
                 onlineVanishedCount++;
             }
         }
         event.setNumPlayers(event.getNumPlayers() - onlineVanishedCount);
     }
 
-    /**
-     * Re-applies vanish status when a vanished player joins and hides other vanished
-     * players from the joining player.
-     */
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joiningPlayer = event.getPlayer();
+        Team vanishTeam = plugin.getVanishTeam();
 
-        // Hide already-vanished players from the new player
+        // Hide other vanished players from the one joining
         for (UUID vanishedUUID : plugin.getUnmodifiableVanishedPlayers()) {
             Player vanishedPlayer = Bukkit.getPlayer(vanishedUUID);
             if (vanishedPlayer != null && vanishedPlayer.isOnline()) {
@@ -63,37 +56,39 @@ public class PlayerListener implements Listener {
             }
         }
 
-        // If the joining player was vanished, re-apply their vanish state silently
+        // Handle the state of the joining player
         if (plugin.isVanished(joiningPlayer)) {
-            plugin.applyVanishEffects(joiningPlayer); // Re-apply effects without fake messages
-            event.joinMessage(null); // Hide the real join message
+            // Player is supposed to be vanished, re-apply effects silently
+            plugin.applyVanishEffects(joiningPlayer);
+            event.joinMessage(null);
             String silentJoinMessage = plugin.getConfigManager().silentJoinMessage
                     .replace("%player%", joiningPlayer.getName());
             Bukkit.broadcast(Component.text(silentJoinMessage), "vanishpp.see");
+        } else {
+            // Player is NOT supposed to be vanished. Defensively remove them from the
+            // team in case their state was changed while they were offline.
+            if (vanishTeam != null && vanishTeam.hasEntry(joiningPlayer.getName())) {
+                vanishTeam.removeEntry(joiningPlayer.getName());
+            }
         }
     }
 
-    /**
-     * Handles silent quit messages for vanished players.
-     */
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player quittingPlayer = event.getPlayer();
-        if (Bukkit.getScoreboardManager() != null && Bukkit.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished") != null) {
-            Bukkit.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished").removeEntry(quittingPlayer.getName());
+        Team vanishTeam = plugin.getVanishTeam();
+        if (vanishTeam != null && vanishTeam.hasEntry(quittingPlayer.getName())) {
+            vanishTeam.removeEntry(quittingPlayer.getName());
         }
 
         if (plugin.isVanished(quittingPlayer)) {
-            event.quitMessage(null); // Hide the real quit message
+            event.quitMessage(null);
             String silentQuitMessage = plugin.getConfigManager().silentQuitMessage
                     .replace("%player%", quittingPlayer.getName());
             Bukkit.broadcast(Component.text(silentQuitMessage), "vanishpp.see");
         }
     }
 
-    /**
-     * Formats chat for vanished players so only staff can see it.
-     */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
@@ -109,27 +104,19 @@ public class PlayerListener implements Listener {
         }
     }
 
-    /**
-     * Prevents vanished players from triggering pressure plates and tripwires.
-     */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (!plugin.getConfigManager().disableBlockTriggering) {
             return;
         }
-
         if (event.getAction() != Action.PHYSICAL) {
             return;
         }
-
         if (plugin.isVanished(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
 
-    /**
-     * Hides death messages from vanished players from the public.
-     */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
         if (plugin.isVanished(event.getPlayer()) && plugin.getConfigManager().hideDeathMessages) {
@@ -146,9 +133,6 @@ public class PlayerListener implements Listener {
         }
     }
 
-    /**
-     * Hides advancement messages from vanished players from the public.
-     */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAdvancement(PlayerAdvancementDoneEvent event) {
         if (plugin.isVanished(event.getPlayer()) && plugin.getConfigManager().hideAdvancements) {

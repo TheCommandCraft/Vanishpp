@@ -9,16 +9,32 @@ messages:
   vanish: "&6You are now vanished."
   unvanish: "&6You are no longer vanished."
   no-permission: "&cYou do not have permission to use this command."
+  player-not-found: "&cPlayer not found."
+  vanished-other: "&6You have vanished %player%."
+  unvanished-other: "&6You have unvanished %player%."
 
   # Messages sent to players with the 'vanishpp.see' permission when a vanished player joins or leaves.
   # %player% is a placeholder for the player's name.
   silent-join: "&8[&7+&8] &7%player% has silently joined."
   silent-quit: "&8[&7-&8] &7%player% has silently left."
 
-# Appearance settings for vanished players, visible only to staff with 'vanishpp.see'
+  # Notifications sent to staff (players with 'vanishpp.see') when another player's vanish state is changed.
+  # %player% is the player who vanished. %staff% is the player who executed the command.
+  staff-notify:
+    enabled: true
+    on-vanish: "&e[Staff] %player% has vanished (by %staff%)."
+    on-unvanish: "&e[Staff] %player% has unvanished (by %staff%)."
+
+# Appearance settings for vanished players
 vanish-appearance:
   # The prefix that appears before a vanished player's name in tab and above their head.
+  # This is only visible to players with 'vanishpp.see'.
   prefix: "&7[VANISHED] "
+
+  # A persistent message shown on the action bar to a vanished player.
+  action-bar:
+    enabled: true
+    text: "&bYou are currently VANISHED"
 
 # How chat from a vanished player is formatted.
 # This will only be seen by players with the 'vanishpp.see' permission.

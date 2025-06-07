@@ -3,8 +3,10 @@ package net.thecommandcraft.vanishpp;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
@@ -17,6 +19,7 @@ public final class Vanishpp extends JavaPlugin {
     private Set<UUID> vanishedPlayers;
     private ConfigManager configManager;
     private Team vanishTeam;
+    private BukkitTask actionBarTask;
 
     @Override
     public void onEnable() {
@@ -35,11 +38,19 @@ public final class Vanishpp extends JavaPlugin {
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
 
+        // Start ActionBar task
+        startActionBarTask();
+
         getLogger().info("Vanish++ has been enabled!");
     }
 
     @Override
     public void onDisable() {
+        // Stop ActionBar task
+        if (actionBarTask != null && !actionBarTask.isCancelled()) {
+            actionBarTask.cancel();
+        }
+
         // Save the config one last time
         if (configManager != null) {
             getLogger().info("Saving " + vanishedPlayers.size() + " vanished players to config...");
@@ -60,14 +71,26 @@ public final class Vanishpp extends JavaPlugin {
             this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
         }
 
-        vanishTeam.setPrefix(configManager.vanishPrefix);
+        vanishTeam.setPrefix(Component.text(configManager.vanishPrefix));
         vanishTeam.setCanSeeFriendlyInvisibles(false);
     }
 
-    /**
-     * Applies all vanish effects to a player. Called on join for vanished players.
-     * @param player The player to apply effects to.
-     */
+    private void startActionBarTask() {
+        if (!configManager.actionBarEnabled || configManager.actionBarText.isEmpty()) {
+            return;
+        }
+
+        Component actionBarComponent = Component.text(configManager.actionBarText);
+        this.actionBarTask = getServer().getScheduler().runTaskTimer(this, () -> {
+            for (UUID uuid : vanishedPlayers) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null && p.isOnline()) {
+                    p.sendActionBar(actionBarComponent);
+                }
+            }
+        }, 0L, 20L); // Run every second
+    }
+
     public void applyVanishEffects(Player player) {
         vanishedPlayers.add(player.getUniqueId());
         vanishTeam.addEntry(player.getName());
@@ -83,13 +106,9 @@ public final class Vanishpp extends JavaPlugin {
         }
     }
 
-    /**
-     * Removes all vanish effects from a player.
-     * @param player The player to remove effects from.
-     */
     public void removeVanishEffects(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
-        player.setAffectsSpawning(true); // Always reset this state
+        player.setAffectsSpawning(true);
 
         if (vanishTeam != null && vanishTeam.hasEntry(player.getName())) {
             vanishTeam.removeEntry(player.getName());
@@ -100,11 +119,7 @@ public final class Vanishpp extends JavaPlugin {
         }
     }
 
-    /**
-     * Called by the command to make a player vanish, including messages.
-     * @param player The player to vanish.
-     */
-    public void vanish(Player player) {
+    public void vanish(Player player, CommandSender executor) {
         applyVanishEffects(player);
         player.sendMessage(configManager.vanishMessage);
 
@@ -116,13 +131,16 @@ public final class Vanishpp extends JavaPlugin {
                 }
             }
         }
+
+        if (configManager.staffNotifyEnabled) {
+            String notification = configManager.staffVanishMessage
+                    .replace("%player%", player.getName())
+                    .replace("%staff%", executor.getName());
+            Bukkit.broadcast(Component.text(notification), "vanishpp.see");
+        }
     }
 
-    /**
-     * Called by the command to make a player unvanish, including messages.
-     * @param player The player to unvanish.
-     */
-    public void unvanish(Player player) {
+    public void unvanish(Player player, CommandSender executor) {
         removeVanishEffects(player);
         player.sendMessage(configManager.unvanishMessage);
 
@@ -133,6 +151,13 @@ public final class Vanishpp extends JavaPlugin {
                     onlinePlayer.sendMessage(joinMessage);
                 }
             }
+        }
+
+        if (configManager.staffNotifyEnabled) {
+            String notification = configManager.staffUnvanishMessage
+                    .replace("%player%", player.getName())
+                    .replace("%staff%", executor.getName());
+            Bukkit.broadcast(Component.text(notification), "vanishpp.see");
         }
     }
 
@@ -150,5 +175,9 @@ public final class Vanishpp extends JavaPlugin {
 
     public Set<UUID> getRawVanishedPlayers() {
         return vanishedPlayers;
+    }
+
+    public Team getVanishTeam() {
+        return vanishTeam;
     }
 }

@@ -1,9 +1,4 @@
-Todo (-configurable means that it should be configurable in the plugins config):
-    - After restart fix prefix for vanished players so remove if not vanished
-    - Make vanish syntax so /vanish vanishes self but if with arg the player in the arg is vanished.
-    - Add that if vanished it displays in the action bar. -configurable
-    - Add that all vanish.see players are notified if someone vanishes. -configurable
-
+Todo:
     - Add command /invisspectator or a better name for it that
 
 Later:

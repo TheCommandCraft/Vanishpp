@@ -7,13 +7,16 @@ description: The better vanish solution!
 
 commands:
   vanish:
-    description: Toggles your vanish state.
-    usage: /vanish
+    description: Toggles your or another player's vanish state.
+    usage: /vanish [player]
     aliases: [ v ]
 
 permissions:
   vanishpp.vanish:
-    description: Allows a player to use the /vanish command.
+    description: Allows a player to use the /vanish command on themselves.
+    default: op
+  vanishpp.vanish.others:
+    description: Allows a player to use the /vanish command on other players.
     default: op
   vanishpp.see:
     description: Allows a player to see vanished players, their chat, and silent join/quit messages.
