@@ -52,24 +52,22 @@ public final class Vanishpp extends JavaPlugin {
 
     private void setupVanishTeam() {
         Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished"); // Use a unique name
+        this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
 
         if (this.vanishTeam == null) {
             this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
         }
 
-        // Configure the team's appearance
         vanishTeam.setPrefix(configManager.vanishPrefix);
         vanishTeam.setCanSeeFriendlyInvisibles(false);
     }
 
     public void vanish(Player player) {
         vanishedPlayers.add(player.getUniqueId());
+        // No save call here - saving is handled onDisable
 
-        // Add to scoreboard team for prefix
         vanishTeam.addEntry(player.getName());
 
-        // Hide from non-staff
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
                 onlinePlayer.hidePlayer(this, player);
@@ -80,13 +78,12 @@ public final class Vanishpp extends JavaPlugin {
 
     public void unvanish(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
+        // No save call here - saving is handled onDisable
 
-        // Remove from scoreboard team
-        if (vanishTeam.hasEntry(player.getName())) {
+        if (vanishTeam != null && vanishTeam.hasEntry(player.getName())) {
             vanishTeam.removeEntry(player.getName());
         }
 
-        // Show to everyone
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             onlinePlayer.showPlayer(this, player);
         }
@@ -105,9 +102,6 @@ public final class Vanishpp extends JavaPlugin {
         return Collections.unmodifiableSet(vanishedPlayers);
     }
 
-    /**
-     * Internal method to give the ConfigManager the mutable set for saving.
-     */
     public Set<UUID> getRawVanishedPlayers() {
         return vanishedPlayers;
     }

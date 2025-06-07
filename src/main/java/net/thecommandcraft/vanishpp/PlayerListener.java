@@ -1,5 +1,7 @@
 package net.thecommandcraft.vanishpp;
 
+// IMPORT THE CORRECT PAPER-SPECIFIC EVENT
+import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -8,9 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.server.ServerListPingEvent;
 
-import java.util.Iterator;
 import java.util.UUID;
 
 public class PlayerListener implements Listener {
@@ -22,44 +22,38 @@ public class PlayerListener implements Listener {
     }
 
     /**
-     * Handles the server list ping to hide vanished players.
-     * The @SuppressWarnings("deprecation") annotation is used here because this is the
-     * ONLY method available in the standard Spigot/Bukkit API to modify the player
-     * list for this event. This is the correct and standard practice.
+     * Handles the server list ping using the modern, Paper-specific event and method.
+     * This uses event.getPlayerProfiles() which is the non-deprecated replacement
+     * for event.getPlayerSample() in recent Paper versions.
      */
-    @SuppressWarnings("deprecation")
     @EventHandler
-    public void onServerListPing(ServerListPingEvent event) {
+    public void onPaperServerListPing(PaperServerListPingEvent event) {
         if (!plugin.getConfigManager().hideFromServerList) {
             return;
         }
 
-        // This is the correct method for the Spigot API.
-        Iterator<Player> iterator = event.iterator();
-        while (iterator.hasNext()) {
-            Player player = iterator.next();
-            // The 'player' object is a full Player, which correctly has the .getUniqueId() method.
-            if (plugin.getUnmodifiableVanishedPlayers().contains(player.getUniqueId())) {
-                iterator.remove();
-            }
-        }
+        // Use getPlayerProfiles(), the new non-deprecated method in the Paper API.
+        // It returns a mutable List<PlayerProfile> that we can modify directly.
+        event.getListedPlayers().removeIf(profile ->
+                plugin.getUnmodifiableVanishedPlayers().contains(profile.id())
+        );
     }
+
+    // The rest of your listener class remains unchanged.
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joiningPlayer = event.getPlayer();
 
-        // Hide already-vanished players from the player who just joined
         for (UUID vanishedUUID : plugin.getUnmodifiableVanishedPlayers()) {
             Player vanishedPlayer = Bukkit.getPlayer(vanishedUUID);
-            if (vanishedPlayer != null) {
+            if (vanishedPlayer != null && vanishedPlayer.isOnline()) {
                 if (!joiningPlayer.hasPermission("vanishpp.see")) {
                     joiningPlayer.hidePlayer(plugin, vanishedPlayer);
                 }
             }
         }
 
-        // Check if the joining player themselves should be vanished
         if (plugin.isVanished(joiningPlayer)) {
             plugin.vanish(joiningPlayer);
             event.setJoinMessage(null);
@@ -72,8 +66,9 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player quittingPlayer = event.getPlayer();
-        // Safety check to remove player from team on quit, preventing ghost prefixes.
-        Bukkit.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished").removeEntry(quittingPlayer.getName());
+        if (Bukkit.getScoreboardManager() != null && Bukkit.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished") != null) {
+            Bukkit.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished").removeEntry(quittingPlayer.getName());
+        }
 
         if (plugin.isVanished(quittingPlayer)) {
             event.setQuitMessage(null);
@@ -94,8 +89,6 @@ public class PlayerListener implements Listener {
                     .replace("%message%", event.getMessage());
 
             event.setFormat(format);
-
-            // Clear the original recipients and only send the message to staff
             event.getRecipients().removeIf(recipient -> !recipient.hasPermission("vanishpp.see"));
         }
     }
