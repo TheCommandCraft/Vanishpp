@@ -1,0 +1,6 @@
+name: Vanishpp
+version: '1.0-SNAPSHOT'
+main: net.thecommandcraft.vanishpp.Vanishpp
+api-version: '1.21'
+authors: [ tcc ]
+description: The better vanish solution!
