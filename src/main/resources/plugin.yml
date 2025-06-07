@@ -11,7 +11,7 @@ commands:
     usage: /vanish [player]
     aliases: [ v ]
   ghost:
-    description: Toggles ghost mode (vanish + spectator).
+    description: Toggles ghost mode (hidden spectator mode).
     usage: /ghost
     aliases: [ g ]
 
@@ -26,5 +26,8 @@ permissions:
     description: Allows a player to see vanished players, their chat, and silent join/quit messages.
     default: op
   vanishpp.ghost:
-    description: Allows a player to use the /ghost command to enter spectator mode while vanished.
+    description: Allows a player to use the /ghost command to enter hidden spectator mode.
+    default: op
+  vanishpp.update-on-op:
+    description: Internal permission to trigger visibility updates on OP change. Granted by default to those with vanishpp.see.
     default: op

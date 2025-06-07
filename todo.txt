@@ -1,4 +1,9 @@
 Todo:
+    - Add that if someone is opd or deopd it updates what they see immdedeatly.
+    - Fix that in ghost mode name is still in tab and player list and count but its not italic like when in spectator mode so players do not notice.
+    - Make it configurable if ghost teleports you back to where you were after deactivation standard: false and make it save that point so it lasts if the server restarts or you log off.
+    - Like saving their pos make ghosted players also be saved like vanished ones.
+    - Fix messages: /unvanish is not a thing.
 
 Later:
     - Make simple voice chat muted for players without 'vanish.see' if vanished.

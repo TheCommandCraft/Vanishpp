@@ -10,8 +10,10 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.*;
-import org.bukkit.scoreboard.Team;
+import org.bukkit.event.server.ServerCommandEvent;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 public class PlayerListener implements Listener {
@@ -22,65 +24,114 @@ public class PlayerListener implements Listener {
         this.plugin = plugin;
     }
 
+    /**
+     * When a player runs a command, check if it's /op or /deop and update visibility.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
+        handleOpCommand(event.getMessage());
+    }
+
+    /**
+     * When the console runs a command, check if it's op or deop and update visibility.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onServerCommand(ServerCommandEvent event) {
+        handleOpCommand(event.getCommand());
+    }
+
+    /**
+     * Helper method to parse op/deop commands and trigger a visibility update.
+     * @param command The full command string.
+     */
+    private void handleOpCommand(String command) {
+        String lowerCaseCommand = command.toLowerCase().trim();
+        // Remove leading slash if present
+        if (lowerCaseCommand.startsWith("/")) {
+            lowerCaseCommand = lowerCaseCommand.substring(1);
+        }
+
+        String[] parts = lowerCaseCommand.split("\\s+");
+        if (parts.length < 2) return;
+
+        String commandLabel = parts[0];
+        if (commandLabel.equals("op") || commandLabel.equals("deop")) {
+            String playerName = parts[1];
+            Player target = Bukkit.getPlayer(playerName);
+
+            // If the player is online, schedule a delayed task to update visibility.
+            // The delay gives the server a moment to apply the permission change.
+            if (target != null) {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    // Update visibility for all players, as the target's ability to see has changed.
+                    for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                        plugin.updatePlayerVisibility(onlinePlayer);
+                    }
+                });
+            }
+        }
+    }
+
     @EventHandler
     public void onPaperServerListPing(PaperServerListPingEvent event) {
         if (!plugin.getConfigManager().hideFromServerList) return;
-        event.getListedPlayers().removeIf(profile -> plugin.getUnmodifiableVanishedPlayers().contains(profile.id()));
-        int onlineVanishedCount = 0;
-        for (UUID uuid : plugin.getUnmodifiableVanishedPlayers()) {
-            if (Bukkit.getPlayer(uuid) != null) onlineVanishedCount++;
+
+        Set<UUID> hiddenPlayers = new HashSet<>(plugin.getRawVanishedPlayers());
+        hiddenPlayers.addAll(plugin.getRawGhostStates().keySet());
+
+        event.getListedPlayers().removeIf(profile -> hiddenPlayers.contains(profile.id()));
+
+        int onlineHiddenCount = 0;
+        for (UUID uuid : hiddenPlayers) {
+            if (Bukkit.getPlayer(uuid) != null) {
+                onlineHiddenCount++;
+            }
         }
-        event.setNumPlayers(event.getNumPlayers() - onlineVanishedCount);
+        event.setNumPlayers(event.getNumPlayers() - onlineHiddenCount);
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joiningPlayer = event.getPlayer();
-        Team vanishTeam = plugin.getVanishTeam();
 
-        // Hide vanished players from the joining player
-        for (UUID vanishedUUID : plugin.getUnmodifiableVanishedPlayers()) {
-            Player vanishedPlayer = Bukkit.getPlayer(vanishedUUID);
-            if (vanishedPlayer != null && vanishedPlayer.isOnline()) {
-                if (!joiningPlayer.hasPermission("vanishpp.see")) {
-                    joiningPlayer.hidePlayer(plugin, vanishedPlayer);
-                }
-            }
+        // Re-apply persistent ghost mode first
+        if (plugin.isGhosted(joiningPlayer)) {
+            plugin.enterGhostMode(joiningPlayer);
         }
 
-        // Hide ghosted players from the joining player
-        for (UUID ghostedUUID : plugin.getGhostedPlayerUUIDs()) {
-            Player ghostedPlayer = Bukkit.getPlayer(ghostedUUID);
-            if (ghostedPlayer != null && ghostedPlayer.isOnline()) {
-                if (!joiningPlayer.hasPermission("vanishpp.see")) {
-                    joiningPlayer.hidePlayer(plugin, ghostedPlayer);
-                }
-            }
-        }
-
+        // Re-apply persistent vanish mode
         if (plugin.isVanished(joiningPlayer)) {
-            plugin.applyVanishEffects(joiningPlayer);
+            // Use the player as the executor since there isn't one on join
+            plugin.applyVanishEffects(joiningPlayer, joiningPlayer);
             event.joinMessage(null);
             String silentJoinMessage = plugin.getConfigManager().silentJoinMessage.replace("%player%", joiningPlayer.getName());
             Bukkit.broadcast(Component.text(silentJoinMessage), "vanishpp.see");
         } else {
-            if (vanishTeam != null && vanishTeam.hasEntry(joiningPlayer.getName())) {
-                vanishTeam.removeEntry(joiningPlayer.getName());
+            // Defensively remove from vanish team if they aren't supposed to be vanished
+            if (plugin.getVanishTeam().hasEntry(joiningPlayer.getName())) {
+                plugin.getVanishTeam().removeEntry(joiningPlayer.getName());
             }
         }
+
+        // Update visibility for all players now that a new player is online
+        Bukkit.getOnlinePlayers().forEach(plugin::updatePlayerVisibility);
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player quittingPlayer = event.getPlayer();
+
+        // Do not call exitGhostMode here as we want the state to persist.
+        // Just remove from the scoreboard team to prevent issues.
         if (plugin.isGhosted(quittingPlayer)) {
-            plugin.exitGhostMode(quittingPlayer);
-        }
-        Team vanishTeam = plugin.getVanishTeam();
-        if (vanishTeam != null && vanishTeam.hasEntry(quittingPlayer.getName())) {
-            vanishTeam.removeEntry(quittingPlayer.getName());
+            if (plugin.getGhostTeam().hasEntry(quittingPlayer.getName())) {
+                plugin.getGhostTeam().removeEntry(quittingPlayer.getName());
+            }
         }
         if (plugin.isVanished(quittingPlayer)) {
+            if (plugin.getVanishTeam().hasEntry(quittingPlayer.getName())) {
+                plugin.getVanishTeam().removeEntry(quittingPlayer.getName());
+            }
             event.quitMessage(null);
             String silentQuitMessage = plugin.getConfigManager().silentQuitMessage.replace("%player%", quittingPlayer.getName());
             Bukkit.broadcast(Component.text(silentQuitMessage), "vanishpp.see");

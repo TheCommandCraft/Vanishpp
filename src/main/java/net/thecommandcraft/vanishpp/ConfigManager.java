@@ -1,12 +1,14 @@
 package net.thecommandcraft.vanishpp;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class ConfigManager {
@@ -14,35 +16,18 @@ public class ConfigManager {
     private final Vanishpp plugin;
     private FileConfiguration config;
 
-    // Message and format variables
-    public String vanishMessage;
-    public String unvanishMessage;
-    public String noPermissionMessage;
-    public String playerNotFoundMessage;
-    public String vanishedOtherMessage;
-    public String unvanishedOtherMessage;
-    public String silentJoinMessage;
-    public String silentQuitMessage;
-    public String vanishPrefix;
-    public String vanishedChatFormat;
-    public String actionBarText;
-    public String staffVanishMessage;
-    public String staffUnvanishMessage;
-    public String ghostOnMessage;
-    public String ghostOffMessage;
-    public String ghostFailGamemodeMessage;
-    public String ghostFailVanishMessage;
-    public String vanishFailGhostedMessage;
+    // Messages
+    public String vanishMessage, unvanishMessage, noPermissionMessage, playerNotFoundMessage,
+            vanishedOtherMessage, unvanishedOtherMessage, silentJoinMessage, silentQuitMessage,
+            staffVanishMessage, staffUnvanishMessage, ghostOnMessage, ghostOffMessage,
+            ghostFailGamemodeMessage, ghostFailVanishMessage, vanishFailGhostedMessage;
 
-    // Feature toggles
-    public boolean hideFromServerList;
-    public boolean fakeLeaveMessage;
-    public boolean fakeJoinMessage;
-    public boolean disableBlockTriggering;
-    public boolean hideDeathMessages;
-    public boolean hideAdvancements;
-    public boolean actionBarEnabled;
-    public boolean staffNotifyEnabled;
+    // Formatting
+    public String vanishPrefix, vanishedChatFormat, actionBarText;
+
+    // Toggles
+    public boolean hideFromServerList, fakeLeaveMessage, fakeJoinMessage, disableBlockTriggering,
+            hideDeathMessages, hideAdvancements, actionBarEnabled, staffNotifyEnabled, ghostTeleportBack;
 
     public ConfigManager(Vanishpp plugin) {
         this.plugin = plugin;
@@ -51,35 +36,6 @@ public class ConfigManager {
     public void load() {
         plugin.saveDefaultConfig();
         config = plugin.getConfig();
-
-        // --- Set Defaults ---
-        config.addDefault("messages.vanish", "&6You are now vanished.");
-        config.addDefault("messages.unvanish", "&6You are no longer vanished.");
-        config.addDefault("messages.no-permission", "&cYou do not have permission to use this command.");
-        config.addDefault("messages.player-not-found", "&cPlayer not found.");
-        config.addDefault("messages.vanished-other", "&6You have vanished %player%.");
-        config.addDefault("messages.unvanished-other", "&6You have unvanished %player%.");
-        config.addDefault("messages.ghost-on", "&bGhost mode enabled. You are now in spectator mode and hidden from normal players.");
-        config.addDefault("messages.ghost-off", "&bGhost mode disabled. Returned to your original state.");
-        config.addDefault("messages.ghost-fail-gamemode", "&cYou must be in survival, creative, or adventure mode to use /ghost.");
-        config.addDefault("messages.ghost-fail-vanished", "&cYou cannot use /ghost while already vanished. Use /unvanish first.");
-        config.addDefault("messages.vanish-fail-ghosted", "&cYou cannot use /vanish while in ghost mode. Use /ghost to exit.");
-        config.addDefault("messages.silent-join", "&8[&7+&8] &7%player% has silently joined.");
-        config.addDefault("messages.silent-quit", "&8[&7-&8] &7%player% has silently left.");
-        config.addDefault("messages.staff-notify.enabled", true);
-        config.addDefault("messages.staff-notify.on-vanish", "&e[Staff] %player% has vanished (by %staff%).");
-        config.addDefault("messages.staff-notify.on-unvanish", "&e[Staff] %player% has unvanished (by %staff%).");
-        config.addDefault("vanish-appearance.prefix", "&7[VANISHED] ");
-        config.addDefault("vanish-appearance.action-bar.enabled", true);
-        config.addDefault("vanish-appearance.action-bar.text", "&bYou are currently VANISHED");
-        config.addDefault("chat-format.vanished-player-format", "%prefix%&7%player%: %message%");
-        config.addDefault("vanish-effects.hide-from-server-list", true);
-        config.addDefault("vanish-effects.fake-leave-message", true);
-        config.addDefault("vanish-effects.fake-join-message", true);
-        config.addDefault("vanish-effects.disable-block-triggering", true);
-        config.addDefault("hide-announcements.death-messages", true);
-        config.addDefault("hide-announcements.advancements", true);
-        config.addDefault("data.vanished-players", new HashSet<String>());
 
         config.options().copyDefaults(true);
         plugin.saveConfig();
@@ -105,6 +61,7 @@ public class ConfigManager {
         vanishedChatFormat = translateColors(config.getString("chat-format.vanished-player-format"));
         staffNotifyEnabled = config.getBoolean("messages.staff-notify.enabled");
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
+        ghostTeleportBack = config.getBoolean("ghost-mode.teleport-back-on-exit");
         hideFromServerList = config.getBoolean("vanish-effects.hide-from-server-list");
         fakeLeaveMessage = config.getBoolean("vanish-effects.fake-leave-message");
         fakeJoinMessage = config.getBoolean("vanish-effects.fake-join-message");
@@ -115,32 +72,81 @@ public class ConfigManager {
 
     public void save() {
         saveVanishedPlayers(plugin.getRawVanishedPlayers());
-    }
-
-    public Set<UUID> loadVanishedPlayers() {
-        List<String> vanishedUUIDsAsStrings = config.getStringList("data.vanished-players");
-        Set<UUID> vanishedUUIDs = new HashSet<>();
-        for (String uuidString : vanishedUUIDsAsStrings) {
-            try {
-                vanishedUUIDs.add(UUID.fromString(uuidString));
-            } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("Could not parse UUID from config: " + uuidString);
-            }
-        }
-        return vanishedUUIDs;
-    }
-
-    private void saveVanishedPlayers(Set<UUID> vanishedPlayers) {
-        List<String> vanishedUUIDsAsStrings = vanishedPlayers.stream()
-                .map(UUID::toString)
-                .collect(Collectors.toList());
-
-        config.set("data.vanished-players", vanishedUUIDsAsStrings);
+        saveGhostStates(plugin.getRawGhostStates());
         plugin.saveConfig();
     }
 
+    public Set<UUID> loadVanishedPlayers() {
+        return config.getStringList("data.vanished-players").stream()
+                .map(uuidString -> {
+                    try { return UUID.fromString(uuidString); }
+                    catch (IllegalArgumentException e) {
+                        plugin.getLogger().warning("Could not parse UUID from vanished-players: " + uuidString);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    private void saveVanishedPlayers(Set<UUID> vanishedPlayers) {
+        List<String> uuids = vanishedPlayers.stream().map(UUID::toString).collect(Collectors.toList());
+        config.set("data.vanished-players", uuids);
+    }
+
+    public Map<UUID, Vanishpp.GhostState> loadGhostStates() {
+        Map<UUID, Vanishpp.GhostState> states = new HashMap<>();
+        ConfigurationSection section = config.getConfigurationSection("data.ghost-states");
+        if (section == null) return states;
+
+        for (String uuidString : section.getKeys(false)) {
+            try {
+                UUID uuid = UUID.fromString(uuidString);
+                ConfigurationSection stateSection = section.getConfigurationSection(uuidString);
+                if (stateSection == null) continue;
+
+                GameMode gameMode = GameMode.valueOf(stateSection.getString("gamemode", "SURVIVAL"));
+                World world = Bukkit.getWorld(stateSection.getString("location.world", "world"));
+                if (world == null) {
+                    plugin.getLogger().warning("Could not find world for ghosted player's location: " + uuidString + ". Using default world spawn.");
+                    world = Bukkit.getWorlds().get(0);
+                }
+                Location location = new Location(
+                        world,
+                        stateSection.getDouble("location.x"),
+                        stateSection.getDouble("location.y"),
+                        stateSection.getDouble("location.z"),
+                        (float) stateSection.getDouble("location.yaw"),
+                        (float) stateSection.getDouble("location.pitch")
+                );
+                states.put(uuid, new Vanishpp.GhostState(gameMode, location));
+            } catch (Exception e) {
+                plugin.getLogger().warning("Could not parse ghost state for " + uuidString + ": " + e.getMessage());
+            }
+        }
+        return states;
+    }
+
+    private void saveGhostStates(Map<UUID, Vanishpp.GhostState> ghostStates) {
+        // Create a fresh section to avoid leftover data
+        config.createSection("data.ghost-states");
+        ConfigurationSection section = config.getConfigurationSection("data.ghost-states");
+
+        for (Map.Entry<UUID, Vanishpp.GhostState> entry : ghostStates.entrySet()) {
+            String uuid = entry.getKey().toString();
+            Vanishpp.GhostState state = entry.getValue();
+            String path = uuid; // Relative to the new section
+            section.set(path + ".gamemode", state.gameMode().name());
+            section.set(path + ".location.world", state.location().getWorld().getName());
+            section.set(path + ".location.x", state.location().getX());
+            section.set(path + ".location.y", state.location().getY());
+            section.set(path + ".location.z", state.location().getZ());
+            section.set(path + ".location.yaw", state.location().getYaw());
+            section.set(path + ".location.pitch", state.location().getPitch());
+        }
+    }
+
     private String translateColors(String text) {
-        if (text == null) return "";
-        return ChatColor.translateAlternateColorCodes('&', text);
+        return text == null ? "" : ChatColor.translateAlternateColorCodes('&', text);
     }
 }

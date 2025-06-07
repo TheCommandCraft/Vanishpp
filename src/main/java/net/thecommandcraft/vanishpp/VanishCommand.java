@@ -54,12 +54,12 @@ public class VanishCommand implements CommandExecutor {
 
     private void toggleVanish(Player target, CommandSender executor) {
         if (plugin.isVanished(target)) {
-            plugin.unvanish(target, executor);
+            plugin.removeVanishEffects(target, executor);
             if (!target.equals(executor)) {
                 executor.sendMessage(configManager.unvanishedOtherMessage.replace("%player%", target.getName()));
             }
         } else {
-            plugin.vanish(target, executor);
+            plugin.applyVanishEffects(target, executor);
             if (!target.equals(executor)) {
                 executor.sendMessage(configManager.vanishedOtherMessage.replace("%player%", target.getName()));
             }
