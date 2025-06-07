@@ -1,0 +1,80 @@
+# ----------------------------------- #
+#       Vanish++ Configuration        #
+# ----------------------------------- #
+#
+# You can use standard Minecraft color codes with the '&' symbol.
+# For example: &c for red, &l for bold.
+
+messages:
+  vanish: "&6You are now vanished."
+  unvanish: "&6You are no longer vanished."
+  no-permission: "&cYou do not have permission to use this command."
+  player-not-found: "&cPlayer not found."
+  vanished-other: "&6You have vanished %player%."
+  unvanished-other: "&6You have unvanished %player%."
+
+  ghost-on: "&bGhost mode enabled. You are now in spectator mode and hidden from normal players."
+  ghost-off: "&bGhost mode disabled. Returned to your original state."
+  ghost-fail-gamemode: "&cYou must be in survival, creative, or adventure mode to use /ghost."
+  ghost-fail-vanished: "&cYou cannot use /ghost while already vanished. Use /unvanish first."
+  vanish-fail-ghosted: "&cYou cannot use /vanish while in ghost mode. Use /ghost to exit."
+
+  # Messages sent to players with the 'vanishpp.see' permission when a vanished player joins or leaves.
+  # %player% is a placeholder for the player's name.
+  silent-join: "&8[&7+&8] &7%player% has silently joined."
+  silent-quit: "&8[&7-&8] &7%player% has silently left."
+
+  # Notifications sent to staff (players with 'vanishpp.see') when another player's vanish state is changed.
+  # %player% is the player who vanished. %staff% is the player who executed the command.
+  staff-notify:
+    enabled: true
+    on-vanish: "&e[Staff] %player% has vanished (by %staff%)."
+    on-unvanish: "&e[Staff] %player% has unvanished (by %staff%)."
+
+# Appearance settings for vanished players
+vanish-appearance:
+  # The prefix that appears before a vanished player's name in tab and above their head.
+  # This is only visible to players with 'vanishpp.see'.
+  prefix: "&7[VANISHED] "
+
+  # A persistent message shown on the action bar to a vanished player.
+  action-bar:
+    enabled: true
+    text: "&bYou are currently VANISHED"
+
+# How chat from a vanished player is formatted.
+# This will only be seen by players with the 'vanishpp.see' permission.
+chat-format:
+  # Placeholders: %prefix%, %player%, %message%
+  vanished-player-format: "%prefix%&7%player%: %message%"
+
+# General effects applied to vanished players.
+vanish-effects:
+  # If true, vanished players will not appear in the player count or the
+  # player list when someone pings the server in the multiplayer menu.
+  hide-from-server-list: true
+
+  # If true, a fake "Player left the game" message will be shown to normal players when someone vanishes.
+  # This uses the server's own translation for the message.
+  fake-leave-message: true
+
+  # If true, a fake "Player joined the game" message will be shown to normal players when someone un-vanishes.
+  # This uses the server's own translation for the message.
+  fake-join-message: true
+
+  # If true, vanished players will not trigger pressure plates, tripwires, sculk sensors, or affect mob spawning.
+  disable-block-triggering: true
+
+# What messages/announcements from vanished players should be hidden from normal players.
+# These will still be visible to players with the 'vanishpp.see' permission.
+hide-announcements:
+  death-messages: true
+  advancements: true
+
+
+# ----------------------------------- #
+#       Plugin Data Storage           #
+# ----------------------------------- #
+# This section is managed by the plugin. Please do not edit it manually.
+data:
+  vanished-players: []

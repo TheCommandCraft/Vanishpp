@@ -1,6 +1,30 @@
 name: Vanishpp
-version: '1.0-SNAPSHOT'
+version: '1.0'
 main: net.thecommandcraft.vanishpp.Vanishpp
 api-version: '1.21'
 authors: [ tcc ]
 description: The better vanish solution!
+
+commands:
+  vanish:
+    description: Toggles your or another player's vanish state.
+    usage: /vanish [player]
+    aliases: [ v ]
+  ghost:
+    description: Toggles ghost mode (vanish + spectator).
+    usage: /ghost
+    aliases: [ g ]
+
+permissions:
+  vanishpp.vanish:
+    description: Allows a player to use the /vanish command on themselves.
+    default: op
+  vanishpp.vanish.others:
+    description: Allows a player to use the /vanish command on other players.
+    default: op
+  vanishpp.see:
+    description: Allows a player to see vanished players, their chat, and silent join/quit messages.
+    default: op
+  vanishpp.ghost:
+    description: Allows a player to use the /ghost command to enter spectator mode while vanished.
+    default: op

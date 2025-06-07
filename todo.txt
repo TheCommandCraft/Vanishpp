@@ -1,0 +1,4 @@
+Todo:
+
+Later:
+    - Make simple voice chat muted for players without 'vanish.see' if vanished.
