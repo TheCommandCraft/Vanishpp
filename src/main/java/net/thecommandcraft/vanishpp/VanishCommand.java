@@ -1,6 +1,5 @@
 package net.thecommandcraft.vanishpp;
 
-// Imports remain the same
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -25,7 +24,6 @@ public class VanishCommand implements CommandExecutor {
         Player player = (Player) sender;
 
         if (!player.hasPermission("vanishpp.vanish")) {
-            // Use the message from the config
             player.sendMessage(plugin.getConfigManager().noPermissionMessage);
             return true;
         }

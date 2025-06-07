@@ -15,6 +15,24 @@ messages:
   silent-join: "&8[&7+&8] &7%player% has silently joined."
   silent-quit: "&8[&7-&8] &7%player% has silently left."
 
+# Appearance settings for vanished players, visible only to staff with 'vanishpp.see'
+vanish-appearance:
+  # The prefix that appears before a vanished player's name in tab and above their head.
+  prefix: "&7[VANISHED] "
+
+# How chat from a vanished player is formatted.
+# This will only be seen by players with the 'vanishpp.see' permission.
+chat-format:
+  # Placeholders: %prefix%, %player%, %message%
+  vanished-player-format: "%prefix%&7%player%: %message%"
+
+# General effects applied to vanished players.
+vanish-effects:
+  # If true, vanished players will not appear in the player count or the
+  # player list when someone pings the server in the multiplayer menu.
+  hide-from-server-list: true
+
+
 # ----------------------------------- #
 #       Plugin Data Storage           #
 # ----------------------------------- #

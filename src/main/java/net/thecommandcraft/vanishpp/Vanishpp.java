@@ -3,6 +3,8 @@ package net.thecommandcraft.vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 
 import java.util.Collections;
 import java.util.Set;
@@ -10,9 +12,9 @@ import java.util.UUID;
 
 public final class Vanishpp extends JavaPlugin {
 
-    // No longer final, it will be loaded from the config in onEnable
     private Set<UUID> vanishedPlayers;
     private ConfigManager configManager;
+    private Team vanishTeam;
 
     @Override
     public void onEnable() {
@@ -24,30 +26,71 @@ public final class Vanishpp extends JavaPlugin {
         this.vanishedPlayers = configManager.loadVanishedPlayers();
         getLogger().info("Loaded " + vanishedPlayers.size() + " vanished players from config.");
 
-        // Register command
-        this.getCommand("vanish").setExecutor(new VanishCommand(this));
+        // Setup Scoreboard Team for prefixes
+        setupVanishTeam();
 
-        // Register the event listener
+        // Register command and listener
+        this.getCommand("vanish").setExecutor(new VanishCommand(this));
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
 
         getLogger().info("Vanish++ has been enabled!");
     }
 
-    /**
-     * Provides a safe, unmodifiable view of the vanished players set.
-     * @return An unmodifiable set of vanished player UUIDs.
-     */
-    public Set<UUID> getVanishedPlayers() {
-        return Collections.unmodifiableSet(vanishedPlayers);
-    }
-
     @Override
     public void onDisable() {
-        // Save the config one last time using our new method.
+        // Save the config one last time
         if (configManager != null) {
             getLogger().info("Saving " + vanishedPlayers.size() + " vanished players to config...");
             configManager.save();
         }
+
+        // Clean up the vanish team
+        if (vanishTeam != null) {
+            vanishTeam.unregister();
+        }
+    }
+
+    private void setupVanishTeam() {
+        Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished"); // Use a unique name
+
+        if (this.vanishTeam == null) {
+            this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
+        }
+
+        // Configure the team's appearance
+        vanishTeam.setPrefix(configManager.vanishPrefix);
+        vanishTeam.setCanSeeFriendlyInvisibles(false);
+    }
+
+    public void vanish(Player player) {
+        vanishedPlayers.add(player.getUniqueId());
+
+        // Add to scoreboard team for prefix
+        vanishTeam.addEntry(player.getName());
+
+        // Hide from non-staff
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
+                onlinePlayer.hidePlayer(this, player);
+            }
+        }
+        player.sendMessage(configManager.vanishMessage);
+    }
+
+    public void unvanish(Player player) {
+        vanishedPlayers.remove(player.getUniqueId());
+
+        // Remove from scoreboard team
+        if (vanishTeam.hasEntry(player.getName())) {
+            vanishTeam.removeEntry(player.getName());
+        }
+
+        // Show to everyone
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            onlinePlayer.showPlayer(this, player);
+        }
+        player.sendMessage(configManager.unvanishMessage);
     }
 
     public ConfigManager getConfigManager() {
@@ -58,29 +101,14 @@ public final class Vanishpp extends JavaPlugin {
         return vanishedPlayers.contains(player.getUniqueId());
     }
 
-    public void vanish(Player player) {
-        vanishedPlayers.add(player.getUniqueId());
-        // Save the updated list to the config
-        configManager.saveVanishedPlayers(vanishedPlayers);
-
-        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
-                onlinePlayer.hidePlayer(this, player);
-            }
-        }
-        // Use the message from the config
-        player.sendMessage(configManager.vanishMessage);
+    public Set<UUID> getUnmodifiableVanishedPlayers() {
+        return Collections.unmodifiableSet(vanishedPlayers);
     }
 
-    public void unvanish(Player player) {
-        vanishedPlayers.remove(player.getUniqueId());
-        // Save the updated list to the config
-        configManager.saveVanishedPlayers(vanishedPlayers);
-
-        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            onlinePlayer.showPlayer(this, player);
-        }
-        // Use the message from the config
-        player.sendMessage(configManager.unvanishMessage);
+    /**
+     * Internal method to give the ConfigManager the mutable set for saving.
+     */
+    public Set<UUID> getRawVanishedPlayers() {
+        return vanishedPlayers;
     }
 }
