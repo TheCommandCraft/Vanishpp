@@ -14,10 +14,11 @@ public class ConfigManager {
     private final Vanishpp plugin;
     private FileConfiguration config;
 
-    // ... (message variables are the same)
     public String vanishMessage;
     public String unvanishMessage;
     public String noPermissionMessage;
+    public String silentJoinMessage;
+    public String silentQuitMessage;
 
     public ConfigManager(Vanishpp plugin) {
         this.plugin = plugin;
@@ -31,6 +32,8 @@ public class ConfigManager {
         config.addDefault("messages.vanish", "&6You are now vanished.");
         config.addDefault("messages.unvanish", "&6You are no longer vanished.");
         config.addDefault("messages.no-permission", "&cYou do not have permission to use this command.");
+        config.addDefault("messages.silent-join", "&8[&7-&8] &7%player% has silently joined.");
+        config.addDefault("messages.silent-quit", "&8[&7-&8] &7%player% has silently left.");
 
         // Add a default for our new vanished players list (it will be an empty list by default)
         config.addDefault("data.vanished-players", new HashSet<String>());
@@ -42,6 +45,8 @@ public class ConfigManager {
         vanishMessage = translateColors(config.getString("messages.vanish"));
         unvanishMessage = translateColors(config.getString("messages.unvanish"));
         noPermissionMessage = translateColors(config.getString("messages.no-permission"));
+        silentJoinMessage = translateColors(config.getString("messages.silent-join"));
+        silentQuitMessage = translateColors(config.getString("messages.silent-quit"));
     }
 
     /**

@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -27,10 +28,18 @@ public final class Vanishpp extends JavaPlugin {
         // Register command
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
 
-        // You'll need this in the next step to handle players logging in
-        // getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
+        // Register the event listener
+        getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
 
         getLogger().info("Vanish++ has been enabled!");
+    }
+
+    /**
+     * Provides a safe, unmodifiable view of the vanished players set.
+     * @return An unmodifiable set of vanished player UUIDs.
+     */
+    public Set<UUID> getVanishedPlayers() {
+        return Collections.unmodifiableSet(vanishedPlayers);
     }
 
     @Override

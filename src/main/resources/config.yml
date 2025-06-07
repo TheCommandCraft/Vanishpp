@@ -10,6 +10,11 @@ messages:
   unvanish: "&6You are no longer vanished."
   no-permission: "&cYou do not have permission to use this command."
 
+  # Messages sent to players with the 'vanishpp.see' permission when a vanished player joins or leaves.
+  # %player% is a placeholder for the player's name.
+  silent-join: "&8[&7+&8] &7%player% has silently joined."
+  silent-quit: "&8[&7-&8] &7%player% has silently left."
+
 # ----------------------------------- #
 #       Plugin Data Storage           #
 # ----------------------------------- #
