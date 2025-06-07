@@ -16,13 +16,13 @@ import java.util.*;
 
 public final class Vanishpp extends JavaPlugin {
 
-    // Record class to store pre-ghost state cleanly
-    private record PlayerState(GameMode gameMode, Location location) {}
+    public record GhostState(GameMode gameMode, Location location) {}
 
     private Set<UUID> vanishedPlayers;
-    private Map<UUID, PlayerState> ghostedPlayers;
+    private Map<UUID, GhostState> ghostedPlayers;
     private ConfigManager configManager;
     private Team vanishTeam;
+    private Team ghostTeam;
     private BukkitTask actionBarTask;
 
     @Override
@@ -30,9 +30,10 @@ public final class Vanishpp extends JavaPlugin {
         this.configManager = new ConfigManager(this);
         configManager.load();
         this.vanishedPlayers = configManager.loadVanishedPlayers();
-        this.ghostedPlayers = new HashMap<>();
-        getLogger().info("Loaded " + vanishedPlayers.size() + " vanished players from config.");
-        setupVanishTeam();
+        this.ghostedPlayers = configManager.loadGhostStates();
+        getLogger().info("Loaded " + vanishedPlayers.size() + " vanished and " + ghostedPlayers.size() + " ghosted players from config.");
+
+        setupTeams();
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
         this.getCommand("ghost").setExecutor(new GhostCommand(this));
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
@@ -44,25 +45,25 @@ public final class Vanishpp extends JavaPlugin {
     public void onDisable() {
         if (actionBarTask != null && !actionBarTask.isCancelled()) actionBarTask.cancel();
 
-        // Safely exit ghost mode for any remaining players to prevent state issues on restart
-        new ArrayList<>(ghostedPlayers.keySet()).forEach(uuid -> {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) exitGhostMode(p);
-        });
-
         if (configManager != null) {
-            getLogger().info("Saving " + vanishedPlayers.size() + " vanished players to config...");
+            getLogger().info("Saving " + vanishedPlayers.size() + " vanished and " + ghostedPlayers.size() + " ghosted players to config...");
             configManager.save();
         }
         if (vanishTeam != null) vanishTeam.unregister();
+        if (ghostTeam != null) ghostTeam.unregister();
     }
 
-    private void setupVanishTeam() {
+    private void setupTeams() {
         Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+
         this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
         if (this.vanishTeam == null) this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
         vanishTeam.prefix(Component.text(configManager.vanishPrefix));
         vanishTeam.setCanSeeFriendlyInvisibles(false);
+
+        this.ghostTeam = mainScoreboard.getTeam("Vanishpp_Ghosted");
+        if (this.ghostTeam == null) this.ghostTeam = mainScoreboard.registerNewTeam("Vanishpp_Ghosted");
+        ghostTeam.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
     }
 
     private void startActionBarTask() {
@@ -76,28 +77,12 @@ public final class Vanishpp extends JavaPlugin {
         }, 0L, 20L);
     }
 
-    public void applyVanishEffects(Player player) {
+    public void applyVanishEffects(Player player, CommandSender executor) {
         vanishedPlayers.add(player.getUniqueId());
         vanishTeam.addEntry(player.getName());
         if (configManager.disableBlockTriggering) player.setAffectsSpawning(false);
-        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
-                onlinePlayer.hidePlayer(this, player);
-            }
-        }
-    }
+        updatePlayerVisibility(player);
 
-    public void removeVanishEffects(Player player) {
-        vanishedPlayers.remove(player.getUniqueId());
-        player.setAffectsSpawning(true);
-        if (vanishTeam != null && vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
-        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            onlinePlayer.showPlayer(this, player);
-        }
-    }
-
-    public void vanish(Player player, CommandSender executor) {
-        applyVanishEffects(player);
         player.sendMessage(configManager.vanishMessage);
         if (configManager.fakeLeaveMessage) {
             Component quitMessage = Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName());
@@ -113,8 +98,12 @@ public final class Vanishpp extends JavaPlugin {
         }
     }
 
-    public void unvanish(Player player, CommandSender executor) {
-        removeVanishEffects(player);
+    public void removeVanishEffects(Player player, CommandSender executor) {
+        vanishedPlayers.remove(player.getUniqueId());
+        player.setAffectsSpawning(true);
+        if (vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
+        updatePlayerVisibility(player);
+
         player.sendMessage(configManager.unvanishMessage);
         if (configManager.fakeJoinMessage) {
             Component joinMessage = Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName());
@@ -131,38 +120,46 @@ public final class Vanishpp extends JavaPlugin {
     }
 
     public void enterGhostMode(Player player) {
-        ghostedPlayers.put(player.getUniqueId(), new PlayerState(player.getGameMode(), player.getLocation()));
+        ghostedPlayers.put(player.getUniqueId(), new GhostState(player.getGameMode(), player.getLocation()));
         player.setGameMode(GameMode.SPECTATOR);
-        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            if (!onlinePlayer.hasPermission("vanishpp.see")) {
-                onlinePlayer.hidePlayer(this, player);
-            }
-        }
+        ghostTeam.addEntry(player.getName());
+        updatePlayerVisibility(player);
         player.sendMessage(configManager.ghostOnMessage);
     }
 
-    public void exitGhostMode(Player player) {
-        PlayerState originalState = ghostedPlayers.remove(player.getUniqueId());
+    public void exitGhostMode(Player player, boolean sendMessages) {
+        GhostState originalState = ghostedPlayers.remove(player.getUniqueId());
+        if (ghostTeam.hasEntry(player.getName())) ghostTeam.removeEntry(player.getName());
+
         if (originalState != null) {
-            player.teleport(originalState.location());
+            if(configManager.ghostTeleportBack) player.teleport(originalState.location());
             player.setGameMode(originalState.gameMode());
         } else {
             player.setGameMode(Bukkit.getDefaultGameMode());
         }
-        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            onlinePlayer.showPlayer(this, player);
+        updatePlayerVisibility(player);
+        if (sendMessages) player.sendMessage(configManager.ghostOffMessage);
+    }
+
+    public void updatePlayerVisibility(Player subject) {
+        boolean isHidden = isVanished(subject) || isGhosted(subject);
+        for (Player observer : Bukkit.getOnlinePlayers()) {
+            if (observer.equals(subject)) continue;
+            boolean canSee = observer.hasPermission("vanishpp.see");
+
+            if (isHidden && !canSee) {
+                observer.hidePlayer(this, subject);
+            } else {
+                observer.showPlayer(this, subject);
+            }
         }
-        player.sendMessage(configManager.ghostOffMessage);
     }
 
-    public boolean isGhosted(Player player) {
-        return ghostedPlayers.containsKey(player.getUniqueId());
-    }
-
-    public ConfigManager getConfigManager() { return configManager; }
     public boolean isVanished(Player player) { return vanishedPlayers.contains(player.getUniqueId()); }
-    public Set<UUID> getUnmodifiableVanishedPlayers() { return Collections.unmodifiableSet(vanishedPlayers); }
-    public Set<UUID> getGhostedPlayerUUIDs() { return Collections.unmodifiableSet(ghostedPlayers.keySet()); }
-    public Set<UUID> getRawVanishedPlayers() { return vanishedPlayers; }
+    public boolean isGhosted(Player player) { return ghostedPlayers.containsKey(player.getUniqueId()); }
+    public ConfigManager getConfigManager() { return configManager; }
+    public Set<UUID> getRawVanishedPlayers() { return Collections.unmodifiableSet(vanishedPlayers); }
+    public Map<UUID, GhostState> getRawGhostStates() { return Collections.unmodifiableMap(ghostedPlayers); }
     public Team getVanishTeam() { return vanishTeam; }
+    public Team getGhostTeam() { return ghostTeam; }
 }
