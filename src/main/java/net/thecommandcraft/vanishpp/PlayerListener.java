@@ -77,9 +77,10 @@ public class PlayerListener implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joiningPlayer = event.getPlayer();
 
+        // --- GHOST MODE STATE FIX ---
         // Re-apply persistent ghost mode if player was ghosted when they left
         if (plugin.isGhosted(joiningPlayer)) {
-            plugin.enterGhostMode(joiningPlayer);
+            plugin.reapplyGhostMode(joiningPlayer); // Use the new safe method
         }
 
         // Re-apply persistent vanish mode
@@ -102,13 +103,11 @@ public class PlayerListener implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player quittingPlayer = event.getPlayer();
 
-        // We only remove them from the online-only team to prevent errors.
-        // Their state remains in the map and will be saved on shutdown.
-        if (plugin.isGhosted(quittingPlayer)) {
-            if (plugin.getGhostTeam().hasEntry(quittingPlayer.getName())) {
-                plugin.getGhostTeam().removeEntry(quittingPlayer.getName());
-            }
+        // Remove from the online-only team, but keep their persistent state
+        if (plugin.isGhosted(quittingPlayer) && plugin.getGhostTeam().hasEntry(quittingPlayer.getName())) {
+            plugin.getGhostTeam().removeEntry(quittingPlayer.getName());
         }
+
         if (plugin.isVanished(quittingPlayer)) {
             if (plugin.getVanishTeam().hasEntry(quittingPlayer.getName())) {
                 plugin.getVanishTeam().removeEntry(quittingPlayer.getName());
