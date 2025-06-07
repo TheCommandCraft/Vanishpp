@@ -3,7 +3,6 @@ package net.thecommandcraft.vanishpp;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
@@ -64,7 +63,12 @@ public final class Vanishpp extends JavaPlugin {
 
         this.ghostTeam = mainScoreboard.getTeam("Vanishpp_Ghosted");
         if (this.ghostTeam == null) this.ghostTeam = mainScoreboard.registerNewTeam("Vanishpp_Ghosted");
-        ghostTeam.setColor(ChatColor.WHITE);
+
+        // --- TAB LIST FIX ---
+        // This is a more forceful method to ensure the name is styled correctly.
+        // The prefix sets the color to white right before the name is rendered.
+        ghostTeam.prefix(Component.text("", NamedTextColor.WHITE));
+        ghostTeam.color(NamedTextColor.WHITE); // Set color as well for robustness.
         ghostTeam.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
     }
 
@@ -84,20 +88,7 @@ public final class Vanishpp extends JavaPlugin {
         vanishTeam.addEntry(player.getName());
         if (configManager.disableBlockTriggering) player.setAffectsSpawning(false);
         updateVanishVisibility(player);
-
         player.sendMessage(configManager.vanishMessage);
-        if (configManager.fakeLeaveMessage) {
-            Component quitMessage = Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName());
-            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
-                    onlinePlayer.sendMessage(quitMessage);
-                }
-            }
-        }
-        if (configManager.staffNotifyEnabled) {
-            String notification = configManager.staffVanishMessage.replace("%player%", player.getName()).replace("%staff%", executor.getName());
-            Bukkit.broadcast(Component.text(notification), "vanishpp.see");
-        }
     }
 
     public void removeVanishEffects(Player player, CommandSender executor) {
@@ -105,28 +96,34 @@ public final class Vanishpp extends JavaPlugin {
         player.setAffectsSpawning(true);
         if (vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
         updateVanishVisibility(player);
-
         player.sendMessage(configManager.unvanishMessage);
-        if (configManager.fakeJoinMessage) {
-            Component joinMessage = Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName());
-            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
-                    onlinePlayer.sendMessage(joinMessage);
-                }
-            }
-        }
-        if (configManager.staffNotifyEnabled) {
-            String notification = configManager.staffUnvanishMessage.replace("%player%", player.getName()).replace("%staff%", executor.getName());
-            Bukkit.broadcast(Component.text(notification), "vanishpp.see");
-        }
     }
 
-    public void enterGhostMode(Player player) {
-        if (!isGhosted(player)) {
-            ghostedPlayers.put(player.getUniqueId(), new GhostState(player.getGameMode(), player.getLocation()));
-            player.sendMessage(configManager.ghostOnMessage);
-        }
+    // --- GHOST MODE REWORK ---
 
+    /**
+     * Enters ghost mode for the first time, saving the player's original state.
+     * This is called by the /ghost command.
+     */
+    public void enterGhostMode(Player player) {
+        // This is the key to fixing the state bug: we only save the state ONCE.
+        ghostedPlayers.put(player.getUniqueId(), new GhostState(player.getGameMode(), player.getLocation()));
+        player.sendMessage(configManager.ghostOnMessage);
+        applyGhostEffects(player);
+    }
+
+    /**
+     * Re-applies the ghost mode effects to a player who was already ghosted (e.g., on login).
+     * This method DOES NOT save the player's state, preventing the overwrite bug.
+     */
+    public void reapplyGhostMode(Player player) {
+        applyGhostEffects(player);
+    }
+
+    /**
+     * A helper method that applies the visual effects of ghost mode.
+     */
+    private void applyGhostEffects(Player player) {
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             onlinePlayer.showPlayer(this, player);
         }
@@ -134,6 +131,9 @@ public final class Vanishpp extends JavaPlugin {
         ghostTeam.addEntry(player.getName());
     }
 
+    /**
+     * Exits ghost mode, restoring the player's original state.
+     */
     public void exitGhostMode(Player player, boolean sendMessages) {
         GhostState originalState = ghostedPlayers.remove(player.getUniqueId());
 
