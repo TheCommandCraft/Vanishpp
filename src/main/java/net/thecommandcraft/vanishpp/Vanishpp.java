@@ -3,6 +3,7 @@ package net.thecommandcraft.vanishpp;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
@@ -63,6 +64,7 @@ public final class Vanishpp extends JavaPlugin {
 
         this.ghostTeam = mainScoreboard.getTeam("Vanishpp_Ghosted");
         if (this.ghostTeam == null) this.ghostTeam = mainScoreboard.registerNewTeam("Vanishpp_Ghosted");
+        ghostTeam.setColor(ChatColor.WHITE);
         ghostTeam.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
     }
 
@@ -81,7 +83,7 @@ public final class Vanishpp extends JavaPlugin {
         vanishedPlayers.add(player.getUniqueId());
         vanishTeam.addEntry(player.getName());
         if (configManager.disableBlockTriggering) player.setAffectsSpawning(false);
-        updatePlayerVisibility(player);
+        updateVanishVisibility(player);
 
         player.sendMessage(configManager.vanishMessage);
         if (configManager.fakeLeaveMessage) {
@@ -102,7 +104,7 @@ public final class Vanishpp extends JavaPlugin {
         vanishedPlayers.remove(player.getUniqueId());
         player.setAffectsSpawning(true);
         if (vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
-        updatePlayerVisibility(player);
+        updateVanishVisibility(player);
 
         player.sendMessage(configManager.unvanishMessage);
         if (configManager.fakeJoinMessage) {
@@ -120,16 +122,24 @@ public final class Vanishpp extends JavaPlugin {
     }
 
     public void enterGhostMode(Player player) {
-        ghostedPlayers.put(player.getUniqueId(), new GhostState(player.getGameMode(), player.getLocation()));
+        if (!isGhosted(player)) {
+            ghostedPlayers.put(player.getUniqueId(), new GhostState(player.getGameMode(), player.getLocation()));
+            player.sendMessage(configManager.ghostOnMessage);
+        }
+
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            onlinePlayer.showPlayer(this, player);
+        }
         player.setGameMode(GameMode.SPECTATOR);
         ghostTeam.addEntry(player.getName());
-        updatePlayerVisibility(player);
-        player.sendMessage(configManager.ghostOnMessage);
     }
 
     public void exitGhostMode(Player player, boolean sendMessages) {
         GhostState originalState = ghostedPlayers.remove(player.getUniqueId());
-        if (ghostTeam.hasEntry(player.getName())) ghostTeam.removeEntry(player.getName());
+
+        if (ghostTeam.hasEntry(player.getName())) {
+            ghostTeam.removeEntry(player.getName());
+        }
 
         if (originalState != null) {
             if(configManager.ghostTeleportBack) player.teleport(originalState.location());
@@ -137,17 +147,29 @@ public final class Vanishpp extends JavaPlugin {
         } else {
             player.setGameMode(Bukkit.getDefaultGameMode());
         }
-        updatePlayerVisibility(player);
+
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            onlinePlayer.showPlayer(this, player);
+        }
+
         if (sendMessages) player.sendMessage(configManager.ghostOffMessage);
     }
 
-    public void updatePlayerVisibility(Player subject) {
-        boolean isHidden = isVanished(subject) || isGhosted(subject);
+    public void updateVanishVisibility(Player subject) {
+        boolean isVanished = isVanished(subject);
+
+        if (isGhosted(subject)) {
+            for (Player observer : Bukkit.getOnlinePlayers()) {
+                observer.showPlayer(this, subject);
+            }
+            return;
+        }
+
         for (Player observer : Bukkit.getOnlinePlayers()) {
             if (observer.equals(subject)) continue;
             boolean canSee = observer.hasPermission("vanishpp.see");
 
-            if (isHidden && !canSee) {
+            if (isVanished && !canSee) {
                 observer.hidePlayer(this, subject);
             } else {
                 observer.showPlayer(this, subject);

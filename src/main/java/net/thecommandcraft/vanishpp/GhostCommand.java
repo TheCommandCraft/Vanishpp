@@ -32,7 +32,7 @@ public class GhostCommand implements CommandExecutor {
         }
 
         if (plugin.isGhosted(player)) {
-            plugin.exitGhostMode(player);
+            plugin.exitGhostMode(player, true);
         } else {
             if (plugin.isVanished(player)) {
                 player.sendMessage(configManager.ghostFailVanishMessage);
