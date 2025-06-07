@@ -1,5 +1,7 @@
 package net.thecommandcraft.vanishpp;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -62,23 +64,32 @@ public final class Vanishpp extends JavaPlugin {
         vanishTeam.setCanSeeFriendlyInvisibles(false);
     }
 
-    public void vanish(Player player) {
+    /**
+     * Applies all vanish effects to a player. Called on join for vanished players.
+     * @param player The player to apply effects to.
+     */
+    public void applyVanishEffects(Player player) {
         vanishedPlayers.add(player.getUniqueId());
-        // No save call here - saving is handled onDisable
-
         vanishTeam.addEntry(player.getName());
+
+        if (configManager.disableBlockTriggering) {
+            player.setAffectsSpawning(false);
+        }
 
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
                 onlinePlayer.hidePlayer(this, player);
             }
         }
-        player.sendMessage(configManager.vanishMessage);
     }
 
-    public void unvanish(Player player) {
+    /**
+     * Removes all vanish effects from a player.
+     * @param player The player to remove effects from.
+     */
+    public void removeVanishEffects(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
-        // No save call here - saving is handled onDisable
+        player.setAffectsSpawning(true); // Always reset this state
 
         if (vanishTeam != null && vanishTeam.hasEntry(player.getName())) {
             vanishTeam.removeEntry(player.getName());
@@ -87,7 +98,42 @@ public final class Vanishpp extends JavaPlugin {
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             onlinePlayer.showPlayer(this, player);
         }
+    }
+
+    /**
+     * Called by the command to make a player vanish, including messages.
+     * @param player The player to vanish.
+     */
+    public void vanish(Player player) {
+        applyVanishEffects(player);
+        player.sendMessage(configManager.vanishMessage);
+
+        if (configManager.fakeLeaveMessage) {
+            Component quitMessage = Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName());
+            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
+                    onlinePlayer.sendMessage(quitMessage);
+                }
+            }
+        }
+    }
+
+    /**
+     * Called by the command to make a player unvanish, including messages.
+     * @param player The player to unvanish.
+     */
+    public void unvanish(Player player) {
+        removeVanishEffects(player);
         player.sendMessage(configManager.unvanishMessage);
+
+        if (configManager.fakeJoinMessage) {
+            Component joinMessage = Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName());
+            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                if (!onlinePlayer.hasPermission("vanishpp.see") && !onlinePlayer.equals(player)) {
+                    onlinePlayer.sendMessage(joinMessage);
+                }
+            }
+        }
     }
 
     public ConfigManager getConfigManager() {

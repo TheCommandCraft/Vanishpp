@@ -32,6 +32,23 @@ vanish-effects:
   # player list when someone pings the server in the multiplayer menu.
   hide-from-server-list: true
 
+  # If true, a fake "Player left the game" message will be shown to normal players when someone vanishes.
+  # This uses the server's own translation for the message.
+  fake-leave-message: true
+
+  # If true, a fake "Player joined the game" message will be shown to normal players when someone un-vanishes.
+  # This uses the server's own translation for the message.
+  fake-join-message: true
+
+  # If true, vanished players will not trigger pressure plates, tripwires, sculk sensors, or affect mob spawning.
+  disable-block-triggering: true
+
+# What messages/announcements from vanished players should be hidden from normal players.
+# These will still be visible to players with the 'vanishpp.see' permission.
+hide-announcements:
+  death-messages: true
+  advancements: true
+
 
 # ----------------------------------- #
 #       Plugin Data Storage           #
