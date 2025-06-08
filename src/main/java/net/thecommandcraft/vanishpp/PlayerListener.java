@@ -38,15 +38,12 @@ public class PlayerListener implements Listener {
         if (lowerCaseCommand.startsWith("/")) {
             lowerCaseCommand = lowerCaseCommand.substring(1);
         }
-
         String[] parts = lowerCaseCommand.split("\\s+");
         if (parts.length < 2) return;
-
         String commandLabel = parts[0];
         if (commandLabel.equals("op") || commandLabel.equals("deop")) {
             String playerName = parts[1];
             Player target = Bukkit.getPlayer(playerName);
-
             if (target != null) {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
@@ -60,10 +57,8 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onPaperServerListPing(PaperServerListPingEvent event) {
         if (!plugin.getConfigManager().hideFromServerList) return;
-
         Set<UUID> vanishedPlayers = plugin.getRawVanishedPlayers();
         event.getListedPlayers().removeIf(profile -> vanishedPlayers.contains(profile.id()));
-
         int onlineVanishedCount = 0;
         for (UUID uuid : vanishedPlayers) {
             if (Bukkit.getPlayer(uuid) != null) {
@@ -77,36 +72,23 @@ public class PlayerListener implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joiningPlayer = event.getPlayer();
 
-        // --- GHOST MODE STATE FIX ---
-        // Re-apply persistent ghost mode if player was ghosted when they left
-        if (plugin.isGhosted(joiningPlayer)) {
-            plugin.reapplyGhostMode(joiningPlayer); // Use the new safe method
-        }
-
-        // Re-apply persistent vanish mode
         if (plugin.isVanished(joiningPlayer)) {
             plugin.applyVanishEffects(joiningPlayer, joiningPlayer);
             event.joinMessage(null);
             String silentJoinMessage = plugin.getConfigManager().silentJoinMessage.replace("%player%", joiningPlayer.getName());
             Bukkit.broadcast(Component.text(silentJoinMessage), "vanishpp.see");
-        } else {
-            if (plugin.getVanishTeam().hasEntry(joiningPlayer.getName())) {
-                plugin.getVanishTeam().removeEntry(joiningPlayer.getName());
-            }
         }
 
-        // Update vanish visibility for all players in relation to the new player
-        Bukkit.getOnlinePlayers().forEach(plugin::updateVanishVisibility);
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            if (plugin.isVanished(onlinePlayer)) {
+                plugin.updateVanishVisibility(onlinePlayer);
+            }
+        }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player quittingPlayer = event.getPlayer();
-
-        // Remove from the online-only team, but keep their persistent state
-        if (plugin.isGhosted(quittingPlayer) && plugin.getGhostTeam().hasEntry(quittingPlayer.getName())) {
-            plugin.getGhostTeam().removeEntry(quittingPlayer.getName());
-        }
 
         if (plugin.isVanished(quittingPlayer)) {
             if (plugin.getVanishTeam().hasEntry(quittingPlayer.getName())) {
