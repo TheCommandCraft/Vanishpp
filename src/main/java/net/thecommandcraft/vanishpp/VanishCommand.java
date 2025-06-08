@@ -28,10 +28,6 @@ public class VanishCommand implements CommandExecutor {
                 player.sendMessage(configManager.noPermissionMessage);
                 return true;
             }
-            if (plugin.isGhosted(player)) {
-                player.sendMessage(configManager.vanishFailGhostedMessage);
-                return true;
-            }
             toggleVanish(player, sender);
         } else {
             if (!sender.hasPermission("vanishpp.vanish.others")) {
@@ -41,10 +37,6 @@ public class VanishCommand implements CommandExecutor {
             Player target = Bukkit.getPlayer(args[0]);
             if (target == null) {
                 sender.sendMessage(configManager.playerNotFoundMessage);
-                return true;
-            }
-            if (plugin.isGhosted(target)) {
-                sender.sendMessage(configManager.vanishFailGhostedMessage.replace("You", target.getName()));
                 return true;
             }
             toggleVanish(target, sender);
