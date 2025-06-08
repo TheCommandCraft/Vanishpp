@@ -11,6 +11,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.server.ServerCommandEvent;
+import org.bukkit.scoreboard.Team;
 
 import java.util.Set;
 import java.util.UUID;
@@ -68,17 +69,26 @@ public class PlayerListener implements Listener {
         event.setNumPlayers(event.getNumPlayers() - onlineVanishedCount);
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST) // <-- THIS IS THE FIX
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joiningPlayer = event.getPlayer();
 
+        // If player is supposed to be vanished (from config), re-apply effects silently
         if (plugin.isVanished(joiningPlayer)) {
-            plugin.applyVanishEffects(joiningPlayer, joiningPlayer);
-            event.joinMessage(null);
+            plugin.applyVanishEffects(joiningPlayer); // The silent method
+            event.joinMessage(null); // Still hide the real join message
             String silentJoinMessage = plugin.getConfigManager().silentJoinMessage.replace("%player%", joiningPlayer.getName());
             Bukkit.broadcast(Component.text(silentJoinMessage), "vanishpp.see");
         }
+        // If player is NOT supposed to be vanished, check if they have a leftover prefix and clean it up.
+        else {
+            Team vanishTeam = plugin.getVanishTeam();
+            if (vanishTeam.hasEntry(joiningPlayer.getName())) {
+                vanishTeam.removeEntry(joiningPlayer.getName());
+            }
+        }
 
+        // Update visibility for all other online vanished players relative to the new player
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             if (plugin.isVanished(onlinePlayer)) {
                 plugin.updateVanishVisibility(onlinePlayer);

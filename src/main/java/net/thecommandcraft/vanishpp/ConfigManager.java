@@ -2,7 +2,10 @@ package net.thecommandcraft.vanishpp;
 
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -10,6 +13,7 @@ public class ConfigManager {
 
     private final Vanishpp plugin;
     private FileConfiguration config;
+    private File configFile; // Reference to the actual file for async saving
 
     public String vanishMessage, unvanishMessage, noPermissionMessage, playerNotFoundMessage,
             vanishedOtherMessage, unvanishedOtherMessage, silentJoinMessage, silentQuitMessage,
@@ -25,10 +29,22 @@ public class ConfigManager {
     }
 
     public void load() {
-        plugin.saveDefaultConfig();
-        config = plugin.getConfig();
+        // Ensure the data folder exists
+        if (!plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdir();
+        }
+
+        this.configFile = new File(plugin.getDataFolder(), "config.yml");
+        if (!configFile.exists()) {
+            plugin.saveResource("config.yml", false);
+        }
+
+        this.config = YamlConfiguration.loadConfiguration(configFile);
+
+        // This only sets defaults in memory, doesn't save yet.
         config.options().copyDefaults(true);
-        plugin.saveConfig();
+        // We call the plugin's save logic here once to ensure the file on disk matches the defaults.
+        plugin.saveDefaultConfig();
 
         vanishMessage = translateColors(config.getString("messages.vanish"));
         unvanishMessage = translateColors(config.getString("messages.unvanish"));
@@ -57,22 +73,41 @@ public class ConfigManager {
         hideAdvancements = config.getBoolean("hide-announcements.advancements");
     }
 
-    public void save() {
-        saveVanishedPlayers(plugin.getRawVanishedPlayers());
-        plugin.saveConfig();
+    /**
+     * This method is now safe to be called from any thread.
+     */
+    public synchronized void save() {
+        // Update the in-memory configuration with the latest data
+        saveVanishedPlayersToMemory(plugin.getRawVanishedPlayers());
+
+        // Save the in-memory configuration to the physical file
+        try {
+            config.save(configFile);
+        } catch (IOException e) {
+            plugin.getLogger().severe("Could not save config.yml!");
+            e.printStackTrace();
+        }
     }
 
     public Set<UUID> loadVanishedPlayers() {
         return config.getStringList("data.vanished-players").stream()
                 .map(uuidString -> {
                     try { return UUID.fromString(uuidString); }
-                    catch (IllegalArgumentException e) { return null; }
+                    catch (IllegalArgumentException e) {
+                        plugin.getLogger().warning("Could not parse UUID from config: " + uuidString);
+                        return null;
+                    }
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
     }
 
-    private void saveVanishedPlayers(Set<UUID> vanishedPlayers) {
+    /**
+     * This private helper only modifies the in-memory FileConfiguration object.
+     * It does not write to disk.
+     * @param vanishedPlayers The set of vanished players to save.
+     */
+    private void saveVanishedPlayersToMemory(Set<UUID> vanishedPlayers) {
         List<String> uuids = vanishedPlayers.stream().map(UUID::toString).collect(Collectors.toList());
         config.set("data.vanished-players", uuids);
     }

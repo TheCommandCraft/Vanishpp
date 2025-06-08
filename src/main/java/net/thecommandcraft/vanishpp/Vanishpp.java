@@ -38,7 +38,8 @@ public final class Vanishpp extends JavaPlugin {
         if (actionBarTask != null && !actionBarTask.isCancelled()) actionBarTask.cancel();
 
         if (configManager != null) {
-            getLogger().info("Saving " + vanishedPlayers.size() + " vanished players to config...");
+            getLogger().info("Making a final save of " + vanishedPlayers.size() + " vanished players to config...");
+            // A synchronous save on disable is safe and guarantees the file is written before shutdown.
             configManager.save();
         }
         if (vanishTeam != null) vanishTeam.unregister();
@@ -63,13 +64,36 @@ public final class Vanishpp extends JavaPlugin {
         }, 0L, 20L);
     }
 
-    public void applyVanishEffects(Player player, CommandSender executor) {
+    /**
+     * The core logic for applying vanish effects and triggering a save.
+     * @param player The player to apply effects to.
+     */
+    public void applyVanishEffects(Player player) {
         vanishedPlayers.add(player.getUniqueId());
         vanishTeam.addEntry(player.getName());
         if (configManager.disableBlockTriggering) player.setAffectsSpawning(false);
         updateVanishVisibility(player);
-        player.sendMessage(configManager.vanishMessage);
+        saveDataAsynchronously(); // Save the new state immediately
+    }
 
+    /**
+     * The core logic for removing vanish effects and triggering a save.
+     * @param player The player to remove effects from.
+     */
+    public void removeVanishEffects(Player player) {
+        vanishedPlayers.remove(player.getUniqueId());
+        player.setAffectsSpawning(true);
+        if (vanishTeam.hasEntry(player.getName())) {
+            vanishTeam.removeEntry(player.getName());
+        }
+        updateVanishVisibility(player);
+        saveDataAsynchronously(); // Save the new state immediately
+    }
+
+    public void vanishPlayer(Player player, CommandSender executor) {
+        applyVanishEffects(player);
+
+        player.sendMessage(configManager.vanishMessage);
         if (configManager.fakeLeaveMessage) {
             Component quitMessage = Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName());
             for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
@@ -84,13 +108,10 @@ public final class Vanishpp extends JavaPlugin {
         }
     }
 
-    public void removeVanishEffects(Player player, CommandSender executor) {
-        vanishedPlayers.remove(player.getUniqueId());
-        player.setAffectsSpawning(true);
-        if (vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
-        updateVanishVisibility(player);
-        player.sendMessage(configManager.unvanishMessage);
+    public void unvanishPlayer(Player player, CommandSender executor) {
+        removeVanishEffects(player);
 
+        player.sendMessage(configManager.unvanishMessage);
         if (configManager.fakeJoinMessage) {
             Component joinMessage = Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName());
             for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
@@ -117,6 +138,14 @@ public final class Vanishpp extends JavaPlugin {
                 observer.showPlayer(this, subject);
             }
         }
+    }
+
+    /**
+     * Schedules an asynchronous task to save the current data to disk
+     * without lagging the main server thread.
+     */
+    private void saveDataAsynchronously() {
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> configManager.save());
     }
 
     public boolean isVanished(Player player) { return vanishedPlayers.contains(player.getUniqueId()); }
