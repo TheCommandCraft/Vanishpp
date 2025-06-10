@@ -11,10 +11,12 @@ public class VanishCommand implements CommandExecutor {
 
     private final Vanishpp plugin;
     private final ConfigManager configManager;
+    private final PermissionManager permissionManager; // Added
 
     public VanishCommand(Vanishpp plugin) {
         this.plugin = plugin;
         this.configManager = plugin.getConfigManager();
+        this.permissionManager = plugin.getPermissionManager(); // Added
     }
 
     @Override
@@ -24,13 +26,15 @@ public class VanishCommand implements CommandExecutor {
                 sender.sendMessage("This command can only be used by players. Use /vanish <player> to target another player.");
                 return true;
             }
-            if (!player.hasPermission("vanishpp.vanish")) {
+            // Use the new permission check
+            if (!permissionManager.hasPermission(player, "vanishpp.vanish")) {
                 player.sendMessage(configManager.noPermissionMessage);
                 return true;
             }
             toggleVanish(player, sender);
         } else {
-            if (!sender.hasPermission("vanishpp.vanish.others")) {
+            // Check if the sender is a player before using the new permission check
+            if (sender instanceof Player && !permissionManager.hasPermission((Player) sender, "vanishpp.vanish.others")) {
                 sender.sendMessage(configManager.noPermissionMessage);
                 return true;
             }
@@ -46,13 +50,11 @@ public class VanishCommand implements CommandExecutor {
 
     private void toggleVanish(Player target, CommandSender executor) {
         if (plugin.isVanished(target)) {
-            // Calls the corrected method
             plugin.unvanishPlayer(target, executor);
             if (!target.equals(executor)) {
                 executor.sendMessage(configManager.unvanishedOtherMessage.replace("%player%", target.getName()));
             }
         } else {
-            // Calls the corrected method
             plugin.vanishPlayer(target, executor);
             if (!target.equals(executor)) {
                 executor.sendMessage(configManager.vanishedOtherMessage.replace("%player%", target.getName()));

@@ -1,0 +1,26 @@
+# ================================================================= #
+#                 Vanish++ Simple Permissions File                  #
+# ================================================================= #
+#
+# This file allows you to grant Vanish++ permissions to players
+# without needing OP or a permissions plugin like LuckPerms.
+#
+# HOW TO USE:
+# 1. Find the player's UUID. You can use an online tool like "namemc.com".
+# 2. Add their UUID and the permissions you want them to have, like the example below.
+#
+# Valid Permissions:
+#   - 'vanishpp.vanish'
+#   - 'vanishpp.vanish.others'
+#   - 'vanishpp.see'
+#
+# EXAMPLE (Do not uncomment, this is just a guide):
+#
+# permissions:
+#   '00000000-0000-0000-0000-000000000000': # Notch's UUID
+#     - 'vanishpp.vanish'
+#     - 'vanishpp.see'
+#   '11111111-1111-1111-1111-111111111111': # Another Player's UUID
+#     - 'vanishpp.vanish'
+
+permissions: {}

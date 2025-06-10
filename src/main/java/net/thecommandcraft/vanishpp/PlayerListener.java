@@ -3,11 +3,14 @@ package net.thecommandcraft.vanishpp;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Arrow;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.server.ServerCommandEvent;
@@ -19,9 +22,41 @@ import java.util.UUID;
 public class PlayerListener implements Listener {
 
     private final Vanishpp plugin;
+    private final PermissionManager permissionManager;
 
     public PlayerListener(Vanishpp plugin) {
         this.plugin = plugin;
+        this.permissionManager = plugin.getPermissionManager();
+    }
+
+    /**
+     * Advanced Arrow Stealth: Makes arrows pass through vanished players seamlessly
+     * by temporarily increasing their pierce level.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        Entity victim = event.getEntity();
+        Entity damager = event.getDamager();
+
+        // Check if a vanished player was hit by an arrow
+        if (victim instanceof Player hitPlayer && damager instanceof Arrow arrow) {
+            if (plugin.isVanished(hitPlayer)) {
+                // Prevent the damage
+                event.setCancelled(true);
+
+                // Temporarily increase the arrow's pierce level to make it pass through.
+                int originalPierceLevel = arrow.getPierceLevel();
+                arrow.setPierceLevel(originalPierceLevel + 1);
+
+                // Schedule a task to reset the pierce level on the next tick,
+                // after the game has processed the pass-through.
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (!arrow.isDead()) {
+                        arrow.setPierceLevel(originalPierceLevel);
+                    }
+                });
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -43,8 +78,7 @@ public class PlayerListener implements Listener {
         if (parts.length < 2) return;
         String commandLabel = parts[0];
         if (commandLabel.equals("op") || commandLabel.equals("deop")) {
-            String playerName = parts[1];
-            Player target = Bukkit.getPlayer(playerName);
+            Player target = Bukkit.getPlayer(parts[1]);
             if (target != null) {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
@@ -69,18 +103,16 @@ public class PlayerListener implements Listener {
         event.setNumPlayers(event.getNumPlayers() - onlineVanishedCount);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST) // <-- THIS IS THE FIX
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player joiningPlayer = event.getPlayer();
 
-        // If player is supposed to be vanished (from config), re-apply effects silently
         if (plugin.isVanished(joiningPlayer)) {
-            plugin.applyVanishEffects(joiningPlayer); // The silent method
-            event.joinMessage(null); // Still hide the real join message
+            plugin.applyVanishEffects(joiningPlayer);
+            event.joinMessage(null);
             String silentJoinMessage = plugin.getConfigManager().silentJoinMessage.replace("%player%", joiningPlayer.getName());
             Bukkit.broadcast(Component.text(silentJoinMessage), "vanishpp.see");
         }
-        // If player is NOT supposed to be vanished, check if they have a leftover prefix and clean it up.
         else {
             Team vanishTeam = plugin.getVanishTeam();
             if (vanishTeam.hasEntry(joiningPlayer.getName())) {
@@ -88,7 +120,6 @@ public class PlayerListener implements Listener {
             }
         }
 
-        // Update visibility for all other online vanished players relative to the new player
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             if (plugin.isVanished(onlinePlayer)) {
                 plugin.updateVanishVisibility(onlinePlayer);
@@ -119,7 +150,7 @@ public class PlayerListener implements Listener {
                     .replace("%player%", player.getDisplayName())
                     .replace("%message%", event.getMessage());
             event.setFormat(format);
-            event.getRecipients().removeIf(recipient -> !recipient.hasPermission("vanishpp.see"));
+            event.getRecipients().removeIf(recipient -> !permissionManager.hasPermission(recipient, "vanishpp.see"));
         }
     }
 
@@ -132,7 +163,7 @@ public class PlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
-        if (plugin.isVanished(event.getPlayer()) && plugin.getConfigManager().hideDeathMessages) {
+        if (plugin.isVanished(event.getEntity())) {
             Component deathMessage = event.deathMessage();
             event.deathMessage(null);
             if (deathMessage != null) {
@@ -144,7 +175,7 @@ public class PlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAdvancement(PlayerAdvancementDoneEvent event) {
-        if (plugin.isVanished(event.getPlayer()) && plugin.getConfigManager().hideAdvancements) {
+        if (plugin.isVanished(event.getPlayer())) {
             Component advancementMessage = event.message();
             event.message(null);
             if (advancementMessage != null) {

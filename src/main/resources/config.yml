@@ -10,6 +10,16 @@ messages:
   vanished-other: "&6You have vanished %player%."
   unvanished-other: "&6You have unvanished %player%."
 
+  # New messages for the /vperms command
+  vperms:
+    invalid-usage: "&cUsage: /vperms <player> <permission> <set|remove|get>"
+    invalid-permission: "&cInvalid permission. Use: vanishpp.vanish, vanishpp.see, or vanishpp.vanish.others"
+    perm-set: "&aSet permission '%perm%' for %player%."
+    perm-removed: "&eRemoved permission '%perm%' from %player%."
+    perm-get-has: "&a%player% HAS the permission '%perm%'."
+    perm-get-does-not-have: "&c%player% DOES NOT HAVE the permission '%perm%'."
+    reload: "&aVanish++ permissions reloaded."
+
   # Messages sent to players with the 'vanishpp.see' permission when a vanished player joins or leaves.
   # %player% is a placeholder for the player's name.
   silent-join: "&8[&7+&8] &7%player% has silently joined."

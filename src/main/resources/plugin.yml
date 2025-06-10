@@ -1,5 +1,5 @@
 name: Vanishpp
-version: '1.0.0'
+version: '1.0.1'
 main: net.thecommandcraft.vanishpp.Vanishpp
 api-version: '1.20'
 authors: [ tcc ]
@@ -10,6 +10,9 @@ commands:
     description: Toggles your or another player's vanish state.
     usage: /vanish [player]
     aliases: [ v ]
+  vperms:
+    description: Manages Vanish++ specific permissions for players.
+    usage: /vperms <player> <permission> <set|remove|get>
 
 permissions:
   vanishpp.vanish:
@@ -20,4 +23,7 @@ permissions:
     default: op
   vanishpp.see:
     description: Allows a player to see vanished players, their chat, and silent join/quit messages.
+    default: op
+  vanishpp.manageperms:
+    description: Allows a player to use the /vperms command.
     default: op

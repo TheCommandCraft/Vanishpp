@@ -1,5 +1,5 @@
 Todo:
-    - Add a way to add the perms to players non op without a plugin like luckperms
+
 
 Later:
     - Make simple voice chat muted for players without 'vanish.see' if vanished.
