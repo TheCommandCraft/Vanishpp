@@ -1,187 +1,293 @@
 package net.thecommandcraft.vanishpp;
 
+import com.destroystokyo.paper.event.entity.ProjectileCollideEvent;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Arrow;
-import org.bukkit.entity.Entity;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.GameMode;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.block.Container;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockReceiveGameEvent;
+import org.bukkit.event.entity.*;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.*;
-import org.bukkit.event.server.ServerCommandEvent;
-import org.bukkit.scoreboard.Team;
+import org.bukkit.event.raid.RaidTriggerEvent;
+import org.bukkit.inventory.Inventory;
 
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 public class PlayerListener implements Listener {
 
     private final Vanishpp plugin;
-    private final PermissionManager permissionManager;
+    private final ConfigManager config;
+    private final RuleManager rules;
+    private final Map<UUID, GameMode> silentChestViewers = new HashMap<>();
 
     public PlayerListener(Vanishpp plugin) {
         this.plugin = plugin;
-        this.permissionManager = plugin.getPermissionManager();
+        this.config = plugin.getConfigManager();
+        this.rules = plugin.getRuleManager();
     }
 
-    /**
-     * Advanced Arrow Stealth: Makes arrows pass through vanished players seamlessly
-     * by temporarily increasing their pierce level.
-     */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
-        Entity victim = event.getEntity();
-        Entity damager = event.getDamager();
+    // LOWEST: Hide them BEFORE plugins process join messages or spawns
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
 
-        // Check if a vanished player was hit by an arrow
-        if (victim instanceof Player hitPlayer && damager instanceof Arrow arrow) {
-            if (plugin.isVanished(hitPlayer)) {
-                // Prevent the damage
-                event.setCancelled(true);
+        // 1. If they were vanished, hide them immediately from everyone
+        if (plugin.isVanished(player)) {
+            plugin.applyVanishEffects(player);
+            // Hide from everyone initially
+            plugin.updateVanishVisibility(player);
 
-                // Temporarily increase the arrow's pierce level to make it pass through.
-                int originalPierceLevel = arrow.getPierceLevel();
-                arrow.setPierceLevel(originalPierceLevel + 1);
+            if (config.fakeJoinMessage) event.joinMessage(null);
+        }
 
-                // Schedule a task to reset the pierce level on the next tick,
-                // after the game has processed the pass-through.
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (!arrow.isDead()) {
-                        arrow.setPierceLevel(originalPierceLevel);
-                    }
-                });
+        // 2. Hide EXISTING vanished players from this new joiner if they can't see them
+        for (UUID uuid : plugin.getRawVanishedPlayers()) {
+            Player v = plugin.getServer().getPlayer(uuid);
+            if (v != null) {
+                if (!plugin.getPermissionManager().canSee(player, v)) {
+                    player.hidePlayer(plugin, v);
+                }
             }
         }
-    }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
-        handleOpCommand(event.getMessage());
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onServerCommand(ServerCommandEvent event) {
-        handleOpCommand(event.getCommand());
-    }
-
-    private void handleOpCommand(String command) {
-        String lowerCaseCommand = command.toLowerCase().trim();
-        if (lowerCaseCommand.startsWith("/")) {
-            lowerCaseCommand = lowerCaseCommand.substring(1);
-        }
-        String[] parts = lowerCaseCommand.split("\\s+");
-        if (parts.length < 2) return;
-        String commandLabel = parts[0];
-        if (commandLabel.equals("op") || commandLabel.equals("deop")) {
-            Player target = Bukkit.getPlayer(parts[1]);
-            if (target != null) {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                        plugin.updateVanishVisibility(onlinePlayer);
-                    }
-                });
-            }
+        if (!plugin.hasProtocolLib() && player.isOp() && !plugin.isWarningIgnored(player)) {
+            player.sendMessage(Component.empty());
+            player.sendMessage(Component.text("[Vanish++]", NamedTextColor.GOLD).append(Component.text(" ProtocolLib missing!", NamedTextColor.RED)));
+            player.sendMessage(Component.text("Type /vignore to disable warning.", NamedTextColor.GRAY));
         }
     }
 
-    @EventHandler
-    public void onPaperServerListPing(PaperServerListPingEvent event) {
-        if (!plugin.getConfigManager().hideFromServerList) return;
-        Set<UUID> vanishedPlayers = plugin.getRawVanishedPlayers();
-        event.getListedPlayers().removeIf(profile -> vanishedPlayers.contains(profile.id()));
-        int onlineVanishedCount = 0;
-        for (UUID uuid : vanishedPlayers) {
-            if (Bukkit.getPlayer(uuid) != null) {
-                onlineVanishedCount++;
-            }
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onQuit(PlayerQuitEvent event) {
+        if (plugin.isVanished(event.getPlayer())) {
+            if (config.fakeLeaveMessage) event.quitMessage(null);
+            silentChestViewers.remove(event.getPlayer().getUniqueId());
+            plugin.pendingChatMessages.remove(event.getPlayer().getUniqueId());
         }
-        event.setNumPlayers(event.getNumPlayers() - onlineVanishedCount);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player joiningPlayer = event.getPlayer();
-
-        if (plugin.isVanished(joiningPlayer)) {
-            plugin.applyVanishEffects(joiningPlayer);
-            event.joinMessage(null);
-            String silentJoinMessage = plugin.getConfigManager().silentJoinMessage.replace("%player%", joiningPlayer.getName());
-            Bukkit.broadcast(Component.text(silentJoinMessage), "vanishpp.see");
-        }
-        else {
-            Team vanishTeam = plugin.getVanishTeam();
-            if (vanishTeam.hasEntry(joiningPlayer.getName())) {
-                vanishTeam.removeEntry(joiningPlayer.getName());
+    public void onChat(AsyncChatEvent event) {
+        Player player = event.getPlayer();
+        if (plugin.isVanished(player)) {
+            if (player.hasMetadata("vanishpp_chat_bypass")) {
+                player.removeMetadata("vanishpp_chat_bypass", plugin);
+                return;
             }
-        }
 
-        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            if (plugin.isVanished(onlinePlayer)) {
-                plugin.updateVanishVisibility(onlinePlayer);
+            boolean canChat = rules.getRule(player, RuleManager.CAN_CHAT);
+            if (!canChat) {
+                event.setCancelled(true);
+                String msgContent = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message());
+                plugin.pendingChatMessages.put(player.getUniqueId(), msgContent);
+                player.sendMessage(Component.text(config.chatLockedMessage, NamedTextColor.RED)
+                        .clickEvent(ClickEvent.runCommand("/vchat confirm"))
+                        .hoverEvent(Component.text("Click to confirm", NamedTextColor.GRAY)));
             }
         }
     }
 
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        Player quittingPlayer = event.getPlayer();
-
-        if (plugin.isVanished(quittingPlayer)) {
-            if (plugin.getVanishTeam().hasEntry(quittingPlayer.getName())) {
-                plugin.getVanishTeam().removeEntry(quittingPlayer.getName());
-            }
-            event.quitMessage(null);
-            String silentQuitMessage = plugin.getConfigManager().silentQuitMessage.replace("%player%", quittingPlayer.getName());
-            Bukkit.broadcast(Component.text(silentQuitMessage), "vanishpp.see");
+    public void onProjectileCollide(ProjectileCollideEvent event) {
+        if (!config.ignoreProjectiles) return;
+        if (event.getCollidedWith() instanceof Player player && plugin.isVanished(player)) {
+            event.setCancelled(true);
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
-        Player player = event.getPlayer();
-        if (plugin.isVanished(player)) {
-            String format = plugin.getConfigManager().vanishedChatFormat
-                    .replace("%prefix%", plugin.getConfigManager().vanishPrefix)
-                    .replace("%player%", player.getDisplayName())
-                    .replace("%message%", event.getMessage());
-            event.setFormat(format);
-            event.getRecipients().removeIf(recipient -> !permissionManager.hasPermission(recipient, "vanishpp.see"));
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onPlayerInteract(PlayerInteractEvent event) {
-        if (!plugin.getConfigManager().disableBlockTriggering) return;
-        if (event.getAction() != Action.PHYSICAL) return;
-        if (plugin.isVanished(event.getPlayer())) event.setCancelled(true);
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPlayerDeath(PlayerDeathEvent event) {
-        if (plugin.isVanished(event.getEntity())) {
-            Component deathMessage = event.deathMessage();
-            event.deathMessage(null);
-            if (deathMessage != null) {
-                Bukkit.getConsoleSender().sendMessage(deathMessage);
-                Bukkit.broadcast(deathMessage, "vanishpp.see");
-            }
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onAdvancement(PlayerAdvancementDoneEvent event) {
+    @EventHandler
+    public void onBreak(BlockBreakEvent event) {
         if (plugin.isVanished(event.getPlayer())) {
-            Component advancementMessage = event.message();
-            event.message(null);
-            if (advancementMessage != null) {
-                Bukkit.getConsoleSender().sendMessage(advancementMessage);
-                Bukkit.broadcast(advancementMessage, "vanishpp.see");
+            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS)) {
+                event.setCancelled(true);
+                sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS);
             }
         }
+    }
+
+    @EventHandler
+    public void onPlace(BlockPlaceEvent event) {
+        if (plugin.isVanished(event.getPlayer())) {
+            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS)) {
+                event.setCancelled(true);
+                sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onAttack(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player player && plugin.isVanished(player)) {
+            if (!rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) {
+                event.setCancelled(true);
+                sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPickup(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player player && plugin.isVanished(player)) {
+            if (!rules.getRule(player, RuleManager.CAN_PICKUP_ITEMS)) {
+                event.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onInteract(PlayerInteractEvent event) {
+        Player p = event.getPlayer();
+        if (!plugin.isVanished(p)) return;
+
+        if (event.getAction() == Action.PHYSICAL) {
+            if (!rules.getRule(p, RuleManager.CAN_TRIGGER_PHYSICAL)) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+            if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
+                event.setCancelled(true);
+                sendRuleDeny(p, RuleManager.CAN_INTERACT);
+                return;
+            }
+            handleSilentChest(event);
+        }
+    }
+
+    @EventHandler
+    public void onMobTarget(EntityTargetLivingEntityEvent event) {
+        if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
+            if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
+                event.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onEntityInteract(PlayerInteractEntityEvent event) {
+        if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_INTERACT)) {
+            event.setCancelled(true);
+        }
+    }
+
+    // SERVER LIST FIX: Remove vanished players from the hover sample
+    @EventHandler
+    public void onServerListPing(PaperServerListPingEvent event) {
+        if (config.adjustServerListCount) {
+            int vanishedCount = 0;
+            List<UUID> toRemove = new ArrayList<>();
+
+            for (UUID uuid : plugin.getRawVanishedPlayers()) {
+                if (plugin.getServer().getPlayer(uuid) != null) {
+                    vanishedCount++;
+                    toRemove.add(uuid);
+                }
+            }
+            event.setNumPlayers(Math.max(0, event.getNumPlayers() - vanishedCount));
+
+            // Remove from sample list (Hover text)
+            // FIX: Use id() instead of getId() or getUniqueId() for Java Records
+            event.getListedPlayers().removeIf(profile -> toRemove.contains(profile.id()));
+        }
+    }
+
+    @EventHandler
+    public void onTabComplete(PlayerCommandSendEvent event) {
+        if (config.hideTabComplete && !plugin.getPermissionManager().hasPermission(event.getPlayer(), "vanishpp.see")) {
+            event.getCommands().removeIf(cmd -> cmd.contains(":"));
+        }
+    }
+
+    @EventHandler
+    public void onSculkSensor(BlockReceiveGameEvent event) {
+        if (config.preventSculk && event.getEntity() instanceof Player player) {
+            if (plugin.isVanished(player) && !rules.getRule(player, RuleManager.CAN_TRIGGER_PHYSICAL)) event.setCancelled(true);
+        }
+    }
+    @EventHandler
+    public void onRaidTrigger(RaidTriggerEvent event) {
+        if (config.preventRaid && plugin.isVanished(event.getPlayer())) event.setCancelled(true);
+    }
+    @EventHandler
+    public void onBedEnter(PlayerBedEnterEvent event) {
+        if (config.preventSleeping && plugin.isVanished(event.getPlayer())) event.setCancelled(true);
+    }
+    @EventHandler
+    public void onHunger(FoodLevelChangeEvent event) {
+        if (config.disableHunger && event.getEntity() instanceof Player p && plugin.isVanished(p)) event.setCancelled(true);
+    }
+    @EventHandler
+    public void onDeath(PlayerDeathEvent event) {
+        if (config.hideDeathMessages && plugin.isVanished(event.getEntity())) event.deathMessage(null);
+    }
+
+    private void handleSilentChest(PlayerInteractEvent event) {
+        if (!config.silentChests) return;
+        Player player = event.getPlayer();
+        if (!plugin.isVanished(player)) return;
+        if (!plugin.getPermissionManager().hasPermission(player, "vanishpp.silentchest")) return;
+        if (player.isSneaking()) return;
+
+        Block block = event.getClickedBlock();
+        if (block == null) return;
+        Material type = block.getType();
+
+        if (type == Material.CHEST || type == Material.TRAPPED_CHEST || type == Material.BARREL || type.name().endsWith("SHULKER_BOX")) {
+            event.setCancelled(true);
+            GameMode original = player.getGameMode();
+
+            if (original != GameMode.SPECTATOR) {
+                silentChestViewers.put(player.getUniqueId(), original);
+                player.setGameMode(GameMode.SPECTATOR);
+            }
+
+            Inventory inv = null;
+            if (block.getState() instanceof Container c) inv = c.getInventory();
+            else if (type == Material.ENDER_CHEST) inv = player.getEnderChest();
+
+            if (inv != null) player.openInventory(inv);
+            else {
+                if (original != GameMode.SPECTATOR) player.setGameMode(original);
+                silentChestViewers.remove(player.getUniqueId());
+            }
+        }
+    }
+
+    @EventHandler
+    public void onClose(InventoryCloseEvent event) {
+        if (silentChestViewers.containsKey(event.getPlayer().getUniqueId())) {
+            Player p = (Player) event.getPlayer();
+            GameMode gm = silentChestViewers.remove(p.getUniqueId());
+            if (p.isOnline()) {
+                p.setGameMode(gm);
+                if (config.enableFly && gm != GameMode.CREATIVE && gm != GameMode.SPECTATOR && plugin.isVanished(p)) {
+                    p.setAllowFlight(true);
+                    p.setFlying(true);
+                }
+            }
+        }
+    }
+
+    private void sendRuleDeny(Player p, String rule) {
+        p.sendMessage(Component.text("Action blocked by rule: ", NamedTextColor.RED)
+                .append(Component.text(rule, NamedTextColor.GOLD))
+                .append(Component.text(" (Click to Enable)", NamedTextColor.GRAY)
+                        .clickEvent(ClickEvent.runCommand("/vrules " + rule + " true"))
+                        .hoverEvent(Component.text("Enable " + rule, NamedTextColor.YELLOW))));
     }
 }

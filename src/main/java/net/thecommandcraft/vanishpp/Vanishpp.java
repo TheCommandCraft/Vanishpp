@@ -3,22 +3,38 @@ package net.thecommandcraft.vanishpp;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
 import java.util.*;
 
-public final class Vanishpp extends JavaPlugin {
+public final class Vanishpp extends JavaPlugin implements Listener {
 
     private Set<UUID> vanishedPlayers;
+    private Set<UUID> ignoredWarningPlayers;
+
     private ConfigManager configManager;
     private PermissionManager permissionManager;
+    private RuleManager ruleManager;
+    private IntegrationManager integrationManager;
+    private ProtocolLibManager protocolLibManager;
     private Team vanishTeam;
     private BukkitTask actionBarTask;
+    private BukkitTask syncTask; // New Heartbeat Task
+    private VoiceChatHook voiceChatHook;
+
+    public final Map<UUID, String> pendingChatMessages = new HashMap<>();
+    private boolean hasProtocolLib = false;
 
     @Override
     public void onEnable() {
@@ -28,26 +44,68 @@ public final class Vanishpp extends JavaPlugin {
         this.permissionManager = new PermissionManager(this);
         permissionManager.load();
 
+        this.ruleManager = new RuleManager(this);
+        ruleManager.load();
+
         this.vanishedPlayers = configManager.loadVanishedPlayers();
-        getLogger().info("Loaded " + vanishedPlayers.size() + " vanished players from config.");
+        this.ignoredWarningPlayers = configManager.loadIgnoredWarningPlayers();
+
+        this.integrationManager = new IntegrationManager(this);
+        this.integrationManager.load();
+
+        this.protocolLibManager = new ProtocolLibManager(this);
+        this.protocolLibManager.load();
+
+        if (Bukkit.getPluginManager().getPlugin("ProtocolLib") != null) {
+            this.hasProtocolLib = true;
+        }
 
         setupTeams();
+
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
         this.getCommand("vperms").setExecutor(new VpermsCommand(this));
+        this.getCommand("vanishrules").setExecutor(new VanishRulesCommand(this));
+        this.getCommand("vanishchat").setExecutor(new VanishChatCommand(this));
+        this.getCommand("vanishpickup").setExecutor(new VanishPickupCommand(this));
+        this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
 
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
+        getServer().getPluginManager().registerEvents(this, this);
+
+        if (Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null && configManager.voiceChatEnabled) {
+            this.voiceChatHook = new VoiceChatHook(this);
+            getServer().getPluginManager().registerEvents(voiceChatHook, this);
+        }
+
         startActionBarTask();
-        getLogger().info("Vanish++ has been enabled!");
+        startSyncTask(); // Start the heartbeat
+
+        // Restore state on reload
+        for (UUID uuid : vanishedPlayers) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && p.isOnline()) {
+                integrationManager.updateHooks(p, true);
+                updateVanishVisibility(p);
+            }
+        }
+
+        getLogger().info("Vanish++ 1.1.0 (Patched) enabled.");
     }
 
     @Override
     public void onDisable() {
-        if (actionBarTask != null && !actionBarTask.isCancelled()) actionBarTask.cancel();
+        if (actionBarTask != null) actionBarTask.cancel();
+        if (syncTask != null) syncTask.cancel();
 
-        if (configManager != null) {
-            getLogger().info("Making a final save of " + vanishedPlayers.size() + " vanished players to config...");
-            configManager.save();
+        for (UUID uuid : vanishedPlayers) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && p.isOnline()) {
+                p.removePotionEffect(PotionEffectType.NIGHT_VISION);
+            }
         }
+
+        if (configManager != null) configManager.save();
+        if (ruleManager != null) ruleManager.save();
         if (vanishTeam != null) vanishTeam.unregister();
     }
 
@@ -55,12 +113,14 @@ public final class Vanishpp extends JavaPlugin {
         Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
         if (this.vanishTeam == null) this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
+
         vanishTeam.prefix(Component.text(configManager.vanishPrefix));
-        vanishTeam.setCanSeeFriendlyInvisibles(false);
+        vanishTeam.setCanSeeFriendlyInvisibles(true);
+        vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
     }
 
     private void startActionBarTask() {
-        if (!configManager.actionBarEnabled || configManager.actionBarText.isEmpty()) return;
+        if (!configManager.actionBarEnabled) return;
         Component actionBarComponent = Component.text(configManager.actionBarText);
         this.actionBarTask = getServer().getScheduler().runTaskTimer(this, () -> {
             for (UUID uuid : vanishedPlayers) {
@@ -70,10 +130,38 @@ public final class Vanishpp extends JavaPlugin {
         }, 0L, 20L);
     }
 
+    // THE HEARTBEAT: Ensures visuals are never desynced for more than 1 second
+    private void startSyncTask() {
+        this.syncTask = getServer().getScheduler().runTaskTimer(this, () -> {
+            // Re-calculate visibility for all vanished players
+            // This handles cases where a player gets promoted/demoted silently
+            for (UUID uuid : vanishedPlayers) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null && p.isOnline()) {
+                    updateVanishVisibility(p);
+                }
+            }
+        }, 20L, 20L); // Run every second
+    }
+
     public void applyVanishEffects(Player player) {
         vanishedPlayers.add(player.getUniqueId());
         vanishTeam.addEntry(player.getName());
+
         if (configManager.disableBlockTriggering) player.setAffectsSpawning(false);
+        if (configManager.preventSleeping) player.setSleepingIgnored(true);
+
+        if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
+            player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
+        }
+
+        if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
+            player.setAllowFlight(true);
+            player.setFlying(true);
+        }
+
+        if (voiceChatHook != null) voiceChatHook.updateVanishState(player, true);
+        integrationManager.updateHooks(player, true);
         updateVanishVisibility(player);
         saveDataAsynchronously();
     }
@@ -81,44 +169,55 @@ public final class Vanishpp extends JavaPlugin {
     public void removeVanishEffects(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
         player.setAffectsSpawning(true);
-        if (vanishTeam.hasEntry(player.getName())) {
-            vanishTeam.removeEntry(player.getName());
+        player.setSleepingIgnored(false);
+
+        if (vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
+        if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION)) player.removePotionEffect(PotionEffectType.NIGHT_VISION);
+
+        if (player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR) {
+            player.setAllowFlight(false);
+            player.setFlying(false);
         }
+
+        if (voiceChatHook != null) voiceChatHook.updateVanishState(player, false);
+        integrationManager.updateHooks(player, false);
         updateVanishVisibility(player);
         saveDataAsynchronously();
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {
         applyVanishEffects(player);
-        player.sendMessage(configManager.vanishMessage);
+        player.sendMessage(Component.text(configManager.vanishMessage));
         if (configManager.fakeLeaveMessage) {
-            Component quitMessage = Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName());
-            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                if (!permissionManager.hasPermission(onlinePlayer, "vanishpp.see") && !onlinePlayer.equals(player)) {
-                    onlinePlayer.sendMessage(quitMessage);
-                }
-            }
+            broadcastToUnaware(Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()), player);
         }
-        if (configManager.staffNotifyEnabled) {
-            String notification = configManager.staffVanishMessage.replace("%player%", player.getName()).replace("%staff%", executor.getName());
-            Bukkit.broadcast(Component.text(notification), "vanishpp.see");
-        }
+        notifyStaff(player, executor, true);
     }
 
     public void unvanishPlayer(Player player, CommandSender executor) {
         removeVanishEffects(player);
-        player.sendMessage(configManager.unvanishMessage);
+        player.sendMessage(Component.text(configManager.unvanishMessage));
         if (configManager.fakeJoinMessage) {
-            Component joinMessage = Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName());
-            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                if (!permissionManager.hasPermission(onlinePlayer, "vanishpp.see") && !onlinePlayer.equals(player)) {
-                    onlinePlayer.sendMessage(joinMessage);
-                }
+            broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName()), player);
+        }
+        notifyStaff(player, executor, false);
+    }
+
+    private void broadcastToUnaware(Component message, Player vanishedPlayer) {
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            if (!permissionManager.canSee(onlinePlayer, vanishedPlayer) && !onlinePlayer.equals(vanishedPlayer)) {
+                onlinePlayer.sendMessage(message);
             }
         }
-        if (configManager.staffNotifyEnabled) {
-            String notification = configManager.staffUnvanishMessage.replace("%player%", player.getName()).replace("%staff%", executor.getName());
-            Bukkit.broadcast(Component.text(notification), "vanishpp.see");
+    }
+
+    private void notifyStaff(Player subject, CommandSender executor, boolean isVanishing) {
+        if (!configManager.staffNotifyEnabled) return;
+        String template = isVanishing ? configManager.staffVanishMessage : configManager.staffUnvanishMessage;
+        String notification = template.replace("%player%", subject.getName()).replace("%staff%", executor.getName());
+        Component comp = Component.text(notification);
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (permissionManager.hasPermission(p, "vanishpp.see")) p.sendMessage(comp);
         }
     }
 
@@ -126,7 +225,7 @@ public final class Vanishpp extends JavaPlugin {
         boolean isVanished = isVanished(subject);
         for (Player observer : Bukkit.getOnlinePlayers()) {
             if (observer.equals(subject)) continue;
-            boolean canSee = permissionManager.hasPermission(observer, "vanishpp.see");
+            boolean canSee = permissionManager.canSee(observer, subject);
 
             if (isVanished && !canSee) {
                 observer.hidePlayer(this, subject);
@@ -136,13 +235,47 @@ public final class Vanishpp extends JavaPlugin {
         }
     }
 
+    // Immediate command check for Op/Deop latency (Optimization)
+    @EventHandler
+    public void onCommandPreprocess(PlayerCommandPreprocessEvent event) {
+        String msg = event.getMessage().toLowerCase();
+        if (msg.startsWith("/op ") || msg.startsWith("/deop ") || msg.startsWith("/lp user ") || msg.startsWith("/luckperms user ")) {
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                for (UUID uuid : vanishedPlayers) {
+                    Player p = Bukkit.getPlayer(uuid);
+                    if (p != null) updateVanishVisibility(p);
+                }
+            }, 10L);
+        }
+    }
+
+    public void togglePickup(Player player) {
+        boolean current = ruleManager.getRule(player, RuleManager.CAN_PICKUP_ITEMS);
+        ruleManager.setRule(player, RuleManager.CAN_PICKUP_ITEMS, !current);
+        saveDataAsynchronously();
+    }
+
+    public boolean isWarningIgnored(Player player) { return ignoredWarningPlayers.contains(player.getUniqueId()); }
+    public void setWarningIgnored(Player player, boolean ignored) {
+        if (ignored) ignoredWarningPlayers.add(player.getUniqueId());
+        else ignoredWarningPlayers.remove(player.getUniqueId());
+        saveDataAsynchronously();
+    }
+
     private void saveDataAsynchronously() {
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> configManager.save());
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            configManager.save();
+            ruleManager.save();
+        });
     }
 
     public boolean isVanished(Player player) { return vanishedPlayers.contains(player.getUniqueId()); }
+    public boolean isVanished(UUID uuid) { return vanishedPlayers.contains(uuid); }
+    public boolean hasProtocolLib() { return hasProtocolLib; }
+    public Set<UUID> getIgnoredWarningPlayers() { return ignoredWarningPlayers; }
+
     public ConfigManager getConfigManager() { return configManager; }
     public PermissionManager getPermissionManager() { return permissionManager; }
+    public RuleManager getRuleManager() { return ruleManager; }
     public Set<UUID> getRawVanishedPlayers() { return Collections.unmodifiableSet(vanishedPlayers); }
-    public Team getVanishTeam() { return vanishTeam; }
 }
