@@ -2,6 +2,16 @@
 <project version="4">
   <component name="RemoteRepositoriesConfiguration">
     <remote-repository>
+      <option name="id" value="essentials-releases" />
+      <option name="name" value="essentials-releases" />
+      <option name="url" value="https://repo.essentialsx.net/releases/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="maxhenkel-repo" />
+      <option name="name" value="maxhenkel-repo" />
+      <option name="url" value="https://maven.maxhenkel.de/repository/public" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="central" />
       <option name="name" value="Central Repository" />
       <option name="url" value="https://repo.maven.apache.org/maven2" />
@@ -12,9 +22,19 @@
       <option name="url" value="https://oss.sonatype.org/content/groups/public/" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="dmulloy2-repo" />
+      <option name="name" value="dmulloy2-repo" />
+      <option name="url" value="https://repo.dmulloy2.net/repository/public/" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="papermc-repo" />
       <option name="name" value="papermc-repo" />
       <option name="url" value="https://repo.papermc.io/repository/maven-public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="placeholderapi" />
+      <option name="name" value="placeholderapi" />
+      <option name="url" value="https://repo.extendedclip.com/content/repositories/placeholderapi/" />
     </remote-repository>
     <remote-repository>
       <option name="id" value="central" />
@@ -25,6 +45,11 @@
       <option name="id" value="jboss.community" />
       <option name="name" value="JBoss Community repository" />
       <option name="url" value="https://repository.jboss.org/nexus/content/repositories/public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="mikeprimm-repo" />
+      <option name="name" value="mikeprimm-repo" />
+      <option name="url" value="https://repo.mikeprimm.com/" />
     </remote-repository>
   </component>
 </project>

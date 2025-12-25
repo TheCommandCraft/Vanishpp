@@ -1,6 +1,6 @@
-# ----------------------------------- #
-#       Vanish++ Configuration        #
-# ----------------------------------- #
+# ================================================= #
+#             Vanish++ Configuration                #
+# ================================================= #
 
 messages:
   vanish: "&6You are now vanished."
@@ -10,23 +10,27 @@ messages:
   vanished-other: "&6You have vanished %player%."
   unvanished-other: "&6You have unvanished %player%."
 
-  # New messages for the /vperms command
+  pickup-enabled: "&eItem pickup is now &aENABLED&e."
+  pickup-disabled: "&eItem pickup is now &cDISABLED&e."
+
+  chat-locked: "&cYou are vanished! &7Type &b/vchat confirm &7to send this message."
+  chat-sent: "&aMessage sent."
+  no-chat-pending: "&cYou have no pending chat messages to confirm."
+
+  silent-chest-blocked: "&cYou cannot open this silently (Inventory Type not supported or protected)."
+
   vperms:
     invalid-usage: "&cUsage: /vperms <player> <permission> <set|remove|get>"
-    invalid-permission: "&cInvalid permission. Use: vanishpp.vanish, vanishpp.see, or vanishpp.vanish.others"
+    invalid-permission: "&cInvalid permission."
     perm-set: "&aSet permission '%perm%' for %player%."
     perm-removed: "&eRemoved permission '%perm%' from %player%."
     perm-get-has: "&a%player% HAS the permission '%perm%'."
     perm-get-does-not-have: "&c%player% DOES NOT HAVE the permission '%perm%'."
     reload: "&aVanish++ permissions reloaded."
 
-  # Messages sent to players with the 'vanishpp.see' permission when a vanished player joins or leaves.
-  # %player% is a placeholder for the player's name.
   silent-join: "&8[&7+&8] &7%player% has silently joined."
   silent-quit: "&8[&7-&8] &7%player% has silently left."
 
-  # Notifications sent to staff (players with 'vanishpp.see') when another player's vanish state is changed.
-  # %player% is the player who vanished. %staff% is the player who executed the command.
   staff-notify:
     enabled: true
     on-vanish: "&e[Staff] %player% has vanished (by %staff%)."
@@ -37,9 +41,60 @@ vanish-appearance:
   action-bar:
     enabled: true
     text: "&bYou are currently VANISHED"
+  # Should vanished players be removed from the server list player count?
+  adjust-server-list-count: true
 
 chat-format:
   vanished-player-format: "%prefix%&7%player%: %message%"
+
+# ----------------------------------------------------------------- #
+#                         Invisibility Features                     #
+# ----------------------------------------------------------------- #
+invisibility-features:
+  night-vision: true
+  allow-flight: true
+  disable-mob-targeting: true
+  disable-hunger: true
+  silent-chests: true
+  ignore-projectiles: true
+  # Prevent vanished players from triggering Raids (Bad Omen)
+  prevent-raid-trigger: true
+  # Prevent vanished players from triggering Sculk Sensors (Vibrations)
+  prevent-sculk-sensors: true
+  # Prevent vanished players from trampling Crops or Turtle Eggs
+  prevent-trample: true
+  # Should vanished players be hidden from TAB-Completion for non-staff?
+  hide-from-tab-complete: true
+  # Prevent vanished players from sleeping (ignoring them for sleep count)
+  prevent-sleeping: true
+  # Prevent interacting with entities (prevents GSit, trading, etc)
+  prevent-entity-interact: true
+  # If true, vanished players cannot chat without confirming via /vchat confirm
+  prevent-accidental-chat: true
+
+# ----------------------------------------------------------------- #
+#                        Hooks & Integrations                       #
+# ----------------------------------------------------------------- #
+hooks:
+  simple-voice-chat:
+    enabled: true
+    # If true, vanished players will be muted/hidden in voice chat groups
+    isolate-vanished-players: true
+
+# ----------------------------------------------------------------- #
+#                       Layered Permissions                         #
+# ----------------------------------------------------------------- #
+# This system allows you to create a hierarchy of who can see whom.
+# Permissions:
+#   vanishpp.vanish.level.X  (The player's vanish level)
+#   vanishpp.see.level.X     (The player's see level)
+# Rule: A player can see a vanished player IF:
+#       Observer's See Level >= Target's Vanish Level
+permissions:
+  layered-permissions-enabled: true
+  default-vanish-level: 1
+  default-see-level: 1  # For players with 'vanishpp.see'
+  max-level: 100
 
 vanish-effects:
   hide-from-server-list: true
@@ -51,9 +106,7 @@ hide-announcements:
   death-messages: true
   advancements: true
 
-
-# ------------------------------------------------ #
-#       Vanish++ Plugin Data - Do not edit!        #
-# ------------------------------------------------ #
 data:
   vanished-players: []
+  # Stores who has item pickup enabled (UUIDs)
+  pickup-enabled-players: []

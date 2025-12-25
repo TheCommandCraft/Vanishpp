@@ -1,135 +1,132 @@
 package net.thecommandcraft.vanishpp;
 
-import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
-
-import java.io.File;
-import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class ConfigManager {
-
     private final Vanishpp plugin;
     private FileConfiguration config;
-    private File configFile;
 
     // Messages
-    public String vanishMessage, unvanishMessage, noPermissionMessage, playerNotFoundMessage,
-            vanishedOtherMessage, unvanishedOtherMessage, silentJoinMessage, silentQuitMessage,
-            staffVanishMessage, staffUnvanishMessage;
+    public String vanishMessage, unvanishMessage, noPermissionMessage, playerNotFoundMessage;
+    public String vanishedOtherMessage, unvanishedOtherMessage, silentChestBlocked;
+    public String pickupEnabledMessage, pickupDisabledMessage;
+    public String chatLockedMessage, chatSentMessage, noChatPendingMessage;
+    public String vpermsInvalidUsage, vpermsInvalidPermission, vpermsPermSet, vpermsPermRemoved, vpermsPermGetHas, vpermsPermGetDoesNotHave, vpermsReload;
+    public String silentJoinMessage, silentQuitMessage;
+    public boolean staffNotifyEnabled;
+    public String staffVanishMessage, staffUnvanishMessage;
 
-    // VPerms Messages
-    public String vpermsInvalidUsage, vpermsInvalidPermission, vpermsPermSet,
-            vpermsPermRemoved, vpermsPermGetHas, vpermsPermGetDoesNotHave, vpermsReload;
+    public String vanishPrefix, actionBarText, vanishedPlayerFormat;
+    public boolean actionBarEnabled, hideFromServerList, fakeLeaveMessage, fakeJoinMessage, disableBlockTriggering;
+    public boolean hideDeathMessages, hideAdvancements;
 
-    // Formatting
-    public String vanishPrefix, vanishedChatFormat, actionBarText;
+    public boolean enableNightVision, enableFly, disableMobTarget, disableHunger, silentChests, ignoreProjectiles;
+    public boolean preventRaid, preventSculk, preventTrample, hideTabComplete, preventSleeping, preventEntityInteract;
+    public boolean preventAccidentalChat;
+    public boolean adjustServerListCount;
 
-    // Toggles
-    public boolean hideFromServerList, fakeLeaveMessage, fakeJoinMessage, disableBlockTriggering,
-            hideDeathMessages, hideAdvancements, actionBarEnabled, staffNotifyEnabled;
+    public boolean voiceChatEnabled, voiceChatIsolate;
+    public boolean layeredPermsEnabled;
+    public int defaultVanishLevel, defaultSeeLevel, maxLevel;
 
-    public ConfigManager(Vanishpp plugin) {
-        this.plugin = plugin;
-    }
+    public ConfigManager(Vanishpp plugin) { this.plugin = plugin; }
+
+    public FileConfiguration getConfig() { return config; }
 
     public void load() {
-        if (!plugin.getDataFolder().exists()) {
-            plugin.getDataFolder().mkdir();
-        }
+        plugin.saveDefaultConfig();
+        plugin.reloadConfig();
+        this.config = plugin.getConfig();
 
-        this.configFile = new File(plugin.getDataFolder(), "config.yml");
-        if (!configFile.exists()) {
-            plugin.saveResource("config.yml", false);
-        }
+        vanishMessage = format(config.getString("messages.vanish"));
+        unvanishMessage = format(config.getString("messages.unvanish"));
+        noPermissionMessage = format(config.getString("messages.no-permission"));
+        playerNotFoundMessage = format(config.getString("messages.player-not-found"));
+        vanishedOtherMessage = format(config.getString("messages.vanished-other"));
+        unvanishedOtherMessage = format(config.getString("messages.unvanished-other"));
+        silentChestBlocked = format(config.getString("messages.silent-chest-blocked"));
+        pickupEnabledMessage = format(config.getString("messages.pickup-enabled", "&aPickup Enabled"));
+        pickupDisabledMessage = format(config.getString("messages.pickup-disabled", "&cPickup Disabled"));
 
-        this.config = YamlConfiguration.loadConfiguration(configFile);
+        chatLockedMessage = format(config.getString("messages.chat-locked", "&cConfirm chat with /vchat confirm"));
+        chatSentMessage = format(config.getString("messages.chat-sent", "&aSent."));
+        noChatPendingMessage = format(config.getString("messages.no-chat-pending", "&cNo pending message."));
 
-        config.addDefault("messages.vperms.invalid-usage", "&cUsage: /vperms <player> <permission> <set|remove|get>");
-        config.addDefault("messages.vperms.invalid-permission", "&cInvalid permission. Use: vanishpp.vanish, vanishpp.see, or vanishpp.vanish.others");
-        config.addDefault("messages.vperms.perm-set", "&aSet permission '%perm%' for %player%.");
-        config.addDefault("messages.vperms.perm-removed", "&eRemoved permission '%perm%' from %player%.");
-        config.addDefault("messages.vperms.perm-get-has", "&a%player% HAS the permission '%perm%'.");
-        config.addDefault("messages.vperms.perm-get-does-not-have", "&c%player% DOES NOT HAVE the permission '%perm%'.");
-        config.addDefault("messages.vperms.reload", "&aVanish++ permissions reloaded.");
+        vpermsInvalidUsage = format(config.getString("messages.vperms.invalid-usage"));
+        vpermsInvalidPermission = format(config.getString("messages.vperms.invalid-permission"));
+        vpermsPermSet = format(config.getString("messages.vperms.perm-set"));
+        vpermsPermRemoved = format(config.getString("messages.vperms.perm-removed"));
+        vpermsPermGetHas = format(config.getString("messages.vperms.perm-get-has"));
+        vpermsPermGetDoesNotHave = format(config.getString("messages.vperms.perm-get-does-not-have"));
+        vpermsReload = format(config.getString("messages.vperms.reload"));
 
-        config.options().copyDefaults(true);
-        plugin.saveDefaultConfig(); // Ensures defaults are written if missing
-        try {
-            config.save(configFile); // Save any new defaults like vperms messages
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        // Load all values
-        vanishMessage = translateColors(config.getString("messages.vanish"));
-        unvanishMessage = translateColors(config.getString("messages.unvanish"));
-        noPermissionMessage = translateColors(config.getString("messages.no-permission"));
-        playerNotFoundMessage = translateColors(config.getString("messages.player-not-found"));
-        vanishedOtherMessage = translateColors(config.getString("messages.vanished-other"));
-        unvanishedOtherMessage = translateColors(config.getString("messages.unvanished-other"));
-        silentJoinMessage = translateColors(config.getString("messages.silent-join"));
-        silentQuitMessage = translateColors(config.getString("messages.silent-quit"));
-        staffVanishMessage = translateColors(config.getString("messages.staff-notify.on-vanish"));
-        staffUnvanishMessage = translateColors(config.getString("messages.staff-notify.on-unvanish"));
-
-        vpermsInvalidUsage = translateColors(config.getString("messages.vperms.invalid-usage"));
-        vpermsInvalidPermission = translateColors(config.getString("messages.vperms.invalid-permission"));
-        vpermsPermSet = translateColors(config.getString("messages.vperms.perm-set"));
-        vpermsPermRemoved = translateColors(config.getString("messages.vperms.perm-removed"));
-        vpermsPermGetHas = translateColors(config.getString("messages.vperms.perm-get-has"));
-        vpermsPermGetDoesNotHave = translateColors(config.getString("messages.vperms.perm-get-does-not-have"));
-        vpermsReload = translateColors(config.getString("messages.vperms.reload"));
-
-        vanishPrefix = translateColors(config.getString("vanish-appearance.prefix"));
-        actionBarText = translateColors(config.getString("vanish-appearance.action-bar.text"));
-        vanishedChatFormat = translateColors(config.getString("chat-format.vanished-player-format"));
-
+        silentJoinMessage = format(config.getString("messages.silent-join"));
+        silentQuitMessage = format(config.getString("messages.silent-quit"));
         staffNotifyEnabled = config.getBoolean("messages.staff-notify.enabled");
+        staffVanishMessage = format(config.getString("messages.staff-notify.on-vanish"));
+        staffUnvanishMessage = format(config.getString("messages.staff-notify.on-unvanish"));
+
+        vanishPrefix = format(config.getString("vanish-appearance.prefix"));
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
+        actionBarText = format(config.getString("vanish-appearance.action-bar.text"));
+        adjustServerListCount = config.getBoolean("vanish-appearance.adjust-server-list-count", true);
+        vanishedPlayerFormat = format(config.getString("chat-format.vanished-player-format"));
+
         hideFromServerList = config.getBoolean("vanish-effects.hide-from-server-list");
         fakeLeaveMessage = config.getBoolean("vanish-effects.fake-leave-message");
         fakeJoinMessage = config.getBoolean("vanish-effects.fake-join-message");
         disableBlockTriggering = config.getBoolean("vanish-effects.disable-block-triggering");
+
         hideDeathMessages = config.getBoolean("hide-announcements.death-messages");
         hideAdvancements = config.getBoolean("hide-announcements.advancements");
+
+        enableNightVision = config.getBoolean("invisibility-features.night-vision");
+        enableFly = config.getBoolean("invisibility-features.allow-flight");
+        disableMobTarget = config.getBoolean("invisibility-features.disable-mob-targeting");
+        disableHunger = config.getBoolean("invisibility-features.disable-hunger");
+        silentChests = config.getBoolean("invisibility-features.silent-chests");
+        ignoreProjectiles = config.getBoolean("invisibility-features.ignore-projectiles");
+        preventRaid = config.getBoolean("invisibility-features.prevent-raid-trigger");
+        preventSculk = config.getBoolean("invisibility-features.prevent-sculk-sensors");
+        preventTrample = config.getBoolean("invisibility-features.prevent-trample");
+        hideTabComplete = config.getBoolean("invisibility-features.hide-from-tab-complete");
+        preventSleeping = config.getBoolean("invisibility-features.prevent-sleeping");
+        preventEntityInteract = config.getBoolean("invisibility-features.prevent-entity-interact", true);
+        preventAccidentalChat = config.getBoolean("invisibility-features.prevent-accidental-chat", true);
+
+        voiceChatEnabled = config.getBoolean("hooks.simple-voice-chat.enabled");
+        voiceChatIsolate = config.getBoolean("hooks.simple-voice-chat.isolate-vanished-players");
+
+        layeredPermsEnabled = config.getBoolean("permissions.layered-permissions-enabled");
+        defaultVanishLevel = config.getInt("permissions.default-vanish-level", 1);
+        defaultSeeLevel = config.getInt("permissions.default-see-level", 1);
+        maxLevel = config.getInt("permissions.max-level", 100);
     }
 
-    public synchronized void save() {
-        saveVanishedPlayersToMemory(plugin.getRawVanishedPlayers());
-        try {
-            config.save(configFile);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Could not save config.yml!");
-            e.printStackTrace();
+    public void save() {
+        List<String> uuidStrings = plugin.getRawVanishedPlayers().stream().map(UUID::toString).toList();
+        config.set("data.vanished-players", uuidStrings);
+        // Note: Pickup players are now managed via RuleManager data.rules, separate persistence handled there
+        List<String> ignoredStrings = plugin.getIgnoredWarningPlayers().stream().map(UUID::toString).toList();
+        config.set("data.ignored-warnings", ignoredStrings);
+        plugin.saveConfig();
+    }
+
+    public Set<UUID> loadVanishedPlayers() { return loadUuidSet("data.vanished-players"); }
+    public Set<UUID> loadIgnoredWarningPlayers() { return loadUuidSet("data.ignored-warnings"); }
+
+    // Pickup is now rule-based, so we don't load separate set here anymore
+    public Set<UUID> loadPickupEnabledPlayers() { return new HashSet<>(); }
+
+    private Set<UUID> loadUuidSet(String path) {
+        List<String> list = config.getStringList(path);
+        Set<UUID> set = new HashSet<>();
+        for (String s : list) {
+            try { set.add(UUID.fromString(s)); } catch (Exception ignored) {}
         }
+        return set;
     }
-
-    public Set<UUID> loadVanishedPlayers() {
-        // This needs to happen after config is loaded
-        if (config == null) {
-            this.config = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "config.yml"));
-        }
-        return config.getStringList("data.vanished-players").stream()
-                .map(uuidString -> {
-                    try { return UUID.fromString(uuidString); }
-                    catch (IllegalArgumentException e) {
-                        plugin.getLogger().warning("Could not parse UUID from config: " + uuidString);
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-    }
-
-    private void saveVanishedPlayersToMemory(Set<UUID> vanishedPlayers) {
-        List<String> uuids = vanishedPlayers.stream().map(UUID::toString).collect(Collectors.toList());
-        config.set("data.vanished-players", uuids);
-    }
-
-    private String translateColors(String text) {
-        return text == null ? "" : ChatColor.translateAlternateColorCodes('&', text);
-    }
+    private String format(String m) { return m == null ? "" : m.replace("&", "§"); }
+    public String format(String m, String def) { return m == null ? def : m.replace("&", "§"); }
 }

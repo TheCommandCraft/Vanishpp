@@ -1,12 +1,9 @@
 package net.thecommandcraft.vanishpp;
 
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-
 import java.io.File;
-import java.io.IOException;
 import java.util.*;
 
 public class PermissionManager {
@@ -22,57 +19,45 @@ public class PermissionManager {
     }
 
     public void load() {
-        if (!permissionsFile.exists()) {
-            plugin.saveResource("permissions.yml", false);
-        }
+        if (!permissionsFile.exists()) plugin.saveResource("permissions.yml", false);
         this.permissionsConfig = YamlConfiguration.loadConfiguration(permissionsFile);
         playerPermissions.clear();
-
-        ConfigurationSection permsSection = permissionsConfig.getConfigurationSection("permissions");
-        if (permsSection != null) {
-            for (String uuidString : permsSection.getKeys(false)) {
+        if (permissionsConfig.contains("permissions")) {
+            for (String key : permissionsConfig.getConfigurationSection("permissions").getKeys(false)) {
                 try {
-                    UUID uuid = UUID.fromString(uuidString);
-                    List<String> perms = permsSection.getStringList(uuidString);
-                    playerPermissions.put(uuid, new ArrayList<>(perms));
-                } catch (IllegalArgumentException e) {
-                    plugin.getLogger().warning("Invalid UUID found in permissions.yml: " + uuidString);
-                }
+                    playerPermissions.put(UUID.fromString(key), permissionsConfig.getStringList("permissions." + key));
+                } catch (IllegalArgumentException ignored) {}
             }
-        }
-        plugin.getLogger().info("Loaded custom permissions for " + playerPermissions.size() + " players.");
-    }
-
-    private synchronized void save() {
-        ConfigurationSection permsSection = permissionsConfig.createSection("permissions");
-        for (Map.Entry<UUID, List<String>> entry : playerPermissions.entrySet()) {
-            permsSection.set(entry.getKey().toString(), entry.getValue());
-        }
-        try {
-            permissionsConfig.save(permissionsFile);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Could not save permissions.yml!");
-            e.printStackTrace();
         }
     }
 
     public void addPermission(UUID uuid, String permission) {
-        List<String> perms = playerPermissions.computeIfAbsent(uuid, k -> new ArrayList<>());
-        if (!perms.contains(permission)) {
-            perms.add(permission);
-        }
+        List<String> list = playerPermissions.computeIfAbsent(uuid, k -> new ArrayList<>());
+        if (!list.contains(permission)) list.add(permission);
         save();
     }
 
     public void removePermission(UUID uuid, String permission) {
-        List<String> perms = playerPermissions.get(uuid);
-        if (perms != null) {
-            perms.remove(permission);
-            if (perms.isEmpty()) {
-                playerPermissions.remove(uuid);
-            }
+        if (playerPermissions.containsKey(uuid)) {
+            playerPermissions.get(uuid).remove(permission);
+            if (playerPermissions.get(uuid).isEmpty()) playerPermissions.remove(uuid);
+            save();
         }
-        save();
+    }
+
+    private void save() {
+        permissionsConfig.set("permissions", null);
+        for (Map.Entry<UUID, List<String>> entry : playerPermissions.entrySet()) {
+            permissionsConfig.set("permissions." + entry.getKey().toString(), entry.getValue());
+        }
+        try { permissionsConfig.save(permissionsFile); } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    public boolean hasPermission(Player player, String permission) {
+        if (player.isOp()) return true;
+        if (player.hasPermission("vanishpp.*")) return true;
+        if (player.hasPermission(permission)) return true;
+        return hasPermission(player.getUniqueId(), permission);
     }
 
     public boolean hasPermission(UUID uuid, String permission) {
@@ -80,13 +65,42 @@ public class PermissionManager {
         return perms != null && perms.contains(permission);
     }
 
-    public boolean hasPermission(Player player, String permission) {
-        if (player.isOp()) {
-            return true;
+    /**
+     * Determines if an observer can see a target based on Layered Permissions.
+     */
+    public boolean canSee(Player observer, Player target) {
+        // If target isn't vanished, everyone sees them (handled in updateVanishVisibility, but good safety)
+        if (!plugin.isVanished(target)) return true;
+
+        // Check simple perm first
+        if (!hasPermission(observer, "vanishpp.see")) return false;
+
+        // Layered Check
+        ConfigManager cm = plugin.getConfigManager();
+        if (cm.layeredPermsEnabled) {
+            int targetVanishLevel = getLevel(target, "vanishpp.vanish.level.", cm.defaultVanishLevel);
+            int observerSeeLevel = getLevel(observer, "vanishpp.see.level.", cm.defaultSeeLevel);
+
+            // If Observer See Level is LESS than Target Vanish Level, they CANNOT see.
+            if (observerSeeLevel < targetVanishLevel) {
+                return false;
+            }
         }
-        if (player.hasPermission(permission)) {
-            return true;
+
+        return true;
+    }
+
+    private int getLevel(Player player, String prefix, int def) {
+        if (player.isOp() || player.hasPermission("vanishpp.*")) return plugin.getConfigManager().maxLevel;
+
+        // Loop permissions to find highest level
+        // Ideally we start from Max and go down
+        int max = plugin.getConfigManager().maxLevel;
+        for (int i = max; i > 0; i--) {
+            if (player.hasPermission(prefix + i)) {
+                return i;
+            }
         }
-        return hasPermission(player.getUniqueId(), permission);
+        return def;
     }
 }
