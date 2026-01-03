@@ -2,33 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] - 2025-12-25
+## [1.1.0] - 2026-01-03
 
 ### Added
-- **ProtocolLib Tab Scrubbing:**
-    - Vanish++ now intercepts `TAB_COMPLETE` packets sent to clients.
-    - If a non-staff player tries to tab-complete a name in chat, vanilla commands, or plugin commands, vanished players will be **completely removed** from the suggestions list. This ensures 100% hidden status even against plugins that auto-suggest online players.
-- **ProtocolLib Integration:**
-    - **Ghost View:** Staff members with permission (`vanishpp.see`) see vanished players in the TabList as **Spectators** (gray and italicized).
-    - **True Invisibility:** Packet-level handling ensures vanished players are hidden from Server List counts.
-- **Plugin Hooks:**
-    - **EssentialsX:** Hidden from `/who`, `/list`, `/online`.
-    - **Dynmap:** Hidden from web map.
-    - **PlaceholderAPI:** Added `%vanishpp_is_vanished%`.
-- **Per-Player Rules System:** Added `/vanishrules` (alias `/vrules`). Configure personal restrictions:
-    - `can_break_blocks`, `can_place_blocks`
-    - `can_hit_entities` (Default: false) - Absolute peace mode.
-    - `can_interact` (Default: true) - Chests, buttons.
-    - `can_chat` (Default: false) - Prevents accidental chatting.
-- **Chat Confirmation:** Added `/vanishchat`. Prevents accidental leaks by requiring confirmation if strict chat is enabled.
-
-### Fixed
-- **Projectile Physics:** Switched to Paper's `ProjectileCollideEvent`. Arrows now physically pass through vanished players without stopping or teleporting.
-- **Entity Collision:** Vanished players cannot push or be pushed by entities.
-- **Code Stability:** Cleaned up chat confirmation logic and corrected dependency versions for stable builds.
+- **Java 21 / MC 1.21 Support:** Full compatibility with the latest Minecraft versions.
+- **Legacy Plugin Compatibility:** Vanished players now automatically have the standard Bukkit `"vanished"` metadata set.
+- **Dependency Warning System:** Added a chat/title/sound warning for OP players on join if **ProtocolLib** is missing.
+- **Ignore Warning Command:** Added `/vanishignore` to permanently silence the ProtocolLib warning.
+- **Universal Command Targets:** `/vrules`, `/vpickup`, and `/vignore` now accept an optional target player.
+- **Heartbeat Synchronization:** Force-refreshes visibility every second to handle permission changes instantly.
+- **ProtocolLib Tab Scrubbing:** Vanished players are removed from Tab-Complete packets.
+- **Dropping Rule:** Added `can_drop_items` rule (Default: false).
+- **TAB Plugin Hook:** Native integration with NEZNAMY's TAB plugin to set prefixes without placeholders.
 
 ### Changed
-- **Dependencies:** Added soft-depends for ProtocolLib, PlaceholderAPI, Dynmap, EssentialsX, and SimpleVoiceChat.
+- **Visibility Logic:** Removed the Vanilla Invisibility Potion effect. This ensures that **Staff with permission** can see the vanished player's armor and skin, while normal players still see nothing (handled via packet hiding).
+- **Mob AI:** Mobs are prevented from targeting vanished players via event cancellation, though head tracking may occur visually due to the removal of the invisibility potion.
+
+### Fixed
+- **Mob Gazing:** Fixed mobs looking at vanished players.
+- **Join Visibility Flash:** Moved join event priority to `LOWEST`.
+- **Server List Hover:** Fixed a bug where vanished players appeared in the sample list.
+- **Chat Confirmation Loop:** Fixed logic so confirmed messages don't re-trigger the blocker.
+## [1.0.4] - 2025-12-25
+
+### Added
+- **ProtocolLib Integration:**
+    - **Ghost View:** Staff members see vanished players in the TabList as **Spectators** (gray/italic).
+    - **True Invisibility:** Packet-level hiding from Server List counts.
+- **Plugin Hooks:** EssentialsX, Dynmap, PlaceholderAPI.
+- **Per-Player Rules:** Added `/vrules` configuration.
+- **Chat Confirmation:** Added `/vanishchat`.
+
+### Fixed
+- **Projectile Physics:** Switched to Paper's `ProjectileCollideEvent`. Arrows physically pass through vanished players.
+- **Entity Collision:** Disabled collision via Scoreboard Teams.
 
 ## [1.0.3] - 2025-12-25
 
