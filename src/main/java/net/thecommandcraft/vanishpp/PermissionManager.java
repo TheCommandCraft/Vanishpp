@@ -1,9 +1,12 @@
 package net.thecommandcraft.vanishpp;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
 
 public class PermissionManager {
@@ -13,91 +16,161 @@ public class PermissionManager {
     private FileConfiguration permissionsConfig;
     private final Map<UUID, List<String>> playerPermissions = new HashMap<>();
 
+    // Definitions for custom permission groups
+    private static final Map<String, Set<String>> CUSTOM_GROUPS = new HashMap<>();
+
+    static {
+        // Group: vanishpp.abilities
+        Set<String> abilities = new HashSet<>();
+        abilities.add("vanishpp.silentchest");
+        abilities.add("vanishpp.chat");
+        abilities.add("vanishpp.notarget");
+        abilities.add("vanishpp.nohunger");
+        abilities.add("vanishpp.nightvision");
+        abilities.add("vanishpp.fly");
+        abilities.add("vanishpp.no-raid");
+        abilities.add("vanishpp.no-sculk");
+        abilities.add("vanishpp.no-trample");
+        abilities.add("vanishpp.join-vanished");
+        CUSTOM_GROUPS.put("vanishpp.abilities", abilities);
+
+        // Group: vanishpp.management
+        Set<String> management = new HashSet<>();
+        management.add("vanishpp.manageperms");
+        management.add("vanishpp.ignorewarning");
+        management.add("vanishpp.rules");
+        management.add("vanishpp.rules.others");
+        management.add("vanishpp.pickup");
+        management.add("vanishpp.pickup.others");
+        CUSTOM_GROUPS.put("vanishpp.management", management);
+
+        // Group: vanishpp.core
+        Set<String> core = new HashSet<>();
+        core.add("vanishpp.vanish");
+        core.add("vanishpp.vanish.others");
+        core.add("vanishpp.see");
+        CUSTOM_GROUPS.put("vanishpp.core", core);
+    }
+
     public PermissionManager(Vanishpp plugin) {
         this.plugin = plugin;
         this.permissionsFile = new File(plugin.getDataFolder(), "permissions.yml");
     }
 
     public void load() {
-        if (!permissionsFile.exists()) plugin.saveResource("permissions.yml", false);
+        if (!permissionsFile.exists()) {
+            plugin.saveResource("permissions.yml", false);
+        }
         this.permissionsConfig = YamlConfiguration.loadConfiguration(permissionsFile);
         playerPermissions.clear();
-        if (permissionsConfig.contains("permissions")) {
-            for (String key : permissionsConfig.getConfigurationSection("permissions").getKeys(false)) {
+
+        ConfigurationSection permsSection = permissionsConfig.getConfigurationSection("permissions");
+        if (permsSection != null) {
+            for (String uuidString : permsSection.getKeys(false)) {
                 try {
-                    playerPermissions.put(UUID.fromString(key), permissionsConfig.getStringList("permissions." + key));
-                } catch (IllegalArgumentException ignored) {}
+                    UUID uuid = UUID.fromString(uuidString);
+                    List<String> perms = permsSection.getStringList(uuidString);
+                    playerPermissions.put(uuid, new ArrayList<>(perms));
+                } catch (IllegalArgumentException e) {
+                    plugin.getLogger().warning("Invalid UUID found in permissions.yml: " + uuidString);
+                }
             }
+        }
+        plugin.getLogger().info("Loaded custom permissions for " + playerPermissions.size() + " players.");
+    }
+
+    private synchronized void save() {
+        permissionsConfig.set("permissions", null);
+        ConfigurationSection permsSection = permissionsConfig.createSection("permissions");
+        for (Map.Entry<UUID, List<String>> entry : playerPermissions.entrySet()) {
+            permsSection.set(entry.getKey().toString(), entry.getValue());
+        }
+        try {
+            permissionsConfig.save(permissionsFile);
+        } catch (IOException e) {
+            plugin.getLogger().severe("Could not save permissions.yml!");
+            e.printStackTrace();
         }
     }
 
     public void addPermission(UUID uuid, String permission) {
-        List<String> list = playerPermissions.computeIfAbsent(uuid, k -> new ArrayList<>());
-        if (!list.contains(permission)) list.add(permission);
+        List<String> perms = playerPermissions.computeIfAbsent(uuid, k -> new ArrayList<>());
+        if (!perms.contains(permission)) {
+            perms.add(permission);
+        }
         save();
     }
 
     public void removePermission(UUID uuid, String permission) {
-        if (playerPermissions.containsKey(uuid)) {
-            playerPermissions.get(uuid).remove(permission);
-            if (playerPermissions.get(uuid).isEmpty()) playerPermissions.remove(uuid);
-            save();
-        }
-    }
-
-    private void save() {
-        permissionsConfig.set("permissions", null);
-        for (Map.Entry<UUID, List<String>> entry : playerPermissions.entrySet()) {
-            permissionsConfig.set("permissions." + entry.getKey().toString(), entry.getValue());
-        }
-        try { permissionsConfig.save(permissionsFile); } catch (Exception e) { e.printStackTrace(); }
-    }
-
-    public boolean hasPermission(Player player, String permission) {
-        if (player.isOp()) return true;
-        if (player.hasPermission("vanishpp.*")) return true;
-        if (player.hasPermission(permission)) return true;
-        return hasPermission(player.getUniqueId(), permission);
-    }
-
-    public boolean hasPermission(UUID uuid, String permission) {
         List<String> perms = playerPermissions.get(uuid);
-        return perms != null && perms.contains(permission);
+        if (perms != null) {
+            perms.remove(permission);
+            if (perms.isEmpty()) {
+                playerPermissions.remove(uuid);
+            }
+        }
+        save();
     }
 
     /**
-     * Determines if an observer can see a target based on Layered Permissions.
+     * Checks if a UUID has a permission in the custom file.
+     * Supports 'vanishpp.*' and category groups like 'vanishpp.abilities'.
      */
-    public boolean canSee(Player observer, Player target) {
-        // If target isn't vanished, everyone sees them (handled in updateVanishVisibility, but good safety)
-        if (!plugin.isVanished(target)) return true;
+    public boolean hasPermission(UUID uuid, String permission) {
+        List<String> perms = playerPermissions.get(uuid);
+        if (perms == null) return false;
 
-        // Check simple perm first
+        // 1. Check for Super Wildcard
+        if (perms.contains("vanishpp.*")) return true;
+
+        // 2. Check for Exact Match
+        if (perms.contains(permission)) return true;
+
+        // 3. Check for Group Inheritance
+        // Example: User wants "vanishpp.fly". We check if user has "vanishpp.abilities"
+        // because "vanishpp.abilities" contains "vanishpp.fly".
+        for (Map.Entry<String, Set<String>> group : CUSTOM_GROUPS.entrySet()) {
+            if (group.getValue().contains(permission)) {
+                if (perms.contains(group.getKey())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Checks permission via Bukkit (OP/Plugins) OR Custom File.
+     */
+    public boolean hasPermission(Player player, String permission) {
+        if (player.hasPermission(permission)) {
+            return true;
+        }
+        return hasPermission(player.getUniqueId(), permission);
+    }
+
+    public boolean canSee(Player observer, Player target) {
+        if (!plugin.isVanished(target)) return true;
         if (!hasPermission(observer, "vanishpp.see")) return false;
 
-        // Layered Check
         ConfigManager cm = plugin.getConfigManager();
         if (cm.layeredPermsEnabled) {
             int targetVanishLevel = getLevel(target, "vanishpp.vanish.level.", cm.defaultVanishLevel);
             int observerSeeLevel = getLevel(observer, "vanishpp.see.level.", cm.defaultSeeLevel);
-
-            // If Observer See Level is LESS than Target Vanish Level, they CANNOT see.
             if (observerSeeLevel < targetVanishLevel) {
                 return false;
             }
         }
-
         return true;
     }
 
     private int getLevel(Player player, String prefix, int def) {
-        if (player.isOp() || player.hasPermission("vanishpp.*")) return plugin.getConfigManager().maxLevel;
+        if (hasPermission(player, "vanishpp.*")) return plugin.getConfigManager().maxLevel;
 
-        // Loop permissions to find highest level
-        // Ideally we start from Max and go down
         int max = plugin.getConfigManager().maxLevel;
         for (int i = max; i > 0; i--) {
-            if (player.hasPermission(prefix + i)) {
+            if (hasPermission(player, prefix + i)) {
                 return i;
             }
         }

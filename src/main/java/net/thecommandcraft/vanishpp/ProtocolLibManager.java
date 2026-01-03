@@ -9,11 +9,10 @@ import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.wrappers.EnumWrappers;
 import com.comphenix.protocol.wrappers.PlayerInfoData;
-import com.comphenix.protocol.wrappers.WrappedGameProfile;
-import com.comphenix.protocol.wrappers.WrappedChatComponent;
+import com.comphenix.protocol.wrappers.WrappedDataValue;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,34 +34,35 @@ public class ProtocolLibManager {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         plugin.getLogger().info("Hooked into ProtocolLib.");
 
-        // 1. Intercept PLAYER_INFO packets (Spectator Effect)
+        // 1. Intercept PLAYER_INFO packets (Spectator Effect in Tab)
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGH, PacketType.Play.Server.PLAYER_INFO) {
             @Override
             public void onPacketSending(PacketEvent event) {
-                Player observer = event.getPlayer();
+                if (!ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(event.getPlayer(), "vanishpp.see")) return;
 
-                // If permission to see is missing, Bukkit handles the hiding.
-                // We only modify packets for those who CAN see to make them appear as spectators.
-                if (!ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see")) {
+                PacketContainer packet = event.getPacket();
+
+                Set<EnumWrappers.PlayerInfoAction> actions;
+                try {
+                    actions = packet.getPlayerInfoActions().read(0);
+                } catch (Exception e) {
                     return;
                 }
 
-                PacketContainer packet = event.getPacket();
-                EnumWrappers.PlayerInfoAction action = packet.getPlayerInfoAction().read(0);
-
-                if (action == EnumWrappers.PlayerInfoAction.ADD_PLAYER || action == EnumWrappers.PlayerInfoAction.UPDATE_GAME_MODE) {
+                if (actions.contains(EnumWrappers.PlayerInfoAction.ADD_PLAYER) || actions.contains(EnumWrappers.PlayerInfoAction.UPDATE_GAME_MODE)) {
                     List<PlayerInfoData> originalList = packet.getPlayerInfoDataLists().read(0);
                     List<PlayerInfoData> newList = new ArrayList<>();
                     boolean modified = false;
 
                     for (PlayerInfoData data : originalList) {
-                        UUID targetUUID = data.getProfile().getUUID();
-                        if (ProtocolLibManager.this.isVanished(targetUUID)) {
+                        if (ProtocolLibManager.this.isVanished(data.getProfile().getUUID())) {
+                            // FIX: Pass null for RemoteChatSession to avoid compilation error
                             PlayerInfoData newData = new PlayerInfoData(
                                     data.getProfile(),
                                     data.getLatency(),
                                     EnumWrappers.NativeGameMode.SPECTATOR,
-                                    data.getDisplayName()
+                                    data.getDisplayName(),
+                                    null
                             );
                             newList.add(newData);
                             modified = true;
@@ -79,44 +79,23 @@ public class ProtocolLibManager {
         });
 
         // 2. Intercept TAB_COMPLETE packets (Hide from Tab)
-        // This is the client-bound response containing suggestions.
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Server.TAB_COMPLETE) {
             @Override
             public void onPacketSending(PacketEvent event) {
-                Player observer = event.getPlayer();
-
-                // If observer is staff, they are allowed to see names in tab
-                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see")) {
-                    return;
-                }
-
-                PacketContainer packet = event.getPacket();
-                // "suggestions" is a String array or list depending on version,
-                // but ProtocolLib abstracts it via specific modifiers usually.
-                // In modern versions, it uses a specific structure, but often maps to index 0 (Suggestions/Matches)
-
-                // Check suggestions/matches structure
-                // Older/Newer versions vary (String[] vs WrappedChatComponent vs TabCompleteMatches)
-                // We attempt to read the safest common structure: String Arrays or Lists
-
-                // For modern MC, it's often a "Suggestions" object, abstracted by ProtocolLib via specific getters.
-                // NOTE: ProtocolLib 5.x handles 1.20+ suggestions.
+                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(event.getPlayer(), "vanishpp.see")) return;
 
                 try {
-                    // Try simple string list (legacy compatible wrapper)
-                    // Note: If using 'Paper', usually Mojang Brigadier suggestions are used which are complex.
-                    // This handles legacy/simple string based completions (Chat, some plugins).
+                    PacketContainer packet = event.getPacket();
                     if (packet.getStringArrays().size() > 0) {
                         String[] suggestions = packet.getStringArrays().read(0);
                         List<String> filtered = new ArrayList<>();
                         boolean changed = false;
-
                         Set<String> vanishedNames = ProtocolLibManager.this.getVanishedNames();
 
                         for (String s : suggestions) {
                             if (s == null) continue;
                             if (vanishedNames.contains(s)) {
-                                changed = true; // detected vanished name
+                                changed = true;
                             } else {
                                 filtered.add(s);
                             }
@@ -126,12 +105,50 @@ public class ProtocolLibManager {
                             packet.getStringArrays().write(0, filtered.toArray(new String[0]));
                         }
                     }
-                    // Brigadier Suggestions (Modern Command Completions) often use different packet structures.
-                    // However, Bukkit's "hidePlayer" usually prevents the server from even sending the entity to the Brigadier tree.
-                    // This Listener catches the fallback packet.
-
                 } catch (Exception e) {
-                    // Fail silently on structure mismatch to avoid console spam during gameplay
+                    // Fail silently
+                }
+            }
+        });
+
+        // 3. Intercept ENTITY_METADATA (Fix Invisibility for Staff)
+        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGH, PacketType.Play.Server.ENTITY_METADATA) {
+            @Override
+            public void onPacketSending(PacketEvent event) {
+                if (!ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(event.getPlayer(), "vanishpp.see")) return;
+
+                Entity entity = event.getPacket().getEntityModifier(event).read(0);
+                if (entity instanceof Player target && ProtocolLibManager.this.isVanished(target.getUniqueId())) {
+                    try {
+                        List<WrappedDataValue> values = new ArrayList<>(event.getPacket().getDataValueCollectionModifier().read(0));
+                        boolean modified = false;
+
+                        for (int i = 0; i < values.size(); i++) {
+                            WrappedDataValue value = values.get(i);
+                            // Strip Invisible Bit (Index 0, 0x20)
+                            if (value.getIndex() == 0) {
+                                byte b = (byte) value.getValue();
+                                if ((b & 0x20) != 0) {
+                                    byte newByte = (byte) (b & ~0x20);
+                                    values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(), newByte));
+                                    modified = true;
+                                }
+                            }
+                            // Strip Silent (Index 4)
+                            else if (value.getIndex() == 4) {
+                                if ((boolean) value.getValue()) {
+                                    values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(), false));
+                                    modified = true;
+                                }
+                            }
+                        }
+
+                        if (modified) {
+                            event.getPacket().getDataValueCollectionModifier().write(0, values);
+                        }
+                    } catch (Exception e) {
+                        // Ignore
+                    }
                 }
             }
         });

@@ -1,5 +1,6 @@
 package net.thecommandcraft.vanishpp;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import java.util.*;
 
@@ -19,6 +20,10 @@ public class ConfigManager {
 
     public String vanishPrefix, actionBarText, vanishedPlayerFormat;
     public boolean actionBarEnabled, hideFromServerList, fakeLeaveMessage, fakeJoinMessage, disableBlockTriggering;
+
+    // NEW: Toggles for Fake Broadcasts
+    public boolean broadcastFakeQuit, broadcastFakeJoin;
+
     public boolean hideDeathMessages, hideAdvancements;
 
     public boolean enableNightVision, enableFly, disableMobTarget, disableHunger, silentChests, ignoreProjectiles;
@@ -30,6 +35,9 @@ public class ConfigManager {
     public boolean layeredPermsEnabled;
     public int defaultVanishLevel, defaultSeeLevel, maxLevel;
 
+    // Rules Defaults
+    public Map<String, Boolean> defaultRules = new HashMap<>();
+
     public ConfigManager(Vanishpp plugin) { this.plugin = plugin; }
 
     public FileConfiguration getConfig() { return config; }
@@ -39,6 +47,7 @@ public class ConfigManager {
         plugin.reloadConfig();
         this.config = plugin.getConfig();
 
+        // Load Messages
         vanishMessage = format(config.getString("messages.vanish"));
         unvanishMessage = format(config.getString("messages.unvanish"));
         noPermissionMessage = format(config.getString("messages.no-permission"));
@@ -67,15 +76,22 @@ public class ConfigManager {
         staffVanishMessage = format(config.getString("messages.staff-notify.on-vanish"));
         staffUnvanishMessage = format(config.getString("messages.staff-notify.on-unvanish"));
 
+        // Settings
         vanishPrefix = format(config.getString("vanish-appearance.prefix"));
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
         actionBarText = format(config.getString("vanish-appearance.action-bar.text"));
         adjustServerListCount = config.getBoolean("vanish-appearance.adjust-server-list-count", true);
         vanishedPlayerFormat = format(config.getString("chat-format.vanished-player-format"));
 
+        // Effects
         hideFromServerList = config.getBoolean("vanish-effects.hide-from-server-list");
-        fakeLeaveMessage = config.getBoolean("vanish-effects.fake-leave-message");
-        fakeJoinMessage = config.getBoolean("vanish-effects.fake-join-message");
+        fakeLeaveMessage = config.getBoolean("vanish-effects.fake-leave-message"); // This hides real messages
+        fakeJoinMessage = config.getBoolean("vanish-effects.fake-join-message"); // This hides real messages
+
+        // Broadcast Fake Messages (Actually sending the yellow text)
+        broadcastFakeQuit = config.getBoolean("vanish-effects.broadcast-fake-quit", true);
+        broadcastFakeJoin = config.getBoolean("vanish-effects.broadcast-fake-join", true);
+
         disableBlockTriggering = config.getBoolean("vanish-effects.disable-block-triggering");
 
         hideDeathMessages = config.getBoolean("hide-announcements.death-messages");
@@ -102,12 +118,20 @@ public class ConfigManager {
         defaultVanishLevel = config.getInt("permissions.default-vanish-level", 1);
         defaultSeeLevel = config.getInt("permissions.default-see-level", 1);
         maxLevel = config.getInt("permissions.max-level", 100);
+
+        // Load Default Rules
+        ConfigurationSection rulesSection = config.getConfigurationSection("default-rules");
+        defaultRules.clear();
+        if (rulesSection != null) {
+            for (String key : rulesSection.getKeys(false)) {
+                defaultRules.put(key, rulesSection.getBoolean(key));
+            }
+        }
     }
 
     public void save() {
         List<String> uuidStrings = plugin.getRawVanishedPlayers().stream().map(UUID::toString).toList();
         config.set("data.vanished-players", uuidStrings);
-        // Note: Pickup players are now managed via RuleManager data.rules, separate persistence handled there
         List<String> ignoredStrings = plugin.getIgnoredWarningPlayers().stream().map(UUID::toString).toList();
         config.set("data.ignored-warnings", ignoredStrings);
         plugin.saveConfig();
@@ -115,8 +139,6 @@ public class ConfigManager {
 
     public Set<UUID> loadVanishedPlayers() { return loadUuidSet("data.vanished-players"); }
     public Set<UUID> loadIgnoredWarningPlayers() { return loadUuidSet("data.ignored-warnings"); }
-
-    // Pickup is now rule-based, so we don't load separate set here anymore
     public Set<UUID> loadPickupEnabledPlayers() { return new HashSet<>(); }
 
     private Set<UUID> loadUuidSet(String path) {

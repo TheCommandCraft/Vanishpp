@@ -1,5 +1,7 @@
 package net.thecommandcraft.vanishpp;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -10,54 +12,65 @@ import org.jetbrains.annotations.NotNull;
 public class VanishCommand implements CommandExecutor {
 
     private final Vanishpp plugin;
-    private final ConfigManager configManager;
-    private final PermissionManager permissionManager; // Added
 
     public VanishCommand(Vanishpp plugin) {
         this.plugin = plugin;
-        this.configManager = plugin.getConfigManager();
-        this.permissionManager = plugin.getPermissionManager(); // Added
     }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (args.length == 0) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("This command can only be used by players. Use /vanish <player> to target another player.");
+        Player target;
+
+        // Case 1: Targeting another player (or Console usage)
+        if (args.length > 0) {
+            if (!sender.hasPermission("vanishpp.vanish.others")) {
+                sender.sendMessage(Component.text(plugin.getConfigManager().noPermissionMessage, NamedTextColor.RED));
                 return true;
             }
-            // Use the new permission check
-            if (!permissionManager.hasPermission(player, "vanishpp.vanish")) {
-                player.sendMessage(configManager.noPermissionMessage);
-                return true;
-            }
-            toggleVanish(player, sender);
-        } else {
-            // Check if the sender is a player before using the new permission check
-            if (sender instanceof Player && !permissionManager.hasPermission((Player) sender, "vanishpp.vanish.others")) {
-                sender.sendMessage(configManager.noPermissionMessage);
-                return true;
-            }
-            Player target = Bukkit.getPlayer(args[0]);
+
+            target = Bukkit.getPlayer(args[0]);
             if (target == null) {
-                sender.sendMessage(configManager.playerNotFoundMessage);
+                sender.sendMessage(Component.text(plugin.getConfigManager().playerNotFoundMessage, NamedTextColor.RED));
                 return true;
             }
-            toggleVanish(target, sender);
         }
+        // Case 2: Toggling self
+        else {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage(Component.text("Console must specify a player: /vanish <player>", NamedTextColor.RED));
+                return true;
+            }
+            target = (Player) sender;
+
+            if (!sender.hasPermission("vanishpp.vanish")) {
+                sender.sendMessage(Component.text(plugin.getConfigManager().noPermissionMessage, NamedTextColor.RED));
+                return true;
+            }
+        }
+
+        // Toggle Logic
+        toggleVanish(target, sender);
         return true;
     }
 
     private void toggleVanish(Player target, CommandSender executor) {
         if (plugin.isVanished(target)) {
+            // Unvanish
             plugin.unvanishPlayer(target, executor);
+
+            // Notify executor if they are not the target
             if (!target.equals(executor)) {
-                executor.sendMessage(configManager.unvanishedOtherMessage.replace("%player%", target.getName()));
+                String msg = plugin.getConfigManager().unvanishedOtherMessage.replace("%player%", target.getName());
+                executor.sendMessage(Component.text(msg, NamedTextColor.GREEN));
             }
         } else {
+            // Vanish
             plugin.vanishPlayer(target, executor);
+
+            // Notify executor if they are not the target
             if (!target.equals(executor)) {
-                executor.sendMessage(configManager.vanishedOtherMessage.replace("%player%", target.getName()));
+                String msg = plugin.getConfigManager().vanishedOtherMessage.replace("%player%", target.getName());
+                executor.sendMessage(Component.text(msg, NamedTextColor.GREEN));
             }
         }
     }
