@@ -28,8 +28,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
     private PermissionManager permissionManager;
     private RuleManager ruleManager;
     private IntegrationManager integrationManager;
-    private MobAiManager mobAiManager;
-
     private Object protocolLibManager;
     private TabPluginHook tabPluginHook;
 
@@ -58,10 +56,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
 
         this.integrationManager = new IntegrationManager(this);
         this.integrationManager.load();
-
-        // Load AI Manager
-        this.mobAiManager = new MobAiManager(this);
-        this.mobAiManager.register();
 
         this.tabPluginHook = new TabPluginHook(this);
         this.tabPluginHook.load();
@@ -147,7 +141,12 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
         if (this.vanishTeam == null) this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
 
-        vanishTeam.prefix(Component.text(configManager.vanishPrefix));
+        // FIX: Use Nametag Prefix (Default Empty) for the Scoreboard Team
+        Component prefix = (configManager.vanishNametagPrefix != null && !configManager.vanishNametagPrefix.isEmpty())
+                ? Component.text(configManager.vanishNametagPrefix)
+                : Component.empty();
+
+        vanishTeam.prefix(prefix);
         vanishTeam.setCanSeeFriendlyInvisibles(true);
         vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
     }
@@ -197,7 +196,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
-        // Native Stealth (Smart AI handles Mob Gaze)
+        // Native Stealth
         player.setInvisible(true);
         player.setSilent(true);
         player.setCollidable(false);
@@ -250,7 +249,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void unvanishPlayer(Player player, CommandSender executor) {
-        // Send JOIN message FIRST (while permissions still say "vanished")
         if (configManager.broadcastFakeJoin) {
             broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName()), player);
         }
@@ -260,7 +258,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         notifyStaff(player, executor, false);
     }
 
-    // Sends message to everyone who DOES NOT have permission to see vanished players
     private void broadcastToUnaware(Component message, Player vanishedPlayer) {
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             if (!permissionManager.canSee(onlinePlayer, vanishedPlayer) && !onlinePlayer.equals(vanishedPlayer)) {
