@@ -18,10 +18,15 @@ public class ConfigManager {
     public boolean staffNotifyEnabled;
     public String staffVanishMessage, staffUnvanishMessage;
 
-    public String vanishPrefix, actionBarText, vanishedPlayerFormat;
+    // Appearance
+    public String vanishTabPrefix;      // For Tablist
+    public String vanishNametagPrefix;  // For Scoreboard Team (Nameplate)
+
+    public String actionBarText;
+    public String vanishedPlayerFormat;
     public boolean actionBarEnabled, hideFromServerList, fakeLeaveMessage, fakeJoinMessage, disableBlockTriggering;
 
-    // NEW: Toggles for Fake Broadcasts
+    // Broadcasts
     public boolean broadcastFakeQuit, broadcastFakeJoin;
 
     public boolean hideDeathMessages, hideAdvancements;
@@ -35,7 +40,6 @@ public class ConfigManager {
     public boolean layeredPermsEnabled;
     public int defaultVanishLevel, defaultSeeLevel, maxLevel;
 
-    // Rules Defaults
     public Map<String, Boolean> defaultRules = new HashMap<>();
 
     public ConfigManager(Vanishpp plugin) { this.plugin = plugin; }
@@ -47,7 +51,7 @@ public class ConfigManager {
         plugin.reloadConfig();
         this.config = plugin.getConfig();
 
-        // Load Messages
+        // Messages
         vanishMessage = format(config.getString("messages.vanish"));
         unvanishMessage = format(config.getString("messages.unvanish"));
         noPermissionMessage = format(config.getString("messages.no-permission"));
@@ -76,8 +80,18 @@ public class ConfigManager {
         staffVanishMessage = format(config.getString("messages.staff-notify.on-vanish"));
         staffUnvanishMessage = format(config.getString("messages.staff-notify.on-unvanish"));
 
-        // Settings
-        vanishPrefix = format(config.getString("vanish-appearance.prefix"));
+        // Appearance Settings
+        // Legacy check
+        if (config.contains("vanish-appearance.prefix")) {
+            String legacy = format(config.getString("vanish-appearance.prefix"));
+            vanishTabPrefix = legacy;
+            // Legacy default to empty for nametag if splitting
+            vanishNametagPrefix = "";
+        } else {
+            vanishTabPrefix = format(config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] "));
+            vanishNametagPrefix = format(config.getString("vanish-appearance.nametag-prefix", "")); // Default empty!
+        }
+
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
         actionBarText = format(config.getString("vanish-appearance.action-bar.text"));
         adjustServerListCount = config.getBoolean("vanish-appearance.adjust-server-list-count", true);
@@ -85,13 +99,10 @@ public class ConfigManager {
 
         // Effects
         hideFromServerList = config.getBoolean("vanish-effects.hide-from-server-list");
-        fakeLeaveMessage = config.getBoolean("vanish-effects.fake-leave-message"); // This hides real messages
-        fakeJoinMessage = config.getBoolean("vanish-effects.fake-join-message"); // This hides real messages
-
-        // Broadcast Fake Messages (Actually sending the yellow text)
+        fakeLeaveMessage = config.getBoolean("vanish-effects.fake-leave-message");
+        fakeJoinMessage = config.getBoolean("vanish-effects.fake-join-message");
         broadcastFakeQuit = config.getBoolean("vanish-effects.broadcast-fake-quit", true);
         broadcastFakeJoin = config.getBoolean("vanish-effects.broadcast-fake-join", true);
-
         disableBlockTriggering = config.getBoolean("vanish-effects.disable-block-triggering");
 
         hideDeathMessages = config.getBoolean("hide-announcements.death-messages");
@@ -119,7 +130,6 @@ public class ConfigManager {
         defaultSeeLevel = config.getInt("permissions.default-see-level", 1);
         maxLevel = config.getInt("permissions.max-level", 100);
 
-        // Load Default Rules
         ConfigurationSection rulesSection = config.getConfigurationSection("default-rules");
         defaultRules.clear();
         if (rulesSection != null) {

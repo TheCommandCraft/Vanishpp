@@ -33,7 +33,7 @@ public class TabPluginHook {
                 TabListFormatManager formatManager = api.getTabListFormatManager();
                 if (formatManager != null) {
                     if (isVanished) {
-                        String prefix = plugin.getConfigManager().vanishPrefix;
+                        String prefix = plugin.getConfigManager().vanishTabPrefix;
                         formatManager.setPrefix(tabPlayer, prefix);
                     } else {
                         formatManager.setPrefix(tabPlayer, null);
@@ -41,7 +41,7 @@ public class TabPluginHook {
                 }
             }
         } catch (NoClassDefFoundError | Exception e) {
-            // Silently fail if API changed
+            // Fail silently if API is incompatible
         }
     }
 }

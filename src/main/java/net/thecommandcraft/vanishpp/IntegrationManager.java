@@ -18,12 +18,14 @@ public class IntegrationManager {
     }
 
     public void load() {
+        // Essentials Hook
         Plugin ess = Bukkit.getPluginManager().getPlugin("Essentials");
         if (ess instanceof Essentials) {
             this.essentials = (Essentials) ess;
             plugin.getLogger().info("Hooked into EssentialsX.");
         }
 
+        // Dynmap Hook
         Plugin dmap = Bukkit.getPluginManager().getPlugin("dynmap");
         if (dmap instanceof DynmapAPI) {
             this.dynmap = (DynmapAPI) dmap;
@@ -32,6 +34,7 @@ public class IntegrationManager {
     }
 
     public void updateHooks(Player player, boolean isVanished) {
+        // Update Essentials
         if (essentials != null) {
             User user = essentials.getUser(player);
             if (user != null) {
@@ -39,6 +42,7 @@ public class IntegrationManager {
             }
         }
 
+        // Update Dynmap
         if (dynmap != null) {
             dynmap.assertPlayerInvisibility(player, isVanished, plugin);
         }

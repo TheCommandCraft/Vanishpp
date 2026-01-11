@@ -80,7 +80,7 @@
             <id>maxhenkel-repo</id>
             <url>https://maven.maxhenkel.de/repository/public</url>
         </repository>
-        <!-- TAB (Official Repo) -->
+        <!-- JitPack (For TAB API) -->
         <repository>
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
@@ -128,11 +128,11 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- TAB API -->
+        <!-- TAB API (Via JitPack) -->
         <dependency>
             <groupId>com.github.NEZNAMY</groupId>
             <artifactId>TAB-API</artifactId>
-            <version>5.4.0</version>
+            <version>5.0.4</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
