@@ -1,5 +1,6 @@
 package net.thecommandcraft.vanishpp;
 
+import com.destroystokyo.paper.event.entity.ProjectileCollideEvent;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
@@ -8,14 +9,13 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
+import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -28,7 +28,6 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.util.Vector;
 
 import java.time.Duration;
 import java.util.*;
@@ -89,9 +88,13 @@ public class PlayerListener implements Listener {
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
         }
 
-        // Update Check
+        // Update Check (With Delay)
         if (plugin.getUpdateChecker() != null) {
-            plugin.getUpdateChecker().notifyPlayer(player);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (player.isOnline()) {
+                    plugin.getUpdateChecker().notifyPlayer(player);
+                }
+            }, 5L); // 0.25 seconds delay (5 ticks)
         }
     }
 
@@ -136,34 +139,11 @@ public class PlayerListener implements Listener {
         }
     }
 
-    // MATRIX PHYSICS ENGINE (Replaces Deprecated ProjectileCollideEvent)
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onProjectileHit(ProjectileHitEvent event) {
+    @EventHandler
+    public void onProjectileCollide(ProjectileCollideEvent event) {
         if (!config.ignoreProjectiles) return;
-
-        if (event.getHitEntity() instanceof Player target && plugin.isVanished(target)) {
-            // 1. Cancel the impact (No damage, no knockback, arrow doesn't stick)
+        if (event.getCollidedWith() instanceof Player player && plugin.isVanished(player)) {
             event.setCancelled(true);
-
-            // 2. "Pass-through" logic
-            Projectile original = event.getEntity();
-            Vector velocity = original.getVelocity();
-
-            // If it's moving fast enough to be a projectile and not just falling
-            if (velocity.length() > 0.1) {
-                Location loc = original.getLocation();
-                // Spawn new projectile slightly past the player to prevent immediate re-hit
-                Location spawnLoc = loc.add(velocity.normalize().multiply(1.5));
-
-                // Respawn
-                Projectile newProj = (Projectile) loc.getWorld().spawnEntity(spawnLoc, original.getType());
-                newProj.setVelocity(velocity);
-                newProj.setShooter(original.getShooter());
-                newProj.setFireTicks(original.getFireTicks());
-            }
-
-            // Remove the old one that "hit"
-            original.remove();
         }
     }
 

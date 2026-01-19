@@ -38,7 +38,7 @@ public class ConfigManager {
 
     // Update Checker
     public boolean updateCheckerEnabled;
-    public String updateCheckerId;
+    // Removed: updateCheckerId (Now Hardcoded)
     public String updateCheckerMode;
     public List<String> updateCheckerList;
 
@@ -130,9 +130,8 @@ public class ConfigManager {
         defaultSeeLevel = config.getInt("permissions.default-see-level", 1);
         maxLevel = config.getInt("permissions.max-level", 100);
 
-        // Update Checker Settings
+        // Update Checker Settings (ID is now hardcoded in UpdateChecker class)
         updateCheckerEnabled = config.getBoolean("update-checker.enabled", true);
-        updateCheckerId = config.getString("update-checker.modrinth-id", "vanishpp");
         updateCheckerMode = config.getString("update-checker.notify-mode", "PERMISSION");
         updateCheckerList = config.getStringList("update-checker.notify-list");
 
