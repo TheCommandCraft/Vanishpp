@@ -1,6 +1,5 @@
 package net.thecommandcraft.vanishpp;
 
-import com.destroystokyo.paper.event.entity.ProjectileCollideEvent;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
@@ -10,11 +9,13 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -27,6 +28,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.util.Vector;
 
 import java.time.Duration;
 import java.util.*;
@@ -50,11 +52,13 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+
         if (plugin.isVanished(player)) {
             plugin.applyVanishEffects(player);
             plugin.updateVanishVisibility(player);
             if (config.fakeJoinMessage) event.joinMessage(null);
         }
+
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
             Player v = plugin.getServer().getPlayer(uuid);
             if (v != null) {
@@ -63,14 +67,31 @@ public class PlayerListener implements Listener {
                 }
             }
         }
+
+        // ProtocolLib Warning
         if (!plugin.hasProtocolLib() && player.isOp() && !plugin.isWarningIgnored(player)) {
             player.sendMessage(Component.text("█▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀█", NamedTextColor.DARK_RED, TextDecoration.BOLD));
             player.sendMessage(Component.text(" CRITICAL DEPENDENCY MISSING", NamedTextColor.RED, TextDecoration.BOLD));
             player.sendMessage(Component.text(" ProtocolLib is NOT installed.", NamedTextColor.YELLOW));
+            player.sendMessage(Component.text(" ⚠ YOU ARE NOT FULLY HIDDEN! ⚠", NamedTextColor.RED));
+            player.sendMessage(Component.text(" - Tab-Complete Scrubbing: OFF", NamedTextColor.GRAY));
+            player.sendMessage(Component.text(" - Server List Hiding: OFF", NamedTextColor.GRAY));
+            player.sendMessage(Component.text(" - Spectator View: OFF", NamedTextColor.GRAY));
             player.sendMessage(Component.text("█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█", NamedTextColor.DARK_RED, TextDecoration.BOLD));
-            Title title = Title.title(Component.text("⚠ WARNING ⚠", NamedTextColor.RED), Component.text("ProtocolLib Missing!", NamedTextColor.YELLOW));
+            player.sendMessage(Component.text("Type /vignore to silence this alarm.", NamedTextColor.GRAY, TextDecoration.ITALIC));
+
+            Title title = Title.title(
+                    Component.text("⚠ WARNING ⚠", NamedTextColor.RED, TextDecoration.BOLD),
+                    Component.text("ProtocolLib Missing!", NamedTextColor.YELLOW),
+                    Title.Times.times(Duration.ofMillis(500), Duration.ofMillis(4000), Duration.ofMillis(1000))
+            );
             player.showTitle(title);
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
+        }
+
+        // Update Check
+        if (plugin.getUpdateChecker() != null) {
+            plugin.getUpdateChecker().notifyPlayer(player);
         }
     }
 
@@ -94,11 +115,13 @@ public class PlayerListener implements Listener {
                 player.removeMetadata("vanishpp_chat_bypass", plugin);
                 return;
             }
+
             boolean canChat = rules.getRule(player, RuleManager.CAN_CHAT);
             if (!canChat) {
                 event.setCancelled(true);
                 String msgContent = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message());
                 plugin.pendingChatMessages.put(player.getUniqueId(), msgContent);
+
                 Component msg = Component.text(config.chatLockedMessage, NamedTextColor.RED)
                         .append(Component.text(" [CONFIRM]", NamedTextColor.GREEN, TextDecoration.BOLD)
                                 .clickEvent(ClickEvent.runCommand("/vchat confirm"))
@@ -107,61 +130,40 @@ public class PlayerListener implements Listener {
                         .append(Component.text("[ENABLE CHAT]", NamedTextColor.GOLD, TextDecoration.BOLD)
                                 .clickEvent(ClickEvent.runCommand("/vrules can_chat true"))
                                 .hoverEvent(HoverEvent.showText(Component.text("Click to enable rule permanently"))));
+
                 player.sendMessage(msg);
             }
         }
     }
 
-    // Drop Handler
-    @EventHandler
-    public void onDrop(PlayerDropItemEvent event) {
-        if (plugin.isVanished(event.getPlayer())) {
-            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_DROP_ITEMS)) {
-                event.setCancelled(true);
-                sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "dropping items");
-            }
-        }
-    }
-
-    // ... (Keep existing physics handlers: onProjectileCollide, onBreak, onPlace, onAttack, onPickup, onArrowPickup, onInteract, onMobTarget, onEntityInteract, onServerListPing, onTabComplete, onSculkSensor, onRaidTrigger, onBedEnter, onHunger, onDeath, handleSilentChest, onClose) ...
-    // NOTE: Ensure ALL are present. For brevity, I'm pasting the rule deny helper.
-
-    private void sendRuleDeny(Player p, String ruleName, String actionName) {
-        plugin.triggerActionBarWarning(p, Component.text("✖ Action Blocked: " + actionName, NamedTextColor.RED, TextDecoration.BOLD));
-
-        if (!rules.getRule(p, RuleManager.SHOW_NOTIFICATIONS)) return;
-
-        UUID uuid = p.getUniqueId();
-        long now = System.currentTimeMillis();
-        Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
-        long lastTime = playerCooldowns.getOrDefault(ruleName, 0L);
-
-        if (now - lastTime < 60000) return;
-        playerCooldowns.put(ruleName, now);
-
-        Component message = Component.text("Vanish blocked " + actionName + ". ", NamedTextColor.RED)
-                .append(Component.text("[ENABLE]", NamedTextColor.GREEN, TextDecoration.BOLD)
-                        .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
-                        .hoverEvent(HoverEvent.showText(Component.text("Click to allow", NamedTextColor.GREEN))))
-                .append(Component.text(" | ", NamedTextColor.GRAY))
-                .append(Component.text("[ENABLE 1m]", NamedTextColor.YELLOW, TextDecoration.BOLD)
-                        .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
-                        .hoverEvent(HoverEvent.showText(Component.text("Enable for 60 seconds", NamedTextColor.GOLD))));
-
-        p.sendMessage(message);
-
-        if (!hasSeenDisableTip.contains(uuid)) {
-            hasSeenDisableTip.add(uuid);
-            p.sendMessage(Component.text("Tip: Type /vignore to disable these warnings.", NamedTextColor.GRAY));
-        }
-    }
-
-    // (Include rest of the class from previous step)
-    @EventHandler
-    public void onProjectileCollide(ProjectileCollideEvent event) {
+    // MATRIX PHYSICS ENGINE (Replaces Deprecated ProjectileCollideEvent)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onProjectileHit(ProjectileHitEvent event) {
         if (!config.ignoreProjectiles) return;
-        if (event.getCollidedWith() instanceof Player player && plugin.isVanished(player)) {
+
+        if (event.getHitEntity() instanceof Player target && plugin.isVanished(target)) {
+            // 1. Cancel the impact (No damage, no knockback, arrow doesn't stick)
             event.setCancelled(true);
+
+            // 2. "Pass-through" logic
+            Projectile original = event.getEntity();
+            Vector velocity = original.getVelocity();
+
+            // If it's moving fast enough to be a projectile and not just falling
+            if (velocity.length() > 0.1) {
+                Location loc = original.getLocation();
+                // Spawn new projectile slightly past the player to prevent immediate re-hit
+                Location spawnLoc = loc.add(velocity.normalize().multiply(1.5));
+
+                // Respawn
+                Projectile newProj = (Projectile) loc.getWorld().spawnEntity(spawnLoc, original.getType());
+                newProj.setVelocity(velocity);
+                newProj.setShooter(original.getShooter());
+                newProj.setFireTicks(original.getFireTicks());
+            }
+
+            // Remove the old one that "hit"
+            original.remove();
         }
     }
 
@@ -211,6 +213,16 @@ public class PlayerListener implements Listener {
             if (!rules.getRule(event.getPlayer(), RuleManager.CAN_PICKUP_ITEMS)) {
                 event.setCancelled(true);
                 plugin.triggerActionBarWarning(event.getPlayer(), Component.text("✖ Arrow Pickup Blocked", NamedTextColor.RED));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onDrop(PlayerDropItemEvent event) {
+        if (plugin.isVanished(event.getPlayer())) {
+            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_DROP_ITEMS)) {
+                event.setCancelled(true);
+                sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "dropping items");
             }
         }
     }
@@ -337,6 +349,36 @@ public class PlayerListener implements Listener {
                     p.setFlying(true);
                 }
             }
+        }
+    }
+
+    private void sendRuleDeny(Player p, String ruleName, String actionName) {
+        plugin.triggerActionBarWarning(p, Component.text("✖ Action Blocked: " + actionName, NamedTextColor.RED, TextDecoration.BOLD));
+
+        if (!rules.getRule(p, RuleManager.SHOW_NOTIFICATIONS)) return;
+
+        UUID uuid = p.getUniqueId();
+        long now = System.currentTimeMillis();
+        Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
+        long lastTime = playerCooldowns.getOrDefault(ruleName, 0L);
+
+        if (now - lastTime < 60000) return;
+        playerCooldowns.put(ruleName, now);
+
+        Component message = Component.text("Vanish blocked " + actionName + ". ", NamedTextColor.RED)
+                .append(Component.text("[ENABLE]", NamedTextColor.GREEN, TextDecoration.BOLD)
+                        .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
+                        .hoverEvent(HoverEvent.showText(Component.text("Click to allow", NamedTextColor.GREEN))))
+                .append(Component.text(" | ", NamedTextColor.GRAY))
+                .append(Component.text("[ENABLE 1m]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+                        .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
+                        .hoverEvent(HoverEvent.showText(Component.text("Enable for 60 seconds", NamedTextColor.GOLD))));
+
+        p.sendMessage(message);
+
+        if (!hasSeenDisableTip.contains(uuid)) {
+            hasSeenDisableTip.add(uuid);
+            p.sendMessage(Component.text("Tip: Type /vignore to disable these warnings.", NamedTextColor.GRAY));
         }
     }
 }

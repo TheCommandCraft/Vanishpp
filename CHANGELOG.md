@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-01-17
+
+### Added
+- **Smart Mob AI (True Sight Engine):**
+    - Vanish++ now injects custom AI goals into server mobs. Mobs will physically ignore vanished players—they will not look at you, track you, or turn their heads, even if you stand directly in front of them.
+    - This replaces the old "Invisibility Potion" workaround, allowing Staff to see each other's armor/skins clearly while remaining invisible to mobs.
+- **Modrinth Update Checker:**
+    - Added an asynchronous update checker. OPs (or those with `vanishpp.update`) will receive a notification on join if a newer version is available on Modrinth.
+    - Settings added to `config.yml` to toggle this feature or restrict it to a specific list of players.
+- **Data Separation (Config Fix):**
+    - Created `data.yml`. Dynamic data (vanished players, ignored warnings, custom rules) is now stored here.
+    - **Fix:** This prevents `config.yml` from being overwritten on server restart, allowing you to edit settings safely while the server is running.
+- **Temporary Rules:**
+    - The `/vrules` command now accepts a duration.
+    - Example: `/vrules can_break_blocks true 60` will allow breaking blocks for 60 seconds, then automatically disable it.
+- **Visual Feedback:**
+    - Added Action Bar alerts ("✖ Action Blocked") when a player attempts a prohibited action, providing immediate feedback without spamming chat.
+    - Added an **[ENABLE 1m]** button to chat warnings for quick temporary overrides.
+
+### Fixed
+- **ProtocolLib Crashes:** Fixed critical `NullPointerException` and `FieldAccessException` crashes on 1.21+ servers caused by malformed packets from other plugins.
+- **PlaceholderAPI Integration:** Restored PAPI support. Placeholders like `%vanishpp_visible_online%` now work correctly in Scoreboards and Tablists.
+- **TAB Plugin Compatibility:** Fixed a crash with the TAB plugin hook by switching to the correct API method for prefix management.
+
 ## [1.1.0] - 2026-01-03
 
 ### Added
