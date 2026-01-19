@@ -19,16 +19,12 @@ public class ConfigManager {
     public String staffVanishMessage, staffUnvanishMessage;
 
     // Appearance
-    public String vanishTabPrefix;      // For Tablist
-    public String vanishNametagPrefix;  // For Scoreboard Team (Nameplate)
-
+    public String vanishTabPrefix;
+    public String vanishNametagPrefix;
     public String actionBarText;
     public String vanishedPlayerFormat;
     public boolean actionBarEnabled, hideFromServerList, fakeLeaveMessage, fakeJoinMessage, disableBlockTriggering;
-
-    // Broadcasts
     public boolean broadcastFakeQuit, broadcastFakeJoin;
-
     public boolean hideDeathMessages, hideAdvancements;
 
     public boolean enableNightVision, enableFly, disableMobTarget, disableHunger, silentChests, ignoreProjectiles;
@@ -39,6 +35,12 @@ public class ConfigManager {
     public boolean voiceChatEnabled, voiceChatIsolate;
     public boolean layeredPermsEnabled;
     public int defaultVanishLevel, defaultSeeLevel, maxLevel;
+
+    // Update Checker
+    public boolean updateCheckerEnabled;
+    public String updateCheckerId;
+    public String updateCheckerMode;
+    public List<String> updateCheckerList;
 
     public Map<String, Boolean> defaultRules = new HashMap<>();
 
@@ -80,16 +82,14 @@ public class ConfigManager {
         staffVanishMessage = format(config.getString("messages.staff-notify.on-vanish"));
         staffUnvanishMessage = format(config.getString("messages.staff-notify.on-unvanish"));
 
-        // Appearance Settings
-        // Legacy check
+        // Appearance
         if (config.contains("vanish-appearance.prefix")) {
             String legacy = format(config.getString("vanish-appearance.prefix"));
             vanishTabPrefix = legacy;
-            // Legacy default to empty for nametag if splitting
             vanishNametagPrefix = "";
         } else {
             vanishTabPrefix = format(config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] "));
-            vanishNametagPrefix = format(config.getString("vanish-appearance.nametag-prefix", "")); // Default empty!
+            vanishNametagPrefix = format(config.getString("vanish-appearance.nametag-prefix", ""));
         }
 
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
@@ -130,6 +130,12 @@ public class ConfigManager {
         defaultSeeLevel = config.getInt("permissions.default-see-level", 1);
         maxLevel = config.getInt("permissions.max-level", 100);
 
+        // Update Checker Settings
+        updateCheckerEnabled = config.getBoolean("update-checker.enabled", true);
+        updateCheckerId = config.getString("update-checker.modrinth-id", "vanishpp");
+        updateCheckerMode = config.getString("update-checker.notify-mode", "PERMISSION");
+        updateCheckerList = config.getStringList("update-checker.notify-list");
+
         ConfigurationSection rulesSection = config.getConfigurationSection("default-rules");
         defaultRules.clear();
         if (rulesSection != null) {
@@ -140,25 +146,9 @@ public class ConfigManager {
     }
 
     public void save() {
-        List<String> uuidStrings = plugin.getRawVanishedPlayers().stream().map(UUID::toString).toList();
-        config.set("data.vanished-players", uuidStrings);
-        List<String> ignoredStrings = plugin.getIgnoredWarningPlayers().stream().map(UUID::toString).toList();
-        config.set("data.ignored-warnings", ignoredStrings);
         plugin.saveConfig();
     }
 
-    public Set<UUID> loadVanishedPlayers() { return loadUuidSet("data.vanished-players"); }
-    public Set<UUID> loadIgnoredWarningPlayers() { return loadUuidSet("data.ignored-warnings"); }
-    public Set<UUID> loadPickupEnabledPlayers() { return new HashSet<>(); }
-
-    private Set<UUID> loadUuidSet(String path) {
-        List<String> list = config.getStringList(path);
-        Set<UUID> set = new HashSet<>();
-        for (String s : list) {
-            try { set.add(UUID.fromString(s)); } catch (Exception ignored) {}
-        }
-        return set;
-    }
     private String format(String m) { return m == null ? "" : m.replace("&", "§"); }
     public String format(String m, String def) { return m == null ? def : m.replace("&", "§"); }
 }

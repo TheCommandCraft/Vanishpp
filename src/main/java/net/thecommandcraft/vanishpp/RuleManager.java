@@ -11,12 +11,11 @@ public class RuleManager {
     private final Vanishpp plugin;
     private final Map<UUID, Map<String, Boolean>> playerRules = new HashMap<>();
 
-    // Definition of available rules
     public static final String CAN_BREAK_BLOCKS = "can_break_blocks";
     public static final String CAN_PLACE_BLOCKS = "can_place_blocks";
     public static final String CAN_HIT_ENTITIES = "can_hit_entities";
     public static final String CAN_PICKUP_ITEMS = "can_pickup_items";
-    public static final String CAN_DROP_ITEMS = "can_drop_items"; // NEW RULE
+    public static final String CAN_DROP_ITEMS = "can_drop_items";
     public static final String CAN_TRIGGER_PHYSICAL = "can_trigger_physical";
     public static final String CAN_INTERACT = "can_interact";
     public static final String CAN_CHAT = "can_chat";
@@ -31,7 +30,7 @@ public class RuleManager {
         hardDefaults.put(CAN_PLACE_BLOCKS, false);
         hardDefaults.put(CAN_HIT_ENTITIES, false);
         hardDefaults.put(CAN_PICKUP_ITEMS, false);
-        hardDefaults.put(CAN_DROP_ITEMS, false); // Default false
+        hardDefaults.put(CAN_DROP_ITEMS, false);
         hardDefaults.put(CAN_TRIGGER_PHYSICAL, false);
         hardDefaults.put(CAN_INTERACT, true);
         hardDefaults.put(CAN_CHAT, false);
@@ -40,9 +39,10 @@ public class RuleManager {
     }
 
     public void load() {
-        FileConfiguration config = plugin.getConfigManager().getConfig();
-        if (config.contains("data.rules")) {
-            ConfigurationSection section = config.getConfigurationSection("data.rules");
+        // LOAD FROM DATA.YML
+        FileConfiguration data = plugin.getDataManager().getConfig();
+        if (data.contains("rules")) {
+            ConfigurationSection section = data.getConfigurationSection("rules");
             if (section != null) {
                 for (String uuidStr : section.getKeys(false)) {
                     try {
@@ -62,14 +62,15 @@ public class RuleManager {
     }
 
     public void save() {
-        FileConfiguration config = plugin.getConfigManager().getConfig();
-        config.set("data.rules", null);
+        // SAVE TO DATA.YML
+        FileConfiguration data = plugin.getDataManager().getConfig();
+        data.set("rules", null);
         for (Map.Entry<UUID, Map<String, Boolean>> entry : playerRules.entrySet()) {
             for (Map.Entry<String, Boolean> rule : entry.getValue().entrySet()) {
-                config.set("data.rules." + entry.getKey().toString() + "." + rule.getKey(), rule.getValue());
+                data.set("rules." + entry.getKey().toString() + "." + rule.getKey(), rule.getValue());
             }
         }
-        plugin.saveConfig();
+        plugin.getDataManager().save();
     }
 
     public boolean getRule(Player player, String rule) {

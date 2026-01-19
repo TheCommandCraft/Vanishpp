@@ -10,6 +10,8 @@ import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.wrappers.EnumWrappers;
 import com.comphenix.protocol.wrappers.PlayerInfoData;
 import com.comphenix.protocol.wrappers.WrappedDataValue;
+import com.comphenix.protocol.wrappers.WrappedGameProfile;
+import com.comphenix.protocol.wrappers.WrappedServerPing;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -31,7 +33,7 @@ public class ProtocolLibManager {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         plugin.getLogger().info("Hooked into ProtocolLib.");
 
-        // 1. Spectator in Tab (Robust Handling)
+        // 1. Spectator in Tab
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGH, PacketType.Play.Server.PLAYER_INFO) {
             @Override
             public void onPacketSending(PacketEvent event) {
@@ -42,7 +44,6 @@ public class ProtocolLibManager {
                     PacketContainer packet = event.getPacket();
                     Set<EnumWrappers.PlayerInfoAction> actions = packet.getPlayerInfoActions().read(0);
 
-                    // Only process packets that add players or update gamemode
                     if (actions.contains(EnumWrappers.PlayerInfoAction.ADD_PLAYER) || actions.contains(EnumWrappers.PlayerInfoAction.UPDATE_GAME_MODE)) {
 
                         List<PlayerInfoData> originalList = packet.getPlayerInfoDataLists().read(0);
@@ -50,7 +51,6 @@ public class ProtocolLibManager {
                         boolean modified = false;
 
                         for (PlayerInfoData data : originalList) {
-                            // CRITICAL NULL CHECK: Fixes NullPointerException
                             if (data == null || data.getProfile() == null || data.getProfile().getUUID() == null) {
                                 newList.add(data);
                                 continue;
@@ -60,9 +60,9 @@ public class ProtocolLibManager {
                                 PlayerInfoData newData = new PlayerInfoData(
                                         data.getProfile(),
                                         data.getLatency(),
-                                        EnumWrappers.NativeGameMode.SPECTATOR, // Force Spectator visual
+                                        EnumWrappers.NativeGameMode.SPECTATOR,
                                         data.getDisplayName(),
-                                        null // RemoteChatSession (Safe null for 1.19.3+)
+                                        null
                                 );
                                 newList.add(newData);
                                 modified = true;
@@ -76,8 +76,7 @@ public class ProtocolLibManager {
                         }
                     }
                 } catch (Exception e) {
-                    // Packet structure mismatch or other error.
-                    // Safely ignore to prevent server kick/crash.
+                    // Ignore
                 }
             }
         });
@@ -123,7 +122,6 @@ public class ProtocolLibManager {
 
                         for (int i = 0; i < values.size(); i++) {
                             WrappedDataValue value = values.get(i);
-                            // Strip Invisible Bit (Index 0)
                             if (value.getIndex() == 0) {
                                 byte b = (byte) value.getValue();
                                 if ((b & 0x20) != 0) {
@@ -131,7 +129,6 @@ public class ProtocolLibManager {
                                     modified = true;
                                 }
                             }
-                            // Strip Silent (Index 4)
                             else if (value.getIndex() == 4) {
                                 if ((boolean) value.getValue()) {
                                     values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(), false));
@@ -147,12 +144,41 @@ public class ProtocolLibManager {
                 } catch (Exception ignored) {}
             }
         });
+
+        // 4. Server List Ping (Locator Bar Fix)
+        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Status.Server.SERVER_INFO) {
+            @Override
+            public void onPacketSending(PacketEvent event) {
+                // EXPLICIT CAST FIX: Use ProtocolLibManager.this.plugin to avoid shadowing
+                if (!ProtocolLibManager.this.plugin.getConfigManager().adjustServerListCount) return;
+
+                try {
+                    WrappedServerPing ping = event.getPacket().getServerPings().read(0);
+                    if (ping == null) return;
+
+                    List<WrappedGameProfile> players = new ArrayList<>();
+
+                    // Filter the sample list
+                    for (WrappedGameProfile profile : ping.getPlayers()) {
+                        if (!ProtocolLibManager.this.isVanished(profile.getUUID())) {
+                            players.add(profile);
+                        }
+                    }
+
+                    ping.setPlayers(players);
+
+                    // Adjust count
+                    int online = Bukkit.getOnlinePlayers().size();
+                    int vanished = ProtocolLibManager.this.plugin.getRawVanishedPlayers().size();
+                    ping.setPlayersOnline(Math.max(0, online - vanished));
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+        });
     }
 
-    private boolean isVanished(UUID uuid) {
-        return plugin.getRawVanishedPlayers().contains(uuid);
-    }
-
+    private boolean isVanished(UUID uuid) { return plugin.getRawVanishedPlayers().contains(uuid); }
     private Set<String> getVanishedNames() {
         Set<String> names = new java.util.HashSet<>();
         for (UUID uuid : plugin.getRawVanishedPlayers()) {

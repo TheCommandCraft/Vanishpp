@@ -26,6 +26,7 @@
 # --- Management ---
 # - 'vanishpp.manageperms'   : Use /vperms to manage this file in-game.
 # - 'vanishpp.ignorewarning' : Use /vignore to stop ProtocolLib warnings.
+# - 'vanishpp.update'        : Receive notifications about new plugin versions.
 #
 # --- Rules & Configuration ---
 # - 'vanishpp.rules'         : Use /vrules to toggle personal settings.
