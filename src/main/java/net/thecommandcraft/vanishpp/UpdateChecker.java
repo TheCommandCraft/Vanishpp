@@ -10,6 +10,7 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
 import java.io.InputStreamReader;
@@ -19,27 +20,29 @@ import java.net.URL;
 public class UpdateChecker {
 
     private final Vanishpp plugin;
-    private final String modrinthId;
+    // Hardcoded Project ID (Slug) for Modrinth
+    private static final String PROJECT_ID = "vanish++";
+
     private String latestVersion;
     private boolean updateAvailable;
 
     public UpdateChecker(Vanishpp plugin) {
         this.plugin = plugin;
-        this.modrinthId = plugin.getConfigManager().updateCheckerId;
         this.updateAvailable = false;
     }
 
     public void check() {
+        // Only check if enabled in config
         if (!plugin.getConfigManager().updateCheckerEnabled) {
             return;
         }
 
-        plugin.getLogger().info("Checking for updates on Modrinth (ID: " + modrinthId + ")...");
+        plugin.getLogger().info("Checking for updates on Modrinth...");
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 // Modrinth API v2
-                URL url = new URL("https://api.modrinth.com/v2/project/" + modrinthId + "/version");
+                URL url = new URL("https://api.modrinth.com/v2/project/" + PROJECT_ID + "/version");
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
                 connection.setRequestProperty("User-Agent", "TheCommandCraft/Vanishpp/" + plugin.getDescription().getVersion());
@@ -56,32 +59,25 @@ public class UpdateChecker {
                             String remoteVersion = latest.get("version_number").getAsString();
                             String currentVersion = plugin.getDescription().getVersion();
 
-                            // Normalize versions (remove 'v' prefix if present)
+                            // Normalize versions
                             String cleanRemote = remoteVersion.replaceAll("[^0-9.]", "");
                             String cleanCurrent = currentVersion.replaceAll("[^0-9.]", "");
-
-                            plugin.getLogger().info("Version Check: Local [" + cleanCurrent + "] vs Remote [" + cleanRemote + "]");
 
                             if (isVersionNewer(cleanCurrent, cleanRemote)) {
                                 this.latestVersion = remoteVersion;
                                 this.updateAvailable = true;
                                 plugin.getLogger().warning("--------------------------------------------------");
                                 plugin.getLogger().warning("A new version of Vanish++ is available: " + remoteVersion);
-                                plugin.getLogger().warning("Download at: https://modrinth.com/project/" + modrinthId);
+                                plugin.getLogger().warning("Download at: https://modrinth.com/plugin/" + PROJECT_ID + "/version/" + remoteVersion);
                                 plugin.getLogger().warning("--------------------------------------------------");
                             } else {
                                 plugin.getLogger().info("You are running the latest version.");
                             }
                         }
-                    } else {
-                        plugin.getLogger().warning("Modrinth API returned unexpected JSON format.");
                     }
                     reader.close();
                 } else {
                     plugin.getLogger().warning("Failed to connect to Modrinth. Response Code: " + responseCode);
-                    if (responseCode == 404) {
-                        plugin.getLogger().warning("Project ID '" + modrinthId + "' not found on Modrinth. Check config.yml.");
-                    }
                 }
             } catch (Exception e) {
                 plugin.getLogger().warning("Update check failed: " + e.getMessage());
@@ -89,10 +85,6 @@ public class UpdateChecker {
         });
     }
 
-    /**
-     * Compares semantic versions (e.g. 1.1.0 vs 1.2.0)
-     * Returns true if remote is strictly NEWER than current.
-     */
     private boolean isVersionNewer(String current, String remote) {
         try {
             String[] currentParts = current.split("\\.");
@@ -104,14 +96,13 @@ public class UpdateChecker {
                 int v1 = i < currentParts.length ? Integer.parseInt(currentParts[i]) : 0;
                 int v2 = i < remoteParts.length ? Integer.parseInt(remoteParts[i]) : 0;
 
-                if (v2 > v1) return true;  // Remote is newer
-                if (v2 < v1) return false; // Local is newer (dev build)
+                if (v2 > v1) return true;
+                if (v2 < v1) return false;
             }
         } catch (NumberFormatException e) {
-            // Fallback for complex version strings
             return !current.equalsIgnoreCase(remote);
         }
-        return false; // Versions are identical
+        return false;
     }
 
     public void notifyPlayer(Player player) {
@@ -133,6 +124,9 @@ public class UpdateChecker {
         }
 
         if (shouldNotify) {
+            // Play Notification Sound
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 2.0f);
+
             player.sendMessage(Component.empty());
             player.sendMessage(Component.text("Vanish++ Update Available!", NamedTextColor.GREEN, TextDecoration.BOLD));
             player.sendMessage(Component.text("Current: ", NamedTextColor.GRAY)
@@ -140,10 +134,12 @@ public class UpdateChecker {
             player.sendMessage(Component.text("Latest: ", NamedTextColor.GRAY)
                     .append(Component.text(latestVersion, NamedTextColor.GREEN)));
 
-            String link = "https://modrinth.com/project/" + modrinthId;
+            // New Link Structure: /plugin/ID/version/VERSION
+            String link = "https://modrinth.com/plugin/" + PROJECT_ID + "/version/" + latestVersion;
+
             player.sendMessage(Component.text("[CLICK TO DOWNLOAD]", NamedTextColor.GOLD, TextDecoration.BOLD)
                     .clickEvent(ClickEvent.openUrl(link))
-                    .hoverEvent(HoverEvent.showText(Component.text("Go to Modrinth", NamedTextColor.YELLOW))));
+                    .hoverEvent(HoverEvent.showText(Component.text("Go to Modrinth Version " + latestVersion, NamedTextColor.YELLOW))));
             player.sendMessage(Component.empty());
         }
     }
