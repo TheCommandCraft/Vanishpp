@@ -1,2 +1,4 @@
 - Separate chat channel for vanished players
 - Hide chest opening not with spectator for stealing items out of there
+
+!!! FIX THE [VANISHED] PREFIX DISPLAYING ON NAMETAGS FOR PLAYERS WITH Vanishpp.See !!!
