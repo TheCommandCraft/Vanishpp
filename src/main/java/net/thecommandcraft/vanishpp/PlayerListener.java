@@ -1,6 +1,5 @@
 package net.thecommandcraft.vanishpp;
 
-import com.destroystokyo.paper.event.entity.ProjectileCollideEvent;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
@@ -9,13 +8,13 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
-import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -28,6 +27,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.util.Vector;
 
 import java.time.Duration;
 import java.util.*;
@@ -55,7 +55,9 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(player)) {
             plugin.applyVanishEffects(player);
             plugin.updateVanishVisibility(player);
-            if (config.fakeJoinMessage) event.joinMessage(null);
+
+            // SYSTEM MESSAGE HIDING
+            if (config.hideRealJoin) event.joinMessage(null);
         }
 
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
@@ -73,28 +75,14 @@ public class PlayerListener implements Listener {
             player.sendMessage(Component.text(" CRITICAL DEPENDENCY MISSING", NamedTextColor.RED, TextDecoration.BOLD));
             player.sendMessage(Component.text(" ProtocolLib is NOT installed.", NamedTextColor.YELLOW));
             player.sendMessage(Component.text(" ⚠ YOU ARE NOT FULLY HIDDEN! ⚠", NamedTextColor.RED));
-            player.sendMessage(Component.text(" - Tab-Complete Scrubbing: OFF", NamedTextColor.GRAY));
-            player.sendMessage(Component.text(" - Server List Hiding: OFF", NamedTextColor.GRAY));
-            player.sendMessage(Component.text(" - Spectator View: OFF", NamedTextColor.GRAY));
             player.sendMessage(Component.text("█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█", NamedTextColor.DARK_RED, TextDecoration.BOLD));
-            player.sendMessage(Component.text("Type /vignore to silence this alarm.", NamedTextColor.GRAY, TextDecoration.ITALIC));
-
-            Title title = Title.title(
-                    Component.text("⚠ WARNING ⚠", NamedTextColor.RED, TextDecoration.BOLD),
-                    Component.text("ProtocolLib Missing!", NamedTextColor.YELLOW),
-                    Title.Times.times(Duration.ofMillis(500), Duration.ofMillis(4000), Duration.ofMillis(1000))
-            );
+            Title title = Title.title(Component.text("⚠ WARNING ⚠", NamedTextColor.RED), Component.text("ProtocolLib Missing!", NamedTextColor.YELLOW));
             player.showTitle(title);
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
         }
 
-        // Update Check (With Delay)
         if (plugin.getUpdateChecker() != null) {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (player.isOnline()) {
-                    plugin.getUpdateChecker().notifyPlayer(player);
-                }
-            }, 5L); // 0.25 seconds delay (5 ticks)
+            plugin.getUpdateChecker().notifyPlayer(player);
         }
     }
 
@@ -102,7 +90,8 @@ public class PlayerListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         if (plugin.isVanished(event.getPlayer())) {
-            if (config.fakeLeaveMessage) event.quitMessage(null);
+            // SYSTEM MESSAGE HIDING
+            if (config.hideRealQuit) event.quitMessage(null);
             silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
         }
@@ -140,52 +129,37 @@ public class PlayerListener implements Listener {
     }
 
     @EventHandler
-    public void onProjectileCollide(ProjectileCollideEvent event) {
+    public void onDrop(PlayerDropItemEvent event) {
+        if (plugin.isVanished(event.getPlayer())) {
+            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_DROP_ITEMS)) {
+                event.setCancelled(true);
+                sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "dropping items");
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onProjectileHit(ProjectileHitEvent event) {
         if (!config.ignoreProjectiles) return;
-        if (event.getCollidedWith() instanceof Player player && plugin.isVanished(player)) {
+        if (event.getHitEntity() instanceof Player target && plugin.isVanished(target)) {
             event.setCancelled(true);
+            Projectile original = event.getEntity();
+            Vector velocity = original.getVelocity();
+            if (velocity.length() > 0.1) {
+                org.bukkit.Location spawnLoc = original.getLocation().add(velocity.normalize().multiply(1.5));
+                Projectile newProj = (Projectile) original.getWorld().spawnEntity(spawnLoc, original.getType());
+                newProj.setVelocity(velocity);
+                newProj.setShooter(original.getShooter());
+                newProj.setFireTicks(original.getFireTicks());
+            }
+            original.remove();
         }
     }
 
-    @EventHandler
-    public void onBreak(BlockBreakEvent event) {
-        if (plugin.isVanished(event.getPlayer())) {
-            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS)) {
-                event.setCancelled(true);
-                sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "breaking blocks");
-            }
-        }
-    }
-
-    @EventHandler
-    public void onPlace(BlockPlaceEvent event) {
-        if (plugin.isVanished(event.getPlayer())) {
-            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS)) {
-                event.setCancelled(true);
-                sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "placing blocks");
-            }
-        }
-    }
-
-    @EventHandler
-    public void onAttack(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player player && plugin.isVanished(player)) {
-            if (!rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) {
-                event.setCancelled(true);
-                sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "attacking");
-            }
-        }
-    }
-
-    @EventHandler
-    public void onPickup(EntityPickupItemEvent event) {
-        if (event.getEntity() instanceof Player player && plugin.isVanished(player)) {
-            if (!rules.getRule(player, RuleManager.CAN_PICKUP_ITEMS)) {
-                event.setCancelled(true);
-                sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "picking up items");
-            }
-        }
-    }
+    @EventHandler public void onBreak(BlockBreakEvent event) { if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS)) { event.setCancelled(true); sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "breaking blocks"); } }
+    @EventHandler public void onPlace(BlockPlaceEvent event) { if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS)) { event.setCancelled(true); sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "placing blocks"); } }
+    @EventHandler public void onAttack(EntityDamageByEntityEvent event) { if (event.getDamager() instanceof Player player && plugin.isVanished(player) && !rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) { event.setCancelled(true); sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "attacking"); } }
+    @EventHandler public void onPickup(EntityPickupItemEvent event) { if (event.getEntity() instanceof Player player && plugin.isVanished(player) && !rules.getRule(player, RuleManager.CAN_PICKUP_ITEMS)) { event.setCancelled(true); sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "picking up items"); } }
 
     @EventHandler
     public void onArrowPickup(PlayerPickupArrowEvent event) {
@@ -198,27 +172,13 @@ public class PlayerListener implements Listener {
     }
 
     @EventHandler
-    public void onDrop(PlayerDropItemEvent event) {
-        if (plugin.isVanished(event.getPlayer())) {
-            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_DROP_ITEMS)) {
-                event.setCancelled(true);
-                sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "dropping items");
-            }
-        }
-    }
-
-    @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         Player p = event.getPlayer();
         if (!plugin.isVanished(p)) return;
-
         if (event.getAction() == Action.PHYSICAL) {
-            if (!rules.getRule(p, RuleManager.CAN_TRIGGER_PHYSICAL)) {
-                event.setCancelled(true);
-            }
+            if (!rules.getRule(p, RuleManager.CAN_TRIGGER_PHYSICAL)) event.setCancelled(true);
             return;
         }
-
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) {
             if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
                 event.setCancelled(true);
@@ -305,9 +265,7 @@ public class PlayerListener implements Listener {
                 player.setGameMode(GameMode.SPECTATOR);
             }
 
-            Inventory inv = null;
-            if (block.getState() instanceof Container c) inv = c.getInventory();
-            else if (type == Material.ENDER_CHEST) inv = player.getEnderChest();
+            Inventory inv = (block.getState() instanceof Container c) ? c.getInventory() : (type == Material.ENDER_CHEST ? player.getEnderChest() : null);
 
             if (inv != null) player.openInventory(inv);
             else {

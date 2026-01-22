@@ -23,14 +23,22 @@ public class ConfigManager {
     public String vanishNametagPrefix;
     public String actionBarText;
     public String vanishedPlayerFormat;
-    public boolean actionBarEnabled, hideFromServerList, fakeLeaveMessage, fakeJoinMessage, disableBlockTriggering;
-    public boolean broadcastFakeQuit, broadcastFakeJoin;
+    public boolean actionBarEnabled;
+    public boolean adjustServerListCount;
+
+    // Core Effects Logic
+    public boolean hideFromServerList;
+    public boolean hideRealQuit;
+    public boolean hideRealJoin;
+    public boolean broadcastFakeQuit;
+    public boolean broadcastFakeJoin;
+    public boolean disableBlockTriggering;
+
     public boolean hideDeathMessages, hideAdvancements;
 
     public boolean enableNightVision, enableFly, disableMobTarget, disableHunger, silentChests, ignoreProjectiles;
     public boolean preventRaid, preventSculk, preventTrample, hideTabComplete, preventSleeping, preventEntityInteract;
     public boolean preventAccidentalChat;
-    public boolean adjustServerListCount;
 
     public boolean voiceChatEnabled, voiceChatIsolate;
     public boolean layeredPermsEnabled;
@@ -38,7 +46,7 @@ public class ConfigManager {
 
     // Update Checker
     public boolean updateCheckerEnabled;
-    // Removed: updateCheckerId (Now Hardcoded)
+    public String updateCheckerId;
     public String updateCheckerMode;
     public List<String> updateCheckerList;
 
@@ -53,7 +61,7 @@ public class ConfigManager {
         plugin.reloadConfig();
         this.config = plugin.getConfig();
 
-        // Messages
+        // Load Messages
         vanishMessage = format(config.getString("messages.vanish"));
         unvanishMessage = format(config.getString("messages.unvanish"));
         noPermissionMessage = format(config.getString("messages.no-permission"));
@@ -65,16 +73,16 @@ public class ConfigManager {
         pickupDisabledMessage = format(config.getString("messages.pickup-disabled", "&cPickup Disabled"));
 
         chatLockedMessage = format(config.getString("messages.chat-locked", "&cConfirm chat with /vchat confirm"));
-        chatSentMessage = format(config.getString("messages.chat-sent", "&aSent."));
+        chatSentMessage = format(config.getString("messages.chat-sent", "&aMessage sent."));
         noChatPendingMessage = format(config.getString("messages.no-chat-pending", "&cNo pending message."));
 
+        vpermsReload = format(config.getString("messages.vperms.reload"));
         vpermsInvalidUsage = format(config.getString("messages.vperms.invalid-usage"));
         vpermsInvalidPermission = format(config.getString("messages.vperms.invalid-permission"));
         vpermsPermSet = format(config.getString("messages.vperms.perm-set"));
         vpermsPermRemoved = format(config.getString("messages.vperms.perm-removed"));
         vpermsPermGetHas = format(config.getString("messages.vperms.perm-get-has"));
         vpermsPermGetDoesNotHave = format(config.getString("messages.vperms.perm-get-does-not-have"));
-        vpermsReload = format(config.getString("messages.vperms.reload"));
 
         silentJoinMessage = format(config.getString("messages.silent-join"));
         silentQuitMessage = format(config.getString("messages.silent-quit"));
@@ -83,14 +91,8 @@ public class ConfigManager {
         staffUnvanishMessage = format(config.getString("messages.staff-notify.on-unvanish"));
 
         // Appearance
-        if (config.contains("vanish-appearance.prefix")) {
-            String legacy = format(config.getString("vanish-appearance.prefix"));
-            vanishTabPrefix = legacy;
-            vanishNametagPrefix = "";
-        } else {
-            vanishTabPrefix = format(config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] "));
-            vanishNametagPrefix = format(config.getString("vanish-appearance.nametag-prefix", ""));
-        }
+        vanishTabPrefix = format(config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] "));
+        vanishNametagPrefix = format(config.getString("vanish-appearance.nametag-prefix", "&7[VANISHED] "));
 
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
         actionBarText = format(config.getString("vanish-appearance.action-bar.text"));
@@ -99,15 +101,16 @@ public class ConfigManager {
 
         // Effects
         hideFromServerList = config.getBoolean("vanish-effects.hide-from-server-list");
-        fakeLeaveMessage = config.getBoolean("vanish-effects.fake-leave-message");
-        fakeJoinMessage = config.getBoolean("vanish-effects.fake-join-message");
-        broadcastFakeQuit = config.getBoolean("vanish-effects.broadcast-fake-quit", true);
-        broadcastFakeJoin = config.getBoolean("vanish-effects.broadcast-fake-join", true);
+        hideRealQuit = config.getBoolean("vanish-effects.hide-real-quit-messages", true);
+        hideRealJoin = config.getBoolean("vanish-effects.hide-real-join-messages", true);
+        broadcastFakeQuit = config.getBoolean("vanish-effects.broadcast-fake-quit", false);
+        broadcastFakeJoin = config.getBoolean("vanish-effects.broadcast-fake-join", false);
         disableBlockTriggering = config.getBoolean("vanish-effects.disable-block-triggering");
 
         hideDeathMessages = config.getBoolean("hide-announcements.death-messages");
         hideAdvancements = config.getBoolean("hide-announcements.advancements");
 
+        // Features
         enableNightVision = config.getBoolean("invisibility-features.night-vision");
         enableFly = config.getBoolean("invisibility-features.allow-flight");
         disableMobTarget = config.getBoolean("invisibility-features.disable-mob-targeting");
@@ -122,19 +125,13 @@ public class ConfigManager {
         preventEntityInteract = config.getBoolean("invisibility-features.prevent-entity-interact", true);
         preventAccidentalChat = config.getBoolean("invisibility-features.prevent-accidental-chat", true);
 
-        voiceChatEnabled = config.getBoolean("hooks.simple-voice-chat.enabled");
-        voiceChatIsolate = config.getBoolean("hooks.simple-voice-chat.isolate-vanished-players");
-
-        layeredPermsEnabled = config.getBoolean("permissions.layered-permissions-enabled");
-        defaultVanishLevel = config.getInt("permissions.default-vanish-level", 1);
-        defaultSeeLevel = config.getInt("permissions.default-see-level", 1);
-        maxLevel = config.getInt("permissions.max-level", 100);
-
-        // Update Checker Settings (ID is now hardcoded in UpdateChecker class)
+        // Update Checker
         updateCheckerEnabled = config.getBoolean("update-checker.enabled", true);
+        updateCheckerId = config.getString("update-checker.modrinth-id", "vanishpp");
         updateCheckerMode = config.getString("update-checker.notify-mode", "PERMISSION");
         updateCheckerList = config.getStringList("update-checker.notify-list");
 
+        // Default Rules Section
         ConfigurationSection rulesSection = config.getConfigurationSection("default-rules");
         defaultRules.clear();
         if (rulesSection != null) {
@@ -144,10 +141,6 @@ public class ConfigManager {
         }
     }
 
-    public void save() {
-        plugin.saveConfig();
-    }
-
+    public void save() { plugin.saveConfig(); }
     private String format(String m) { return m == null ? "" : m.replace("&", "§"); }
-    public String format(String m, String def) { return m == null ? def : m.replace("&", "§"); }
 }

@@ -7,11 +7,7 @@ import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
-import com.comphenix.protocol.wrappers.PlayerInfoData;
-import com.comphenix.protocol.wrappers.WrappedDataValue;
-import com.comphenix.protocol.wrappers.WrappedGameProfile;
-import com.comphenix.protocol.wrappers.WrappedServerPing;
+import com.comphenix.protocol.wrappers.*;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -33,55 +29,7 @@ public class ProtocolLibManager {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         plugin.getLogger().info("Hooked into ProtocolLib.");
 
-        // 1. Spectator in Tab
-        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGH, PacketType.Play.Server.PLAYER_INFO) {
-            @Override
-            public void onPacketSending(PacketEvent event) {
-                if (event.isCancelled()) return;
-                if (!ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(event.getPlayer(), "vanishpp.see")) return;
-
-                try {
-                    PacketContainer packet = event.getPacket();
-                    Set<EnumWrappers.PlayerInfoAction> actions = packet.getPlayerInfoActions().read(0);
-
-                    if (actions.contains(EnumWrappers.PlayerInfoAction.ADD_PLAYER) || actions.contains(EnumWrappers.PlayerInfoAction.UPDATE_GAME_MODE)) {
-
-                        List<PlayerInfoData> originalList = packet.getPlayerInfoDataLists().read(0);
-                        List<PlayerInfoData> newList = new ArrayList<>();
-                        boolean modified = false;
-
-                        for (PlayerInfoData data : originalList) {
-                            if (data == null || data.getProfile() == null || data.getProfile().getUUID() == null) {
-                                newList.add(data);
-                                continue;
-                            }
-
-                            if (ProtocolLibManager.this.isVanished(data.getProfile().getUUID())) {
-                                PlayerInfoData newData = new PlayerInfoData(
-                                        data.getProfile(),
-                                        data.getLatency(),
-                                        EnumWrappers.NativeGameMode.SPECTATOR,
-                                        data.getDisplayName(),
-                                        null
-                                );
-                                newList.add(newData);
-                                modified = true;
-                            } else {
-                                newList.add(data);
-                            }
-                        }
-
-                        if (modified) {
-                            packet.getPlayerInfoDataLists().write(0, newList);
-                        }
-                    }
-                } catch (Exception e) {
-                    // Ignore
-                }
-            }
-        });
-
-        // 2. Tab Scrubbing
+        // 1. Tab Scrubbing (Hiding vanished players from non-staff)
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Server.TAB_COMPLETE) {
             @Override
             public void onPacketSending(PacketEvent event) {
@@ -107,7 +55,7 @@ public class ProtocolLibManager {
             }
         });
 
-        // 3. Reveal Invisible/Silent to Staff
+        // 2. Reveal Invisible/Silent to Staff
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGH, PacketType.Play.Server.ENTITY_METADATA) {
             @Override
             public void onPacketSending(PacketEvent event) {
@@ -116,7 +64,7 @@ public class ProtocolLibManager {
 
                 try {
                     Entity entity = event.getPacket().getEntityModifier(event).read(0);
-                    if (entity instanceof Player target && ProtocolLibManager.this.isVanished(target.getUniqueId())) {
+                    if (entity instanceof Player target && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
                         List<WrappedDataValue> values = new ArrayList<>(event.getPacket().getDataValueCollectionModifier().read(0));
                         boolean modified = false;
 
@@ -136,20 +84,16 @@ public class ProtocolLibManager {
                                 }
                             }
                         }
-
-                        if (modified) {
-                            event.getPacket().getDataValueCollectionModifier().write(0, values);
-                        }
+                        if (modified) event.getPacket().getDataValueCollectionModifier().write(0, values);
                     }
                 } catch (Exception ignored) {}
             }
         });
 
-        // 4. Server List Ping (Locator Bar Fix)
+        // 3. Server List Ping
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Status.Server.SERVER_INFO) {
             @Override
             public void onPacketSending(PacketEvent event) {
-                // EXPLICIT CAST FIX: Use ProtocolLibManager.this.plugin to avoid shadowing
                 if (!ProtocolLibManager.this.plugin.getConfigManager().adjustServerListCount) return;
 
                 try {
@@ -157,31 +101,55 @@ public class ProtocolLibManager {
                     if (ping == null) return;
 
                     List<WrappedGameProfile> players = new ArrayList<>();
-
-                    // Filter the sample list
                     for (WrappedGameProfile profile : ping.getPlayers()) {
-                        if (!ProtocolLibManager.this.isVanished(profile.getUUID())) {
+                        if (!ProtocolLibManager.this.plugin.isVanished(profile.getUUID())) {
                             players.add(profile);
                         }
                     }
-
                     ping.setPlayers(players);
 
-                    // Adjust count
-                    int online = Bukkit.getOnlinePlayers().size();
-                    int vanished = ProtocolLibManager.this.plugin.getRawVanishedPlayers().size();
-                    ping.setPlayersOnline(Math.max(0, online - vanished));
+                    int onlineCount = Bukkit.getOnlinePlayers().size();
+                    int vanishedCount = ProtocolLibManager.this.plugin.getRawVanishedPlayers().size();
+                    ping.setPlayersOnline(Math.max(0, onlineCount - vanishedCount));
                 } catch (Exception e) {
                     // Ignore
                 }
             }
         });
+
+        // 4. THE FIX: Intercept Team packets (Renamed to SCOREBOARD_TEAM in 5.3.0)
+        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGH, PacketType.Play.Server.SCOREBOARD_TEAM) {
+            @Override
+            public void onPacketSending(PacketEvent event) {
+                Player observer = event.getPlayer();
+
+                if (!ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see")) {
+                    return;
+                }
+
+                PacketContainer packet = event.getPacket();
+                String teamName = packet.getStrings().read(0);
+
+                if (teamName != null && teamName.equals("Vanishpp_Vanished")) {
+                    try {
+                        int action = packet.getIntegers().read(0);
+                        if (action == 0 || action == 2) {
+                            String prefix = ProtocolLibManager.this.plugin.getConfigManager().vanishNametagPrefix;
+                            if (prefix != null && !prefix.isEmpty()) {
+                                packet.getChatComponents().write(1, WrappedChatComponent.fromLegacyText(prefix));
+                            }
+                        }
+                    } catch (Exception e) {
+                        // Ignore version mismatch
+                    }
+                }
+            }
+        });
     }
 
-    private boolean isVanished(UUID uuid) { return plugin.getRawVanishedPlayers().contains(uuid); }
     private Set<String> getVanishedNames() {
         Set<String> names = new java.util.HashSet<>();
-        for (UUID uuid : plugin.getRawVanishedPlayers()) {
+        for (UUID uuid : ProtocolLibManager.this.plugin.getRawVanishedPlayers()) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) names.add(p.getName());
         }

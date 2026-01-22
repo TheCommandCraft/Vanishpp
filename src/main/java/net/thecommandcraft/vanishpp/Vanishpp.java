@@ -44,7 +44,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        // 1. Load Managers
         this.dataManager = new DataManager(this);
         this.dataManager.load();
 
@@ -57,11 +56,9 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         this.ruleManager = new RuleManager(this);
         ruleManager.load();
 
-        // 2. Load Data
         this.vanishedPlayers = loadUuidSet(dataManager.getConfig().getStringList("vanished-players"));
         this.ignoredWarningPlayers = loadUuidSet(dataManager.getConfig().getStringList("ignored-warnings"));
 
-        // 3. Load Hooks
         this.integrationManager = new IntegrationManager(this);
         this.integrationManager.load();
 
@@ -84,7 +81,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
 
         setupTeams();
 
-        // 4. Register Commands
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
         this.getCommand("vperms").setExecutor(new VpermsCommand(this));
         this.getCommand("vanishrules").setExecutor(new VanishRulesCommand(this));
@@ -93,7 +89,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
         this.getCommand("vanishlist").setExecutor(new VanishListCommand(this));
 
-        // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(this, this);
 
@@ -108,14 +103,12 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             getServer().getPluginManager().registerEvents(voiceChatHook, this);
         }
 
-        // 6. Init Update Checker
         this.updateChecker = new UpdateChecker(this);
         this.updateChecker.check();
 
         startActionBarTask();
         startSyncTask();
 
-        // 7. Restore State
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null && p.isOnline()) {
@@ -126,7 +119,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             }
         }
 
-        getLogger().info("Vanish++ 1.1.1 enabled.");
+        getLogger().info("Vanish++ 1.1.2 enabled.");
     }
 
     private void hookProtocolLib() {
@@ -146,6 +139,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
                 p.setInvisible(false);
                 p.setSilent(false);
                 p.setCollidable(true);
+                p.playerListName(null);
                 p.removePotionEffect(PotionEffectType.NIGHT_VISION);
                 p.removeMetadata("vanished", this);
                 tabPluginHook.update(p, false);
@@ -156,38 +150,20 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         if (vanishTeam != null) vanishTeam.unregister();
     }
 
-    // --- PUBLIC API METHODS (Fixes Compilation Errors) ---
-    public boolean isVanished(Player player) {
-        return vanishedPlayers.contains(player.getUniqueId());
-    }
-
-    public boolean isVanished(UUID uuid) {
-        return vanishedPlayers.contains(uuid);
-    }
-
-    public UpdateChecker getUpdateChecker() {
-        return updateChecker;
-    }
-
-    public boolean hasProtocolLib() {
-        return hasProtocolLib;
-    }
-
-    public Set<UUID> getIgnoredWarningPlayers() {
-        return ignoredWarningPlayers;
-    }
-    // -----------------------------------------------------
+    public boolean isVanished(Player player) { return vanishedPlayers.contains(player.getUniqueId()); }
+    public boolean isVanished(UUID uuid) { return vanishedPlayers.contains(uuid); }
+    public UpdateChecker getUpdateChecker() { return updateChecker; }
+    public boolean hasProtocolLib() { return hasProtocolLib; }
+    public Set<UUID> getIgnoredWarningPlayers() { return ignoredWarningPlayers; }
 
     private void setupTeams() {
         Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
         if (this.vanishTeam == null) this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
 
-        Component prefix = (configManager.vanishNametagPrefix != null && !configManager.vanishNametagPrefix.isEmpty())
-                ? Component.text(configManager.vanishNametagPrefix)
-                : Component.empty();
-
-        vanishTeam.prefix(prefix);
+        // Team Prefix is kept EMPTY to prevent leakage into Scoreboards.
+        // ProtocolLibManager injects it into packets for staff only.
+        vanishTeam.prefix(Component.empty());
         vanishTeam.setCanSeeFriendlyInvisibles(true);
         vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
     }
@@ -230,6 +206,11 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         vanishTeam.addEntry(player.getName());
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
 
+        // Inject Tab Prefix
+        if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
+            player.playerListName(Component.text(configManager.vanishTabPrefix).append(Component.text(player.getName())));
+        }
+
         if (configManager.disableBlockTriggering) player.setAffectsSpawning(false);
         if (configManager.preventSleeping) player.setSleepingIgnored(true);
 
@@ -237,7 +218,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
-        // Native Stealth (Smart AI handles targeting, ProtocolLib handles visibility for staff)
         player.setInvisible(true);
         player.setSilent(true);
         player.setCollidable(false);
@@ -259,6 +239,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         player.setAffectsSpawning(true);
         player.setSleepingIgnored(false);
         player.removeMetadata("vanished", this);
+        player.playerListName(null);
 
         if (vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
 
@@ -359,10 +340,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         saveDataAsynchronously();
     }
 
-    public boolean isWarningIgnored(Player player) {
-        return ignoredWarningPlayers.contains(player.getUniqueId());
-    }
-
+    public boolean isWarningIgnored(Player player) { return ignoredWarningPlayers.contains(player.getUniqueId()); }
     public void setWarningIgnored(Player player, boolean ignored) {
         if (ignored) ignoredWarningPlayers.add(player.getUniqueId());
         else ignoredWarningPlayers.remove(player.getUniqueId());
@@ -388,35 +366,15 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         Set<UUID> set = new HashSet<>();
         if (list == null) return set;
         for (String s : list) {
-            try {
-                set.add(UUID.fromString(s));
-            } catch (Exception ignored) {
-            }
+            try { set.add(UUID.fromString(s)); } catch (Exception ignored) {}
         }
         return set;
     }
 
-    public ConfigManager getConfigManager() {
-        return configManager;
-    }
-
-    public DataManager getDataManager() {
-        return dataManager;
-    }
-
-    public PermissionManager getPermissionManager() {
-        return permissionManager;
-    }
-
-    public RuleManager getRuleManager() {
-        return ruleManager;
-    }
-
-    public Set<UUID> getRawVanishedPlayers() {
-        return Collections.unmodifiableSet(vanishedPlayers);
-    }
-
-    public Set<UUID> getRawPickupPlayers() {
-        return new HashSet<>();
-    }
+    public ConfigManager getConfigManager() { return configManager; }
+    public DataManager getDataManager() { return dataManager; }
+    public PermissionManager getPermissionManager() { return permissionManager; }
+    public RuleManager getRuleManager() { return ruleManager; }
+    public Set<UUID> getRawVanishedPlayers() { return Collections.unmodifiableSet(vanishedPlayers); }
+    public Set<UUID> getRawPickupPlayers() { return new HashSet<>(); }
 }
