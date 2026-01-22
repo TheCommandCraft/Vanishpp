@@ -11,6 +11,7 @@ public class RuleManager {
     private final Vanishpp plugin;
     private final Map<UUID, Map<String, Boolean>> playerRules = new HashMap<>();
 
+    // Definition of available rules
     public static final String CAN_BREAK_BLOCKS = "can_break_blocks";
     public static final String CAN_PLACE_BLOCKS = "can_place_blocks";
     public static final String CAN_HIT_ENTITIES = "can_hit_entities";
@@ -39,7 +40,7 @@ public class RuleManager {
     }
 
     public void load() {
-        // LOAD FROM DATA.YML
+        // Load overrides from DATA.YML (User specific)
         FileConfiguration data = plugin.getDataManager().getConfig();
         if (data.contains("rules")) {
             ConfigurationSection section = data.getConfigurationSection("rules");
@@ -62,9 +63,9 @@ public class RuleManager {
     }
 
     public void save() {
-        // SAVE TO DATA.YML
+        // Save overrides to DATA.YML
         FileConfiguration data = plugin.getDataManager().getConfig();
-        data.set("rules", null);
+        data.set("rules", null); // Clear old to handle removals
         for (Map.Entry<UUID, Map<String, Boolean>> entry : playerRules.entrySet()) {
             for (Map.Entry<String, Boolean> rule : entry.getValue().entrySet()) {
                 data.set("rules." + entry.getKey().toString() + "." + rule.getKey(), rule.getValue());
@@ -78,17 +79,17 @@ public class RuleManager {
     }
 
     public boolean getRule(UUID uuid, String rule) {
-        if (!playerRules.containsKey(uuid)) {
-            Map<String, Boolean> configDefaults = plugin.getConfigManager().defaultRules;
-            if (configDefaults.containsKey(rule)) return configDefaults.get(rule);
-            return hardDefaults.getOrDefault(rule, false);
+        // 1. Check Player Specific Override
+        if (playerRules.containsKey(uuid)) {
+            Map<String, Boolean> pRules = playerRules.get(uuid);
+            if (pRules.containsKey(rule)) return pRules.get(rule);
         }
 
-        Map<String, Boolean> pRules = playerRules.get(uuid);
-        if (pRules.containsKey(rule)) return pRules.get(rule);
-
+        // 2. Check Config Default (Global setting)
         Map<String, Boolean> configDefaults = plugin.getConfigManager().defaultRules;
         if (configDefaults.containsKey(rule)) return configDefaults.get(rule);
+
+        // 3. Check Hardcoded Default (Fallback)
         return hardDefaults.getOrDefault(rule, false);
     }
 
@@ -100,6 +101,7 @@ public class RuleManager {
     public void setAllRules(Player player, boolean value) {
         Map<String, Boolean> rules = playerRules.computeIfAbsent(player.getUniqueId(), k -> new HashMap<>());
         for (String key : hardDefaults.keySet()) {
+            // Notifications usually shouldn't be toggled by "all"
             if (key.equals(SHOW_NOTIFICATIONS)) continue;
             rules.put(key, value);
         }

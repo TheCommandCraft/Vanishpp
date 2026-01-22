@@ -66,9 +66,10 @@ invisibility-features:
 
 vanish-effects:
   hide-from-server-list: true
-  fake-leave-message: true
-  fake-join-message: true
-  # Should the fake message actually be broadcasted?
+  # Controls whether the REAL vanilla messages are blocked
+  hide-real-quit-messages: true
+  hide-real-join-messages: true
+  # Controls whether the plugin sends FAKE yellow messages on vanish/unvanish
   broadcast-fake-quit: true
   broadcast-fake-join: true
   disable-block-triggering: true

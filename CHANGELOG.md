@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-01-22
+
+## Fixed
+- **Config Bug:** The config now affects if the fake join and leave messages display when vanishing.
+
 ## [1.1.1] - 2026-01-17
 
 ### Added
