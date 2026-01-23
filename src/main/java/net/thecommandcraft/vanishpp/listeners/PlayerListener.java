@@ -1,4 +1,4 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.listeners;
 
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
@@ -8,6 +8,10 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
+import net.thecommandcraft.vanishpp.config.ConfigManager;
+import net.thecommandcraft.vanishpp.config.RuleManager;
+import net.thecommandcraft.vanishpp.Vanishpp;
+import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -52,37 +56,54 @@ public class PlayerListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
 
+        // 1. Apply Vanish State if stored
         if (plugin.isVanished(player)) {
             plugin.applyVanishEffects(player);
             plugin.updateVanishVisibility(player);
 
-            // SYSTEM MESSAGE HIDING
-            if (config.hideRealJoin) event.joinMessage(null);
-        }
-
-        for (UUID uuid : plugin.getRawVanishedPlayers()) {
-            Player v = plugin.getServer().getPlayer(uuid);
-            if (v != null) {
-                if (!plugin.getPermissionManager().canSee(player, v)) {
-                    player.hidePlayer(plugin, v);
-                }
+            // Hide real system message based on config
+            if (config.hideRealJoin) {
+                event.joinMessage(null);
             }
         }
 
-        // ProtocolLib Warning
+        // 2. Global Refresh: Ensure new joiner cannot see existing vanished players
+        for (UUID uuid : plugin.getRawVanishedPlayers()) {
+            Player v = plugin.getServer().getPlayer(uuid);
+            if (v != null && !plugin.getPermissionManager().canSee(player, v)) {
+                player.hidePlayer(plugin, v);
+            }
+        }
+
+        // 3. Config Migration Report for Admins
+        if (player.hasPermission("vanishpp.update") || player.isOp()) {
+            config.sendMigrationReport(player);
+        }
+
+        // 4. ProtocolLib Missing Warning (Aggressive)
         if (!plugin.hasProtocolLib() && player.isOp() && !plugin.isWarningIgnored(player)) {
             player.sendMessage(Component.text("█▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀█", NamedTextColor.DARK_RED, TextDecoration.BOLD));
             player.sendMessage(Component.text(" CRITICAL DEPENDENCY MISSING", NamedTextColor.RED, TextDecoration.BOLD));
             player.sendMessage(Component.text(" ProtocolLib is NOT installed.", NamedTextColor.YELLOW));
             player.sendMessage(Component.text(" ⚠ YOU ARE NOT FULLY HIDDEN! ⚠", NamedTextColor.RED));
             player.sendMessage(Component.text("█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█", NamedTextColor.DARK_RED, TextDecoration.BOLD));
-            Title title = Title.title(Component.text("⚠ WARNING ⚠", NamedTextColor.RED), Component.text("ProtocolLib Missing!", NamedTextColor.YELLOW));
+
+            Title title = Title.title(
+                    Component.text("⚠ WARNING ⚠", NamedTextColor.RED, TextDecoration.BOLD),
+                    Component.text("ProtocolLib Missing! Stealth compromised.", NamedTextColor.YELLOW),
+                    Title.Times.times(Duration.ofMillis(500), Duration.ofMillis(4000), Duration.ofMillis(1000))
+            );
             player.showTitle(title);
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
         }
 
+        // 5. Modrinth Update Check
         if (plugin.getUpdateChecker() != null) {
-            plugin.getUpdateChecker().notifyPlayer(player);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (player.isOnline()) {
+                    plugin.getUpdateChecker().notifyPlayer(player);
+                }
+            }, 5L);
         }
     }
 
@@ -90,11 +111,14 @@ public class PlayerListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         if (plugin.isVanished(event.getPlayer())) {
-            // SYSTEM MESSAGE HIDING
-            if (config.hideRealQuit) event.quitMessage(null);
+            // Hide real system message
+            if (config.hideRealQuit) {
+                event.quitMessage(null);
+            }
             silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
         }
+        // Cleanup session data
         ruleNotificationCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
     }
@@ -103,6 +127,7 @@ public class PlayerListener implements Listener {
     public void onChat(AsyncChatEvent event) {
         Player player = event.getPlayer();
         if (plugin.isVanished(player)) {
+            // Metadata bypass set by /vchat confirm
             if (player.hasMetadata("vanishpp_chat_bypass")) {
                 player.removeMetadata("vanishpp_chat_bypass", plugin);
                 return;
@@ -117,7 +142,7 @@ public class PlayerListener implements Listener {
                 Component msg = Component.text(config.chatLockedMessage, NamedTextColor.RED)
                         .append(Component.text(" [CONFIRM]", NamedTextColor.GREEN, TextDecoration.BOLD)
                                 .clickEvent(ClickEvent.runCommand("/vchat confirm"))
-                                .hoverEvent(HoverEvent.showText(Component.text("Click to send ONCE"))))
+                                .hoverEvent(HoverEvent.showText(Component.text("Click to send this message ONCE"))))
                         .append(Component.text(" or ", NamedTextColor.GRAY))
                         .append(Component.text("[ENABLE CHAT]", NamedTextColor.GOLD, TextDecoration.BOLD)
                                 .clickEvent(ClickEvent.runCommand("/vrules can_chat true"))
@@ -141,8 +166,12 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onProjectileHit(ProjectileHitEvent event) {
         if (!config.ignoreProjectiles) return;
+
         if (event.getHitEntity() instanceof Player target && plugin.isVanished(target)) {
+            // Cancel impact
             event.setCancelled(true);
+
+            // Physics passthrough logic
             Projectile original = event.getEntity();
             Vector velocity = original.getVelocity();
             if (velocity.length() > 0.1) {
@@ -152,20 +181,57 @@ public class PlayerListener implements Listener {
                 newProj.setShooter(original.getShooter());
                 newProj.setFireTicks(original.getFireTicks());
             }
+            // Remove the stuck arrow
             original.remove();
         }
     }
 
-    @EventHandler public void onBreak(BlockBreakEvent event) { if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS)) { event.setCancelled(true); sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "breaking blocks"); } }
-    @EventHandler public void onPlace(BlockPlaceEvent event) { if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS)) { event.setCancelled(true); sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "placing blocks"); } }
-    @EventHandler public void onAttack(EntityDamageByEntityEvent event) { if (event.getDamager() instanceof Player player && plugin.isVanished(player) && !rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) { event.setCancelled(true); sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "attacking"); } }
-    @EventHandler public void onPickup(EntityPickupItemEvent event) { if (event.getEntity() instanceof Player player && plugin.isVanished(player) && !rules.getRule(player, RuleManager.CAN_PICKUP_ITEMS)) { event.setCancelled(true); sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "picking up items"); } }
+    @EventHandler
+    public void onBreak(BlockBreakEvent event) {
+        if (plugin.isVanished(event.getPlayer())) {
+            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS)) {
+                event.setCancelled(true);
+                sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "breaking blocks");
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlace(BlockPlaceEvent event) {
+        if (plugin.isVanished(event.getPlayer())) {
+            if (!rules.getRule(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS)) {
+                event.setCancelled(true);
+                sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "placing blocks");
+            }
+        }
+    }
+
+    @EventHandler
+    public void onAttack(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player player && plugin.isVanished(player)) {
+            if (!rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) {
+                event.setCancelled(true);
+                sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "attacking");
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPickup(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player player && plugin.isVanished(player)) {
+            if (!rules.getRule(player, RuleManager.CAN_PICKUP_ITEMS)) {
+                event.setCancelled(true);
+                sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "picking up items");
+            }
+        }
+    }
 
     @EventHandler
     public void onArrowPickup(PlayerPickupArrowEvent event) {
         if (plugin.isVanished(event.getPlayer())) {
             if (!rules.getRule(event.getPlayer(), RuleManager.CAN_PICKUP_ITEMS)) {
                 event.setCancelled(true);
+                // Subtle visual warning for silent actions
                 plugin.triggerActionBarWarning(event.getPlayer(), Component.text("✖ Arrow Pickup Blocked", NamedTextColor.RED));
             }
         }
@@ -175,18 +241,26 @@ public class PlayerListener implements Listener {
     public void onInteract(PlayerInteractEvent event) {
         Player p = event.getPlayer();
         if (!plugin.isVanished(p)) return;
+
+        // Block pressure plates, crops, turtle eggs
         if (event.getAction() == Action.PHYSICAL) {
-            if (!rules.getRule(p, RuleManager.CAN_TRIGGER_PHYSICAL)) event.setCancelled(true);
+            if (!rules.getRule(p, RuleManager.CAN_TRIGGER_PHYSICAL)) {
+                event.setCancelled(true);
+            }
             return;
         }
+
+        // Block Bows, Potions, Food, Buttons, Levers
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) {
             if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
                 event.setCancelled(true);
+                // Don't warn for air clicks unless holding an item to avoid spam while walking
                 if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem()) {
                     sendRuleDeny(p, RuleManager.CAN_INTERACT, "interaction");
                 }
                 return;
             }
+            // If interaction is allowed, check for silent container logic
             if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
                 handleSilentChest(event);
             }
@@ -196,6 +270,8 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onMobTarget(EntityTargetLivingEntityEvent event) {
         if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
+            // Fail-safe: AI logic in MobAiManager handles the gaze,
+            // this event handles the actual Aggro/Tracking logic.
             event.setCancelled(true);
             if (event.getEntity() instanceof org.bukkit.entity.Mob mob) {
                 mob.setTarget(null);
@@ -222,7 +298,9 @@ public class PlayerListener implements Listener {
                     toRemove.add(uuid);
                 }
             }
+            // Update the player count number
             event.setNumPlayers(Math.max(0, event.getNumPlayers() - vanishedCount));
+            // Scrub the hover names list
             event.getListedPlayers().removeIf(profile -> toRemove.contains(profile.id()));
         }
     }
@@ -230,6 +308,7 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onTabComplete(PlayerCommandSendEvent event) {
         if (config.hideTabComplete && !plugin.getPermissionManager().hasPermission(event.getPlayer(), "vanishpp.see")) {
+            // Intercept tab completion for vanilla commands if ProtocolLib scrubbing fails
             event.getCommands().removeIf(cmd -> cmd.contains(":"));
         }
     }
@@ -237,13 +316,27 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onSculkSensor(BlockReceiveGameEvent event) {
         if (config.preventSculk && event.getEntity() instanceof Player player) {
-            if (plugin.isVanished(player) && !rules.getRule(player, RuleManager.CAN_TRIGGER_PHYSICAL)) event.setCancelled(true);
+            if (plugin.isVanished(player) && !rules.getRule(player, RuleManager.CAN_TRIGGER_PHYSICAL)) {
+                event.setCancelled(true);
+            }
         }
     }
-    @EventHandler public void onRaidTrigger(RaidTriggerEvent event) { if (config.preventRaid && plugin.isVanished(event.getPlayer())) event.setCancelled(true); }
-    @EventHandler public void onBedEnter(PlayerBedEnterEvent event) { if (config.preventSleeping && plugin.isVanished(event.getPlayer())) event.setCancelled(true); }
-    @EventHandler public void onHunger(FoodLevelChangeEvent event) { if (config.disableHunger && event.getEntity() instanceof Player p && plugin.isVanished(p)) event.setCancelled(true); }
-    @EventHandler public void onDeath(PlayerDeathEvent event) { if (config.hideDeathMessages && plugin.isVanished(event.getEntity())) event.deathMessage(null); }
+
+    @EventHandler public void onRaidTrigger(RaidTriggerEvent event) {
+        if (config.preventRaid && plugin.isVanished(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler public void onBedEnter(PlayerBedEnterEvent event) {
+        if (config.preventSleeping && plugin.isVanished(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler public void onHunger(FoodLevelChangeEvent event) {
+        if (config.disableHunger && event.getEntity() instanceof Player p && plugin.isVanished(p)) event.setCancelled(true);
+    }
+
+    @EventHandler public void onDeath(PlayerDeathEvent event) {
+        if (config.hideDeathMessages && plugin.isVanished(event.getEntity())) event.deathMessage(null);
+    }
 
     private void handleSilentChest(PlayerInteractEvent event) {
         if (!config.silentChests) return;
@@ -256,10 +349,12 @@ public class PlayerListener implements Listener {
         if (block == null) return;
         Material type = block.getType();
 
+        // Check for containers
         if (type == Material.CHEST || type == Material.TRAPPED_CHEST || type == Material.BARREL || type.name().endsWith("SHULKER_BOX")) {
             event.setCancelled(true);
             GameMode original = player.getGameMode();
 
+            // Temporary Spectator switch blocks opening animations/packets to others
             if (original != GameMode.SPECTATOR) {
                 silentChestViewers.put(player.getUniqueId(), original);
                 player.setGameMode(GameMode.SPECTATOR);
@@ -267,8 +362,10 @@ public class PlayerListener implements Listener {
 
             Inventory inv = (block.getState() instanceof Container c) ? c.getInventory() : (type == Material.ENDER_CHEST ? player.getEnderChest() : null);
 
-            if (inv != null) player.openInventory(inv);
-            else {
+            if (inv != null) {
+                player.openInventory(inv);
+            } else {
+                // Cleanup if opening failed
                 if (original != GameMode.SPECTATOR) player.setGameMode(original);
                 silentChestViewers.remove(player.getUniqueId());
             }
@@ -282,6 +379,7 @@ public class PlayerListener implements Listener {
             GameMode gm = silentChestViewers.remove(p.getUniqueId());
             if (p.isOnline()) {
                 p.setGameMode(gm);
+                // Restore flight if vanished survival fly was active
                 if (config.enableFly && gm != GameMode.CREATIVE && gm != GameMode.SPECTATOR && plugin.isVanished(p)) {
                     p.setAllowFlight(true);
                     p.setFlying(true);
@@ -291,6 +389,7 @@ public class PlayerListener implements Listener {
     }
 
     private void sendRuleDeny(Player p, String ruleName, String actionName) {
+        // ALWAYS trigger Action Bar Warning (no cooldown here)
         plugin.triggerActionBarWarning(p, Component.text("✖ Action Blocked: " + actionName, NamedTextColor.RED, TextDecoration.BOLD));
 
         if (!rules.getRule(p, RuleManager.SHOW_NOTIFICATIONS)) return;
@@ -300,13 +399,14 @@ public class PlayerListener implements Listener {
         Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
         long lastTime = playerCooldowns.getOrDefault(ruleName, 0L);
 
+        // 60s Chat Cooldown to prevent chat spam
         if (now - lastTime < 60000) return;
         playerCooldowns.put(ruleName, now);
 
         Component message = Component.text("Vanish blocked " + actionName + ". ", NamedTextColor.RED)
                 .append(Component.text("[ENABLE]", NamedTextColor.GREEN, TextDecoration.BOLD)
                         .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
-                        .hoverEvent(HoverEvent.showText(Component.text("Click to allow", NamedTextColor.GREEN))))
+                        .hoverEvent(HoverEvent.showText(Component.text("Click to allow forever", NamedTextColor.GREEN))))
                 .append(Component.text(" | ", NamedTextColor.GRAY))
                 .append(Component.text("[ENABLE 1m]", NamedTextColor.YELLOW, TextDecoration.BOLD)
                         .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
@@ -314,6 +414,7 @@ public class PlayerListener implements Listener {
 
         p.sendMessage(message);
 
+        // Tip on first notification
         if (!hasSeenDisableTip.contains(uuid)) {
             hasSeenDisableTip.add(uuid);
             p.sendMessage(Component.text("Tip: Type /vignore to disable these warnings.", NamedTextColor.GRAY));

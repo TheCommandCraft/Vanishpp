@@ -1,8 +1,9 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.listeners;
 
 import com.destroystokyo.paper.entity.ai.Goal;
 import com.destroystokyo.paper.entity.ai.GoalKey;
 import com.destroystokyo.paper.entity.ai.GoalType;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;

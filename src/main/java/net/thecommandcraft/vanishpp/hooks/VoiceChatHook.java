@@ -1,8 +1,9 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.hooks;
 
 import de.maxhenkel.voicechat.api.BukkitVoicechatService;
 import de.maxhenkel.voicechat.api.VoicechatConnection;
 import de.maxhenkel.voicechat.api.VoicechatServerApi;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;

@@ -1,4 +1,4 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.utils;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -9,6 +9,8 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.thecommandcraft.vanishpp.Vanishpp;
+import net.thecommandcraft.vanishpp.config.ConfigManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;

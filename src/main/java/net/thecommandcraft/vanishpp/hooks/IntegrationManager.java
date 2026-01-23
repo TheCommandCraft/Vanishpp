@@ -1,8 +1,10 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.hooks;
 
 import com.earth2me.essentials.Essentials;
 import com.earth2me.essentials.User;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
+import net.thecommandcraft.vanishpp.Vanishpp;
+import net.thecommandcraft.vanishpp.config.RuleManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;

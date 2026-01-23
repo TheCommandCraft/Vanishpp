@@ -1,5 +1,8 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.commands;
 
+import net.thecommandcraft.vanishpp.config.ConfigManager;
+import net.thecommandcraft.vanishpp.PermissionManager;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -12,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 

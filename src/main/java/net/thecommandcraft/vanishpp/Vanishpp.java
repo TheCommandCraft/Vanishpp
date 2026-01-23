@@ -2,6 +2,17 @@ package net.thecommandcraft.vanishpp;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.thecommandcraft.vanishpp.commands.*;
+import net.thecommandcraft.vanishpp.config.ConfigManager;
+import net.thecommandcraft.vanishpp.config.DataManager;
+import net.thecommandcraft.vanishpp.config.RuleManager;
+import net.thecommandcraft.vanishpp.hooks.IntegrationManager;
+import net.thecommandcraft.vanishpp.hooks.ProtocolLibManager;
+import net.thecommandcraft.vanishpp.hooks.TabPluginHook;
+import net.thecommandcraft.vanishpp.hooks.VoiceChatHook;
+import net.thecommandcraft.vanishpp.listeners.MobAiManager;
+import net.thecommandcraft.vanishpp.listeners.PlayerListener;
+import net.thecommandcraft.vanishpp.utils.UpdateChecker;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.command.CommandSender;

@@ -1,7 +1,9 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.commands;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.thecommandcraft.vanishpp.config.RuleManager;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -13,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class VanishRulesCommand implements CommandExecutor, TabCompleter {

@@ -1,8 +1,9 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.hooks;
 
 import me.neznamy.tab.api.TabAPI;
 import me.neznamy.tab.api.TabPlayer;
 import me.neznamy.tab.api.tablist.TabListFormatManager;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
