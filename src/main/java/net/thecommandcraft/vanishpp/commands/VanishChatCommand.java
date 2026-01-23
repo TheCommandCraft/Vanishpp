@@ -1,7 +1,8 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.commands;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;

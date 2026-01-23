@@ -1,6 +1,7 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.listeners;
 
 import com.destroystokyo.paper.entity.ai.VanillaGoal;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Mob;
 import org.bukkit.event.EventHandler;

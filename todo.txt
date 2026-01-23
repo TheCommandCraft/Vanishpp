@@ -2,3 +2,4 @@
 - Hide chest opening not with spectator for stealing items out of there
 
 !!! FIX THE [VANISHED] PREFIX DISPLAYING ON NAMETAGS FOR PLAYERS WITH Vanishpp.See !!!
+- Make a velocity plugin to sync configs across the whole server using velocity!

@@ -108,3 +108,8 @@ data:
   vanished-players: []
   ignored-warnings: []
   rules: {}
+
+# ------------------------------------------------ #
+#       Vanish++ Internal Data - Do not edit!      #
+# ------------------------------------------------ #
+config-version: 2
