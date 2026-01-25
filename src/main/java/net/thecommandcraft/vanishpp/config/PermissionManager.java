@@ -1,6 +1,6 @@
-package net.thecommandcraft.vanishpp;
+package net.thecommandcraft.vanishpp.config;
 
-import net.thecommandcraft.vanishpp.config.ConfigManager;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;

@@ -1,7 +1,7 @@
 package net.thecommandcraft.vanishpp.commands;
 
 import net.thecommandcraft.vanishpp.config.ConfigManager;
-import net.thecommandcraft.vanishpp.PermissionManager;
+import net.thecommandcraft.vanishpp.config.PermissionManager;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
