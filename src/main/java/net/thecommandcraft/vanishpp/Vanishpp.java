@@ -3,16 +3,10 @@ package net.thecommandcraft.vanishpp;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.commands.*;
-import net.thecommandcraft.vanishpp.config.ConfigManager;
-import net.thecommandcraft.vanishpp.config.DataManager;
-import net.thecommandcraft.vanishpp.config.RuleManager;
-import net.thecommandcraft.vanishpp.hooks.IntegrationManager;
-import net.thecommandcraft.vanishpp.hooks.ProtocolLibManager;
-import net.thecommandcraft.vanishpp.hooks.TabPluginHook;
-import net.thecommandcraft.vanishpp.hooks.VoiceChatHook;
-import net.thecommandcraft.vanishpp.listeners.MobAiManager;
-import net.thecommandcraft.vanishpp.listeners.PlayerListener;
-import net.thecommandcraft.vanishpp.utils.UpdateChecker;
+import net.thecommandcraft.vanishpp.config.*;
+import net.thecommandcraft.vanishpp.listeners.*;
+import net.thecommandcraft.vanishpp.hooks.*;
+import net.thecommandcraft.vanishpp.utils.*;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.command.CommandSender;
@@ -55,6 +49,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        // 1. Load Data/Config Managers
         this.dataManager = new DataManager(this);
         this.dataManager.load();
 
@@ -67,9 +62,11 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         this.ruleManager = new RuleManager(this);
         ruleManager.load();
 
+        // 2. Load Persistent Sets
         this.vanishedPlayers = loadUuidSet(dataManager.getConfig().getStringList("vanished-players"));
         this.ignoredWarningPlayers = loadUuidSet(dataManager.getConfig().getStringList("ignored-warnings"));
 
+        // 3. Load Hooks
         this.integrationManager = new IntegrationManager(this);
         this.integrationManager.load();
 
@@ -87,11 +84,12 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             }
         } else {
             this.hasProtocolLib = false;
-            getLogger().warning("ProtocolLib NOT found! Advanced features disabled.");
+            getLogger().warning("ProtocolLib NOT found! Advanced features (Tab scrubbing) disabled.");
         }
 
         setupTeams();
 
+        // 4. Register Commands
         this.getCommand("vanish").setExecutor(new VanishCommand(this));
         this.getCommand("vperms").setExecutor(new VpermsCommand(this));
         this.getCommand("vanishrules").setExecutor(new VanishRulesCommand(this));
@@ -99,9 +97,13 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         this.getCommand("vanishpickup").setExecutor(new VanishPickupCommand(this));
         this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
         this.getCommand("vanishlist").setExecutor(new VanishListCommand(this));
+        this.getCommand("vanishhelp").setExecutor(new VanishHelpCommand(this));
+        this.getCommand("vanishconfig").setExecutor(new VanishConfigCommand(this));
+        this.getCommand("vack").setExecutor(new VanishAckCommand(this));
 
+        // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
-        getServer().getPluginManager().registerEvents(this, this);
+        getServer().getPluginManager().registerEvents(this, this); // Preprocess listener
 
         try {
             new MobAiManager(this).register();
@@ -114,12 +116,14 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             getServer().getPluginManager().registerEvents(voiceChatHook, this);
         }
 
+        // 6. Init Utils
         this.updateChecker = new UpdateChecker(this);
         this.updateChecker.check();
 
         startActionBarTask();
         startSyncTask();
 
+        // 7. Restore Player State
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null && p.isOnline()) {
@@ -130,7 +134,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             }
         }
 
-        getLogger().info("Vanish++ 1.1.2 enabled.");
+        getLogger().info("Vanish++ 1.1.3 enabled.");
     }
 
     private void hookProtocolLib() {
@@ -161,20 +165,25 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         if (vanishTeam != null) vanishTeam.unregister();
     }
 
+    // --- PUBLIC API GETTERS ---
     public boolean isVanished(Player player) { return vanishedPlayers.contains(player.getUniqueId()); }
     public boolean isVanished(UUID uuid) { return vanishedPlayers.contains(uuid); }
     public UpdateChecker getUpdateChecker() { return updateChecker; }
     public boolean hasProtocolLib() { return hasProtocolLib; }
     public Set<UUID> getIgnoredWarningPlayers() { return ignoredWarningPlayers; }
+    public ConfigManager getConfigManager() { return configManager; }
+    public DataManager getDataManager() { return dataManager; }
+    public PermissionManager getPermissionManager() { return permissionManager; }
+    public RuleManager getRuleManager() { return ruleManager; }
+    public Set<UUID> getRawVanishedPlayers() { return Collections.unmodifiableSet(vanishedPlayers); }
 
+    // --- CORE LOGIC ---
     private void setupTeams() {
         Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
         if (this.vanishTeam == null) this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
 
-        // Team Prefix is kept EMPTY to prevent leakage into Scoreboards.
-        // ProtocolLibManager injects it into packets for staff only.
-        vanishTeam.prefix(Component.empty());
+        vanishTeam.prefix(Component.empty()); // Prefix handled by packets for staff only
         vanishTeam.setCanSeeFriendlyInvisibles(true);
         vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
     }
@@ -188,9 +197,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline()) {
                     long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
-                    if (now > pausedUntil) {
-                        p.sendActionBar(actionBarComponent);
-                    }
+                    if (now > pausedUntil) p.sendActionBar(actionBarComponent);
                 }
             }
         }, 0L, 20L);
@@ -205,9 +212,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         this.syncTask = getServer().getScheduler().runTaskTimer(this, () -> {
             for (UUID uuid : vanishedPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
-                    updateVanishVisibility(p);
-                }
+                if (p != null && p.isOnline()) updateVanishVisibility(p);
             }
         }, 20L, 20L);
     }
@@ -217,7 +222,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         vanishTeam.addEntry(player.getName());
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
 
-        // Inject Tab Prefix
+        // Tab Prefix for staff
         if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
             player.playerListName(Component.text(configManager.vanishTabPrefix).append(Component.text(player.getName())));
         }
@@ -229,6 +234,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
+        // TITAN STEALTH ENGINE
         player.setInvisible(true);
         player.setSilent(true);
         player.setCollidable(false);
@@ -259,7 +265,6 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         player.setCollidable(true);
 
         if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION)) player.removePotionEffect(PotionEffectType.NIGHT_VISION);
-
         if (player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR) {
             player.setAllowFlight(false);
             player.setFlying(false);
@@ -275,17 +280,12 @@ public final class Vanishpp extends JavaPlugin implements Listener {
     public void vanishPlayer(Player player, CommandSender executor) {
         applyVanishEffects(player);
         player.sendMessage(Component.text(configManager.vanishMessage));
-        if (configManager.broadcastFakeQuit) {
-            broadcastToUnaware(Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()), player);
-        }
+        if (configManager.broadcastFakeQuit) broadcastToUnaware(Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()), player);
         notifyStaff(player, executor, true);
     }
 
     public void unvanishPlayer(Player player, CommandSender executor) {
-        if (configManager.broadcastFakeJoin) {
-            broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName()), player);
-        }
-
+        if (configManager.broadcastFakeJoin) broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName()), player);
         removeVanishEffects(player);
         player.sendMessage(Component.text(configManager.unvanishMessage));
         notifyStaff(player, executor, false);
@@ -293,9 +293,7 @@ public final class Vanishpp extends JavaPlugin implements Listener {
 
     private void broadcastToUnaware(Component message, Player vanishedPlayer) {
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            if (!permissionManager.canSee(onlinePlayer, vanishedPlayer) && !onlinePlayer.equals(vanishedPlayer)) {
-                onlinePlayer.sendMessage(message);
-            }
+            if (!permissionManager.canSee(onlinePlayer, vanishedPlayer) && !onlinePlayer.equals(vanishedPlayer)) onlinePlayer.sendMessage(message);
         }
     }
 
@@ -314,21 +312,15 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         for (Player observer : Bukkit.getOnlinePlayers()) {
             if (observer.equals(subject)) continue;
             boolean canSee = permissionManager.canSee(observer, subject);
-
-            if (isVanished && !canSee) {
-                observer.hidePlayer(this, subject);
-            } else {
-                observer.showPlayer(this, subject);
-            }
+            if (isVanished && !canSee) observer.hidePlayer(this, subject);
+            else observer.showPlayer(this, subject);
         }
     }
 
     public void scheduleRuleRevert(Player player, String rule, boolean originalValue, int seconds) {
         Bukkit.getScheduler().runTaskLater(this, () -> {
             ruleManager.setRule(player, rule, originalValue);
-            if (player.isOnline()) {
-                player.sendMessage(Component.text("Temporary rule '" + rule + "' has expired.", NamedTextColor.YELLOW));
-            }
+            if (player.isOnline()) player.sendMessage(Component.text("Temporary rule '" + rule + "' has expired.", NamedTextColor.YELLOW));
         }, seconds * 20L);
     }
 
@@ -361,31 +353,18 @@ public final class Vanishpp extends JavaPlugin implements Listener {
     private void saveDataSync() {
         List<String> uuidStrings = vanishedPlayers.stream().map(UUID::toString).toList();
         dataManager.getConfig().set("vanished-players", uuidStrings);
-
         List<String> ignoredStrings = ignoredWarningPlayers.stream().map(UUID::toString).toList();
         dataManager.getConfig().set("ignored-warnings", ignoredStrings);
-
         dataManager.save();
         ruleManager.save();
     }
 
-    private void saveDataAsynchronously() {
-        Bukkit.getScheduler().runTaskAsynchronously(this, this::saveDataSync);
-    }
+    private void saveDataAsynchronously() { Bukkit.getScheduler().runTaskAsynchronously(this, this::saveDataSync); }
 
     private Set<UUID> loadUuidSet(List<String> list) {
         Set<UUID> set = new HashSet<>();
         if (list == null) return set;
-        for (String s : list) {
-            try { set.add(UUID.fromString(s)); } catch (Exception ignored) {}
-        }
+        for (String s : list) { try { set.add(UUID.fromString(s)); } catch (Exception ignored) {} }
         return set;
     }
-
-    public ConfigManager getConfigManager() { return configManager; }
-    public DataManager getDataManager() { return dataManager; }
-    public PermissionManager getPermissionManager() { return permissionManager; }
-    public RuleManager getRuleManager() { return ruleManager; }
-    public Set<UUID> getRawVanishedPlayers() { return Collections.unmodifiableSet(vanishedPlayers); }
-    public Set<UUID> getRawPickupPlayers() { return new HashSet<>(); }
 }

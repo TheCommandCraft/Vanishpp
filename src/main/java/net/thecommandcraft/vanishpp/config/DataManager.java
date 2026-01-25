@@ -6,6 +6,8 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DataManager {
 
@@ -32,6 +34,12 @@ public class DataManager {
         }
 
         this.config = YamlConfiguration.loadConfiguration(this.file);
+
+        // Initialize sections if missing
+        if (!config.contains("acknowledged-notifications")) {
+            config.set("acknowledged-notifications", new ArrayList<String>());
+            save();
+        }
     }
 
     public void save() {

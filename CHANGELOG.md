@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.3] - 2026-01-24
+
+### Added
+- **Titan God Mode:** Vanished players are now strictly invincible. They take no damage and are immune to all external potion effects (splash potions, mob effects).
+- **Interactive Help System:** Added `/vhelp`. A professional, clickable chat menu that explains every command, usage, and permission.
+- **Live Config Editor:** Added `/vconfig`. Every single setting in `config.yml` can now be viewed and changed in-game with instant effect. Supports Booleans, Integers, and Strings.
+- **Smart-Merge Migration:** Completely overhauled the configuration update system. Future config changes now recursively copy all user-customized values (messages, rules, prefixes) into new versions without loss.
+- **Join Notification Delay:** All join notifications (warnings, updates, migrations) now wait 250ms to ensure they appear at the bottom of the chat, visible above other plugin spam.
+- **Acknowledgement System:** Migration reports now stay visible on join until specifically hidden via the new **[HIDE]** button.
+
+### Changed
+- **Code Refactor:** Project reorganized into a professional package structure (`config`, `listeners`, `commands`, `hooks`, `utils`).
+- **Unified Rules:** `/vpickup` and other individual toggles now strictly sync with the RuleManager engine.
+
+### Fixed
+- **Prefix Leakage:** Strictly decoupled Tab prefixes from Nametag prefixes. Prefix text will no longer "leak" into Scoreboards or the Social Interaction menu.
+- **Persistence Fix:** Fixed an issue where manual config edits were overwritten by the plugin's automatic data saving.
+- **Staff-Notify Bug:** Resolved a compilation error where `staffNotifyEnabled` was missing, ensuring staff broadcasts can be disabled correctly.
+
 ## [1.1.2] - 2026-01-22
 
 ## Fixed

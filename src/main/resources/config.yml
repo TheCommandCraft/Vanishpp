@@ -50,6 +50,8 @@ chat-format:
   vanished-player-format: "%prefix%&7%player%: %message%"
 
 invisibility-features:
+  god-mode: true
+  prevent-potion-effects: true
   night-vision: true
   allow-flight: true
   disable-mob-targeting: true
@@ -112,4 +114,4 @@ data:
 # ------------------------------------------------ #
 #       Vanish++ Internal Data - Do not edit!      #
 # ------------------------------------------------ #
-config-version: 2
+config-version: 3

@@ -1,5 +1,5 @@
 name: Vanishpp
-version: '1.1.2'
+version: '1.1.3'
 main: net.thecommandcraft.vanishpp.Vanishpp
 api-version: '1.21'
 authors: [ tcc ]
@@ -34,6 +34,17 @@ commands:
     description: Lists all currently vanished players.
     usage: /vanishlist
     aliases: [ vlist ]
+  vanishhelp:
+    description: Shows the interactive help menu.
+    usage: /vanishhelp [command]
+    aliases: [ vhelp ]
+  vanishconfig:
+    description: Edit config settings in-game.
+    usage: /vanishconfig <key> [value]
+    aliases: [ vconfig ]
+  vack:
+    description: Internal command to acknowledge and hide notifications.
+    usage: /vack <type>
 
 permissions:
   vanishpp.*:
@@ -61,10 +72,9 @@ permissions:
       vanishpp.join-vanished: true
       vanishpp.ignorewarning: true
       vanishpp.ignorewarning.others: true
+      vanishpp.config: true
+      vanishpp.update: true
 
-  vanishpp.list:
-    description: Allows using /vlist.
-    default: op
   vanishpp.vanish:
     description: Allows a player to vanish themselves.
     default: op
@@ -112,4 +122,13 @@ permissions:
     default: op
   vanishpp.ignorewarning.others:
     description: Allows using /vignore for others.
+    default: op
+  vanishpp.config:
+    description: Allows using /vconfig to manage the plugin settings.
+    default: op
+  vanishpp.update:
+    description: Receive notifications about plugin updates.
+    default: op
+  vanishpp.list:
+    description: Allows using /vlist.
     default: op
