@@ -136,19 +136,19 @@ Customize your ghost experience. Default behavior can be tweaked per player.
 Vanish++ is built for modern ecosystems.
 
 ### Supported Versions
-| Minecraft Version | Status | Notes |
-| :--- | :--- | :--- |
-| **1.21.x** | ✅ Supported | Native support. Recommended. |
-| **1.20.6** | ⚠️ Likely Compatible | Built with cross-version compatibility in mind. |
-| **1.20.4-** | ❌ Unsupported | Incompatible API. Use older versions. |
+| Minecraft Version   | Status               | Notes                                                              |
+| :------------------ | :------------------- | :----------------------------------------------------------------- |
+| **1.21.x**          | ✅ Supported         | Native support. Recommended.                                       |
+| **1.20.6**          | ⚠️ Likely Compatible | Built with cross-version compatibility in mind.                    |
+| **1.20.4-**         | ❌ Unsupported       | Incompatible API. Use older versions.                              |
 
 ### Supported Platforms
-| Platform | Status | Notes |
-| :--- | :--- | :--- |
-| **Paper** | ✅ Recommended | Best performance. Required for full physics/projectile support. |
-| **Spigot** | ⚠️ Compatible | Works, but some advanced physics features may degrade. |
-| **Purpur** | ✅ Supported | Fully compatible. |
-| **Folia** | ❓ Untested | Threading model not officially supported. |
+| Platform            | Status               | Notes                                                              |
+| :------------------ | :------------------- | :----------------------------------------------------------------- |
+| **Paper**           | ✅ Recommended       | Best performance. Required for full physics/projectile support.    |
+| **Spigot**          | ⚠️ Compatible        | Works, but some advanced physics features may degrade.             |
+| **Purpur**          | ✅ Supported         | Fully compatible.                                                  |
+| **Folia**           | ❓ Untested          | Threading model not officially supported.                          |
 
 **Requirements:**
 *   **Java 21**
