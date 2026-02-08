@@ -141,7 +141,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             }
         }
 
-        getLogger().info("Vanish++ 1.1.3 enabled.");
+        getLogger().info("Vanish++ " + getDescription().getVersion() + " enabled.");
     }
 
     private void hookProtocolLib() {
