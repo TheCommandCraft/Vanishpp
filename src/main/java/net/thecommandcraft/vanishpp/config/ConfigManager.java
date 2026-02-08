@@ -17,7 +17,7 @@ import java.util.*;
 public class ConfigManager {
     private final Vanishpp plugin;
     private FileConfiguration config;
-    private final int LATEST_CONFIG_VERSION = 3;
+    private final int LATEST_CONFIG_VERSION = 4;
 
     private boolean migratedThisBoot = false;
     private final List<String> migrationNotes = new ArrayList<>();
@@ -28,6 +28,7 @@ public class ConfigManager {
     public String pickupEnabledMessage, pickupDisabledMessage, chatLockedMessage, chatSentMessage, noChatPendingMessage;
     public String vpermsReload, vpermsInvalidUsage, vpermsInvalidPermission, vpermsPermSet, vpermsPermRemoved, vpermsPermGetHas, vpermsPermGetDoesNotHave;
     public String silentJoinMessage, silentQuitMessage, staffVanishMessage, staffUnvanishMessage;
+    public String fakeJoinMessage, fakeQuitMessage;
 
     // Appearance
     public String vanishTabPrefix, vanishNametagPrefix, actionBarText, vanishedPlayerFormat;
@@ -35,7 +36,7 @@ public class ConfigManager {
 
     // Effects
     public boolean hideRealQuit, hideRealJoin, broadcastFakeQuit, broadcastFakeJoin, disableBlockTriggering;
-    public boolean hideDeathMessages, hideAdvancements;
+    public boolean hideDeathMessages, hideAdvancements, hideFromPluginList;
 
     // Invisibility Features
     public boolean enableNightVision, enableFly, disableMobTarget, disableHunger, silentChests, ignoreProjectiles;
@@ -44,6 +45,7 @@ public class ConfigManager {
 
     // Hooks & System
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
+    public boolean simulateEssentialsMessages;
     public boolean staffNotifyEnabled; // FIX: Added missing field
     public int defaultVanishLevel, defaultSeeLevel, maxLevel;
     public String updateCheckerMode, updateCheckerId;
@@ -120,6 +122,8 @@ public class ConfigManager {
         vpermsPermGetDoesNotHave = format(config.getString("messages.vperms.perm-get-does-not-have"));
         silentJoinMessage = format(config.getString("messages.silent-join"));
         silentQuitMessage = format(config.getString("messages.silent-quit"));
+        fakeJoinMessage = format(config.getString("messages.fake-join"));
+        fakeQuitMessage = format(config.getString("messages.fake-quit"));
 
         staffNotifyEnabled = config.getBoolean("messages.staff-notify.enabled", true); // FIX
         staffVanishMessage = format(config.getString("messages.staff-notify.on-vanish"));
@@ -139,6 +143,7 @@ public class ConfigManager {
         disableBlockTriggering = config.getBoolean("vanish-effects.disable-block-triggering");
         hideDeathMessages = config.getBoolean("hide-announcements.death-messages");
         hideAdvancements = config.getBoolean("hide-announcements.advancements");
+        hideFromPluginList = config.getBoolean("hide-announcements.hide-from-plugin-list", true);
         enableNightVision = config.getBoolean("invisibility-features.night-vision");
         enableFly = config.getBoolean("invisibility-features.allow-flight");
         disableMobTarget = config.getBoolean("invisibility-features.disable-mob-targeting");
@@ -156,6 +161,7 @@ public class ConfigManager {
         preventPotions = config.getBoolean("invisibility-features.prevent-potion-effects", true);
         voiceChatEnabled = config.getBoolean("hooks.simple-voice-chat.enabled");
         voiceChatIsolate = config.getBoolean("hooks.simple-voice-chat.isolate-vanished-players");
+        simulateEssentialsMessages = config.getBoolean("hooks.essentials.simulate-join-leave");
         layeredPermsEnabled = config.getBoolean("permissions.layered-permissions-enabled");
         defaultVanishLevel = config.getInt("permissions.default-vanish-level");
         defaultSeeLevel = config.getInt("permissions.default-see-level");

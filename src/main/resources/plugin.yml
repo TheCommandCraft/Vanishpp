@@ -1,5 +1,5 @@
 name: Vanishpp
-version: '1.1.3'
+version: '1.1.4'
 main: net.thecommandcraft.vanishpp.Vanishpp
 api-version: '1.21'
 authors: [ tcc ]
@@ -10,41 +10,51 @@ commands:
   vanish:
     description: Toggles your or another player's vanish state.
     usage: /vanish [player]
+    permission: vanishpp.vanish
     aliases: [ v, sv ]
   vperms:
     description: Manages Vanish++ specific permissions for players.
     usage: /vperms <player> <permission> <set|remove|get>
+    permission: vanishpp.manageperms
   vanishrules:
     description: Configure personal vanish rules.
     usage: /vanishrules [player] <rule> [true|false]
+    permission: vanishpp.rules
     aliases: [ vrules, vsettings ]
   vanishchat:
     description: Confirms sending a chat message while vanished.
     usage: /vanishchat confirm
+    permission: vanishpp.chat
     aliases: [ vchat ]
   vanishpickup:
     description: Toggles item pickup while vanished.
     usage: /vanishpickup [player]
+    permission: vanishpp.pickup
     aliases: [ vpickup, tipu ]
   vanishignore:
     description: Toggles the ProtocolLib missing warning on join.
     usage: /vanishignore [player]
+    permission: vanishpp.ignorewarning
     aliases: [ vignore ]
   vanishlist:
     description: Lists all currently vanished players.
     usage: /vanishlist
+    permission: vanishpp.list
     aliases: [ vlist ]
   vanishhelp:
     description: Shows the interactive help menu.
     usage: /vanishhelp [command]
+    permission: vanishpp.help
     aliases: [ vhelp ]
   vanishconfig:
     description: Edit config settings in-game.
     usage: /vanishconfig <key> [value]
+    permission: vanishpp.config
     aliases: [ vconfig ]
   vack:
     description: Internal command to acknowledge and hide notifications.
     usage: /vack <type>
+    permission: vanishpp.see
 
 permissions:
   vanishpp.*:
@@ -131,4 +141,7 @@ permissions:
     default: op
   vanishpp.list:
     description: Allows using /vlist.
+    default: op
+  vanishpp.help:
+    description: Allows using the help menu.
     default: op

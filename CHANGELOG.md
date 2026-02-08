@@ -2,24 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.3] - 2026-01-24
+## [1.1.4] - 2026-02-04
 
 ### Added
+- **Plugin Hiding:** "Vanishpp" is now hidden from `/plugins` (or `/pl`) for non-OPs. Administrators see a filtered list with a delayed interactive notification to temporarily unhide or acknowledge the feature.
+- **Strict Command Permissions:** All commands now enforce strict permissions in `plugin.yml`. Unauthorized players cannot see commands in Tab-Complete.
+- **Config Logic:** `vanishMessage`, `unvanishMessage`, `fakeJoinMessage`, and `fakeQuitMessage` logic updated. Setting these to `"false"`, `"none"`, or leaving them empty in `config.yml` now properly disables the message.
+- **Persistence:** Acknowledging the plugin hiding warning now saves the preference to `data.yml` specifically for the current version.
+
+### Fixed
+- **Dependency Resolution:** Fixed an issue where the ProtocolLib dependency was not correctly detected on first install.
+
+## [1.1.3] - 2026-02-04
+
+### Added
+- **No-Delay Notifications:** Completely removed the 60-second cooldown for rule notification alerts. Players now receive immediate feedback every time an action is blocked while vanished.
+- **Enhanced Splash Protection:** Vanished players are now strictly immune to **Splash Potions** and **Lingering Potion Clouds**. They are automatically removed from the list of affected entities.
 - **Titan God Mode:** Vanished players are now strictly invincible. They take no damage and are immune to all external potion effects (splash potions, mob effects).
-- **Interactive Help System:** Added `/vhelp`. A professional, clickable chat menu that explains every command, usage, and permission.
-- **Live Config Editor:** Added `/vconfig`. Every single setting in `config.yml` can now be viewed and changed in-game with instant effect. Supports Booleans, Integers, and Strings.
-- **Smart-Merge Migration:** Completely overhauled the configuration update system. Future config changes now recursively copy all user-customized values (messages, rules, prefixes) into new versions without loss.
+- **Interactive Help System:** Added `/vhelp` and `/vhelp <command>`. A professional, clickable chat menu that explains every command, usage, aliases, and permissions.
+- **Smart-Merge Migration (v2):** Completely overhauled the configuration update system. Future config changes now recursively copy all user-customized values (messages, rules, prefixes) into new versions without loss. NOTE: Critical fix applied to prevent data loss on update failure.
 - **Join Notification Delay:** All join notifications (warnings, updates, migrations) now wait 250ms to ensure they appear at the bottom of the chat, visible above other plugin spam.
 - **Acknowledgement System:** Migration reports now stay visible on join until specifically hidden via the new **[HIDE]** button.
 
 ### Changed
-- **Code Refactor:** Project reorganized into a professional package structure (`config`, `listeners`, `commands`, `hooks`, `utils`).
 - **Unified Rules:** `/vpickup` and other individual toggles now strictly sync with the RuleManager engine.
+- **Config Cleanup:** Removed redundant `data` section from `config.yml` default template to prevent user confusion (uses `data.yml` exclusively).
+- **Downgraded Requirement:** Reverted target Minecraft version to **1.21.11** (Paper) and ProtocolLib **5.4.0** for broader compatibility.
 
 ### Fixed
+- **Critical Migration Bug:** Fixed a logic error where the migration manager would overwrite the configuration file with a default template *before* saving the merged data, leading to reset settings if the save failed.
 - **Prefix Leakage:** Strictly decoupled Tab prefixes from Nametag prefixes. Prefix text will no longer "leak" into Scoreboards or the Social Interaction menu.
 - **Persistence Fix:** Fixed an issue where manual config edits were overwritten by the plugin's automatic data saving.
-- **Staff-Notify Bug:** Resolved a compilation error where `staffNotifyEnabled` was missing, ensuring staff broadcasts can be disabled correctly.
 
 ## [1.1.2] - 2026-01-22
 

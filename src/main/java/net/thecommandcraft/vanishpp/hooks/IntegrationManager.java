@@ -55,6 +55,26 @@ public class IntegrationManager {
         }
     }
 
+    public String getEssentialsJoinMessage() {
+        if (essentials == null) return null;
+        try {
+            String m = essentials.getSettings().getCustomJoinMessage();
+            return (m != null && !m.equals("none")) ? m.replace("&", "§") : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    public String getEssentialsQuitMessage() {
+        if (essentials == null) return null;
+        try {
+            String m = essentials.getSettings().getCustomQuitMessage();
+            return (m != null && !m.equals("none")) ? m.replace("&", "§") : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private static class VanishExpansion extends PlaceholderExpansion {
         private final Vanishpp plugin;
 
