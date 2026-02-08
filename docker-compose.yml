@@ -11,4 +11,4 @@ services:
       ONLINE_MODE: "FALSE"
     volumes:
       - ./server-data:/data
-      - ./target/vanishpp-1.1.3.jar:/data/plugins/Vanishpp.jar
+      - ./target/vanishpp-1.1.4.jar:/data/plugins/Vanishpp.jar

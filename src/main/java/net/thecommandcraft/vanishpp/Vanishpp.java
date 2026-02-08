@@ -24,7 +24,7 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
 import java.util.*;
 
-public final class Vanishpp extends JavaPlugin implements Listener {
+public class Vanishpp extends JavaPlugin implements Listener {
 
     private Set<UUID> vanishedPlayers;
     private Set<UUID> ignoredWarningPlayers;
@@ -120,6 +120,13 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         this.updateChecker = new UpdateChecker(this);
         this.updateChecker.check();
 
+        try {
+            this.pluginHider = new PluginHider(this);
+            this.pluginHider.register();
+        } catch (Throwable e) {
+            getLogger().warning("Failed to initialize Plugin Hider: " + e.getMessage());
+        }
+        
         startActionBarTask();
         startSyncTask();
 
@@ -142,6 +149,8 @@ public final class Vanishpp extends JavaPlugin implements Listener {
         manager.load();
         this.protocolLibManager = manager;
     }
+    
+    private PluginHider pluginHider; // Hook ref for reload if needed
 
     @Override
     public void onDisable() {
@@ -227,8 +236,8 @@ public final class Vanishpp extends JavaPlugin implements Listener {
             player.playerListName(Component.text(configManager.vanishTabPrefix).append(Component.text(player.getName())));
         }
 
-        if (configManager.disableBlockTriggering) player.setAffectsSpawning(false);
-        if (configManager.preventSleeping) player.setSleepingIgnored(true);
+        if (configManager.disableBlockTriggering) try { player.setAffectsSpawning(false); } catch (Throwable ignored) {}
+        if (configManager.preventSleeping) try { player.setSleepingIgnored(true); } catch (Throwable ignored) {}
 
         if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
             player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
@@ -253,8 +262,8 @@ public final class Vanishpp extends JavaPlugin implements Listener {
 
     public void removeVanishEffects(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
-        player.setAffectsSpawning(true);
-        player.setSleepingIgnored(false);
+        try { player.setAffectsSpawning(true); } catch (Throwable ignored) {}
+        try { player.setSleepingIgnored(false); } catch (Throwable ignored) {}
         player.removeMetadata("vanished", this);
         player.playerListName(null);
 
@@ -279,16 +288,63 @@ public final class Vanishpp extends JavaPlugin implements Listener {
 
     public void vanishPlayer(Player player, CommandSender executor) {
         applyVanishEffects(player);
-        player.sendMessage(Component.text(configManager.vanishMessage));
-        if (configManager.broadcastFakeQuit) broadcastToUnaware(Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()), player);
+        if (isValidMessage(configManager.vanishMessage)) {
+            player.sendMessage(Component.text(configManager.vanishMessage));
+        }
+        if (configManager.broadcastFakeQuit) {
+            String fakeMsg = configManager.fakeQuitMessage;
+            if (isValidMessage(fakeMsg)) {
+                String finalMsg = fakeMsg.replace("%player%", player.getName())
+                        .replace("%displayname%", player.getDisplayName()); // Legacy support
+                broadcastToUnaware(Component.text(finalMsg), player);
+            } else if (configManager.simulateEssentialsMessages) {
+                String essMsg = integrationManager.getEssentialsQuitMessage();
+                if (isValidMessage(essMsg)) {
+                    // Essentials placeholders usually handled by Essentials, but we do basic replacement
+                    String finalMsg = essMsg.replace("{PLAYER}", player.getName())
+                            .replace("{USERNAME}", player.getName())
+                            .replace("{vp}", ""); // Strip potential vanity tags if any
+                    broadcastToUnaware(Component.text(finalMsg), player);
+                } else {
+                    broadcastToUnaware(Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()), player);
+                }
+            } else {
+                broadcastToUnaware(Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()), player);
+            }
+        }
         notifyStaff(player, executor, true);
     }
 
     public void unvanishPlayer(Player player, CommandSender executor) {
-        if (configManager.broadcastFakeJoin) broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName()), player);
+        if (configManager.broadcastFakeJoin) {
+            String fakeMsg = configManager.fakeJoinMessage;
+            if (isValidMessage(fakeMsg)) {
+                 String finalMsg = fakeMsg.replace("%player%", player.getName())
+                         .replace("%displayname%", player.getDisplayName());
+                 broadcastToUnaware(Component.text(finalMsg), player);
+            } else if (configManager.simulateEssentialsMessages) {
+                String essMsg = integrationManager.getEssentialsJoinMessage();
+                if (isValidMessage(essMsg)) {
+                    String finalMsg = essMsg.replace("{PLAYER}", player.getName())
+                            .replace("{USERNAME}", player.getName())
+                            .replace("{vp}", "");
+                    broadcastToUnaware(Component.text(finalMsg), player);
+                } else {
+                    broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName()), player);
+                }
+            } else {
+                broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName()), player);
+            }
+        }
         removeVanishEffects(player);
-        player.sendMessage(Component.text(configManager.unvanishMessage));
+        if (isValidMessage(configManager.unvanishMessage)) {
+            player.sendMessage(Component.text(configManager.unvanishMessage));
+        }
         notifyStaff(player, executor, false);
+    }
+
+    private boolean isValidMessage(String msg) {
+        return msg != null && !msg.isEmpty() && !msg.equalsIgnoreCase("false") && !msg.equalsIgnoreCase("none");
     }
 
     private void broadcastToUnaware(Component message, Player vanishedPlayer) {

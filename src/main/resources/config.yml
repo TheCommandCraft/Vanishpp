@@ -27,6 +27,8 @@ messages:
 
   silent-join: "&8[&7+&8] &7%player% has silently joined."
   silent-quit: "&8[&7-&8] &7%player% has silently left."
+  fake-join: "" # Leave empty to use default yellow join message (or Essentials if enabled)
+  fake-quit: "" # Leave empty to use default yellow quit message (or Essentials if enabled)
 
   staff-notify:
     enabled: true
@@ -79,6 +81,7 @@ vanish-effects:
 hide-announcements:
   death-messages: true
   advancements: true
+  hide-from-plugin-list: true
 
 # Default Rules for players
 # Configures what vanished players can do by default.
@@ -99,6 +102,8 @@ hooks:
   simple-voice-chat:
     enabled: true
     isolate-vanished-players: true
+  essentials:
+    simulate-join-leave: false # Try to use Essentials custom join/quit messages if set
 
 permissions:
   layered-permissions-enabled: true
@@ -114,4 +119,4 @@ data:
 # ------------------------------------------------ #
 #       Vanish++ Internal Data - Do not edit!      #
 # ------------------------------------------------ #
-config-version: 3
+config-version: 4
