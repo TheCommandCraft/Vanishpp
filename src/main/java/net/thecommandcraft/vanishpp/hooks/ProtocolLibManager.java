@@ -66,9 +66,9 @@ public class ProtocolLibManager {
                     }
                 });
 
-        // 2. Comprehensive Reveal/Block for Metadata and Updates
-        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
-                PacketType.Play.Server.ENTITY_METADATA,
+        // 2. Comprehensive Reveal/Block for Metadata, Updates, and Movement
+        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST, 
+                PacketType.Play.Server.ENTITY_METADATA, 
                 PacketType.Play.Server.ENTITY_EQUIPMENT,
                 PacketType.Play.Server.ANIMATION,
                 PacketType.Play.Server.ENTITY_EFFECT,
@@ -77,57 +77,93 @@ public class ProtocolLibManager {
                 PacketType.Play.Server.REL_ENTITY_MOVE_LOOK,
                 PacketType.Play.Server.ENTITY_LOOK,
                 PacketType.Play.Server.ENTITY_TELEPORT,
-                PacketType.Play.Server.ENTITY_HEAD_ROTATION) {
+                PacketType.Play.Server.ENTITY_HEAD_ROTATION,
+                PacketType.Play.Server.ENTITY_STATUS,
+                PacketType.Play.Server.COLLECT,
+                PacketType.Play.Server.SET_PASSENGERS) {
             @Override
             public void onPacketSending(PacketEvent event) {
-                if (event.isCancelled())
-                    return;
+                if (event.isCancelled()) return;
                 Player observer = event.getPlayer();
-
+                boolean canSee = ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see");
+                
                 try {
-                    int entityId = event.getPacket().getIntegers().read(0);
+                    PacketContainer packet = event.getPacket();
+                    PacketType type = event.getPacketType();
+                    
+                    // Handle packets where index 0 is the primary entity
+                    int entityId = packet.getIntegers().read(0);
                     Entity entity = protocolManager.getEntityFromID(observer.getWorld(), entityId);
-
-                    if (entity instanceof Player target
-                            && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
-                        boolean canSee = ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer,
-                                "vanishpp.see");
-
+                    
+                    if (entity instanceof Player target && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
                         if (!canSee) {
                             event.setCancelled(true);
                             return;
                         }
 
-                        // For staff, we might want to modify metadata (remove invisibility flag for
-                        // ghost view)
-                        if (event.getPacketType() == PacketType.Play.Server.ENTITY_METADATA) {
-                            List<WrappedDataValue> values = new ArrayList<>(
-                                    event.getPacket().getDataValueCollectionModifier().read(0));
-                            boolean modified = false;
+                        // Staff-only modifications (remove invisibility flag)
+                        if (type == PacketType.Play.Server.ENTITY_METADATA) {
+                            modifyMetadataForStaff(packet);
+                        }
+                    }
 
-                            for (int i = 0; i < values.size(); i++) {
-                                WrappedDataValue value = values.get(i);
-                                if (value.getIndex() == 0) {
-                                    byte b = (byte) value.getValue();
-                                    if ((b & 0x20) != 0) {
-                                        values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(),
-                                                (byte) (b & ~0x20)));
-                                        modified = true;
+                    // Extra checks for specific packet types
+                    if (!canSee) {
+                        if (type == PacketType.Play.Server.COLLECT) {
+                            // Index 1 is the collector ID
+                            int collectorId = packet.getIntegers().read(1);
+                            Entity collector = protocolManager.getEntityFromID(observer.getWorld(), collectorId);
+                            if (collector instanceof Player p && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                event.setCancelled(true);
+                            }
+                        } else if (type == PacketType.Play.Server.SET_PASSENGERS) {
+                            // Int array modifier contains passenger IDs
+                            int[] passengers = packet.getIntegerArrays().read(0);
+                            if (passengers != null) {
+                                boolean hasVanished = false;
+                                List<Integer> filtered = new ArrayList<>();
+                                for (int id : passengers) {
+                                    Entity e = protocolManager.getEntityFromID(observer.getWorld(), id);
+                                    if (e instanceof Player p && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                        hasVanished = true;
+                                    } else {
+                                        filtered.add(id);
                                     }
-                                } else if (value.getIndex() == 4) {
-                                    if ((boolean) value.getValue()) {
-                                        values.set(i,
-                                                new WrappedDataValue(value.getIndex(), value.getSerializer(), false));
-                                        modified = true;
+                                }
+                                if (hasVanished) {
+                                    if (filtered.isEmpty()) event.setCancelled(true);
+                                    else {
+                                        int[] newArray = filtered.stream().mapToInt(i -> i).toArray();
+                                        packet.getIntegerArrays().write(0, newArray);
                                     }
                                 }
                             }
-                            if (modified)
-                                event.getPacket().getDataValueCollectionModifier().write(0, values);
                         }
                     }
-                } catch (Exception ignored) {
-                }
+                } catch (Exception ignored) {}
+            }
+
+            private void modifyMetadataForStaff(PacketContainer packet) {
+                try {
+                    List<WrappedDataValue> values = new ArrayList<>(packet.getDataValueCollectionModifier().read(0));
+                    boolean modified = false;
+                    for (int i = 0; i < values.size(); i++) {
+                        WrappedDataValue value = values.get(i);
+                        if (value.getIndex() == 0) {
+                            byte b = (byte) value.getValue();
+                            if ((b & 0x20) != 0) {
+                                values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(), (byte) (b & ~0x20)));
+                                modified = true;
+                            }
+                        } else if (value.getIndex() == 4) {
+                            if ((boolean) value.getValue()) {
+                                values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(), false));
+                                modified = true;
+                            }
+                        }
+                    }
+                    if (modified) packet.getDataValueCollectionModifier().write(0, values);
+                } catch (Exception ignored) {}
             }
         });
 
