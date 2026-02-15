@@ -25,14 +25,22 @@ public class MigrationManager {
 
         // 1. Create Safety Backup
         File backup = new File(plugin.getDataFolder(), "config_backup_v" + oldVersion + ".yml");
-        try { oldConfig.save(backup); } catch (Exception e) { e.printStackTrace(); }
+        try {
+            oldConfig.save(backup);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
-        // 2. Load the fresh Template from JAR
-        plugin.saveResource("config.yml", true);
-        YamlConfiguration newConfig = YamlConfiguration.loadConfiguration(configFile);
+        // 2. Load the fresh Template from JAR (In-Memory)
+        // We do NOT saveResource yet to avoid overwriting the user's file if saving
+        // fails.
+        YamlConfiguration newConfig = YamlConfiguration.loadConfiguration(
+                new java.io.InputStreamReader(plugin.getResource("config.yml"),
+                        java.nio.charset.StandardCharsets.UTF_8));
 
         // 3. STEP ONE: Recursive Deep Copy (Lossless)
-        // We copy everything from old to new, overwriting the new defaults with user values.
+        // We copy everything from old to new, overwriting the new defaults with user
+        // values.
         deepMerge(oldConfig, newConfig, "");
 
         // 4. STEP TWO: Refactoring Rules (Structural changes)
@@ -56,7 +64,8 @@ public class MigrationManager {
     private void deepMerge(FileConfiguration source, FileConfiguration target, String path) {
         Set<String> keys = source.getKeys(false);
         if (!path.isEmpty()) {
-            if (source.getConfigurationSection(path) == null) return;
+            if (source.getConfigurationSection(path) == null)
+                return;
             keys = source.getConfigurationSection(path).getKeys(false);
         }
 
@@ -66,7 +75,8 @@ public class MigrationManager {
                 deepMerge(source, target, fullPath);
             } else {
                 // Do not copy the internal version key
-                if (fullPath.equalsIgnoreCase("config-version")) continue;
+                if (fullPath.equalsIgnoreCase("config-version"))
+                    continue;
 
                 // Copy the user's custom value into the new structure
                 target.set(fullPath, source.get(fullPath));
@@ -78,12 +88,16 @@ public class MigrationManager {
         switch (oldVersion) {
             case 1:
                 migrateRefactor(oldC, newC, "vanish-appearance.prefix", "vanish-appearance.tab-prefix");
-                migrateRefactor(oldC, newC, "vanish-effects.fake-leave-message", "vanish-effects.hide-real-quit-messages");
-                migrateRefactor(oldC, newC, "vanish-effects.fake-join-message", "vanish-effects.hide-real-join-messages");
+                migrateRefactor(oldC, newC, "vanish-effects.fake-leave-message",
+                        "vanish-effects.hide-real-quit-messages");
+                migrateRefactor(oldC, newC, "vanish-effects.fake-join-message",
+                        "vanish-effects.hide-real-join-messages");
                 configManager.logMigrationChange("Refactored prefix and join/quit keys.");
             case 2:
-                // Case 2 specific refactors (None currently, v3 keys are handled by deepMerge/Defaults)
                 configManager.logMigrationChange("Enabled Titan God Mode features.");
+            case 3:
+                configManager.logMigrationChange("Optimized rule feedback by removing alert rate-limiting.");
+                break;
         }
     }
 
@@ -91,7 +105,8 @@ public class MigrationManager {
         if (oldC.contains(oldP)) {
             newC.set(newP, oldC.get(oldP));
             // Only remove if the path has actually changed to avoid wiping a valid key
-            if (!oldP.equals(newP)) newC.set(oldP, null);
+            if (!oldP.equals(newP))
+                newC.set(oldP, null);
         }
     }
 }

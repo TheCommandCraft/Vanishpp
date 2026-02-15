@@ -111,10 +111,6 @@ permissions:
   default-see-level: 1
   max-level: 100
 
-data:
-  vanished-players: []
-  ignored-warnings: []
-  rules: {}
 
 # ------------------------------------------------ #
 #       Vanish++ Internal Data - Do not edit!      #
