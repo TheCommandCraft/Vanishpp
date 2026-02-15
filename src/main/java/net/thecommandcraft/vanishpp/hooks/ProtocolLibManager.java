@@ -71,7 +71,13 @@ public class ProtocolLibManager {
                 PacketType.Play.Server.ENTITY_METADATA,
                 PacketType.Play.Server.ENTITY_EQUIPMENT,
                 PacketType.Play.Server.ANIMATION,
-                PacketType.Play.Server.ENTITY_EFFECT) {
+                PacketType.Play.Server.ENTITY_EFFECT,
+                PacketType.Play.Server.ENTITY_VELOCITY,
+                PacketType.Play.Server.REL_ENTITY_MOVE,
+                PacketType.Play.Server.REL_ENTITY_MOVE_LOOK,
+                PacketType.Play.Server.ENTITY_LOOK,
+                PacketType.Play.Server.ENTITY_TELEPORT,
+                PacketType.Play.Server.ENTITY_HEAD_ROTATION) {
             @Override
             public void onPacketSending(PacketEvent event) {
                 if (event.isCancelled())
