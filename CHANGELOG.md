@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.5] - 2026-02-15
+
+### Added
+- **Titan Stealth Engine:** Absolute packet-level invisibility for vanished administrators. The server now acts as if the vanished player does not exist in the network data.
+    - **Tab List & Info Filtering:** Blocked `PLAYER_INFO` and `PLAYER_INFO_UPDATE` packets to prevent any tab list flicker or presence detection.
+    - **Ghost-Proof Spawning:** Intercepted `SPAWN_ENTITY` and `NAMED_ENTITY_SPAWN` to ensure vanished players are never spawned on unauthorized clients.
+    - **Absolute Metadata & Update Blocking:** High-priority interceptors for `ENTITY_METADATA`, `ENTITY_EQUIPMENT`, `ANIMATION`, `ENTITY_EFFECT`, `ENTITY_STATUS`, and `ENTITY_SOUND_EFFECT` to ensure zero data leakage.
+    - **Movement & Velocity Filtering:** Blocked `ENTITY_VELOCITY`, `REL_ENTITY_MOVE`, `ENTITY_LOOK`, `ENTITY_TELEPORT`, and `ENTITY_HEAD_ROTATION` to eliminate coordinate-level leaks.
+    - **Action Scrubber:** Intercepted `COLLECT` (item pickups) and `SET_PASSENGERS` (mounting) to scrub vanished names even when they are not the primary entity.
+    - **Team Scrubbing:** Intercepted `SCOREBOARD_TEAM` to remove vanished names from any raw team packets sent to non-staff.
+
 ## [1.1.4] - 2026-02-04
 
 ### Added
