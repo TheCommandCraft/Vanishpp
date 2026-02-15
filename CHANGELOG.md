@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **Dependency Resolution:** Fixed an issue where the ProtocolLib dependency was not correctly detected on first install.
 
-## [1.1.3] - 2026-02-04
+## [1.1.3] - 2026-02-02
 
 ### Added
 - **No-Delay Notifications:** Completely removed the 60-second cooldown for rule notification alerts. Players now receive immediate feedback every time an action is blocked while vanished.

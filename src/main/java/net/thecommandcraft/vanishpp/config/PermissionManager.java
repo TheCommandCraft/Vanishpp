@@ -1,6 +1,7 @@
 package net.thecommandcraft.vanishpp.config;
 
 import net.thecommandcraft.vanishpp.Vanishpp;
+
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -119,13 +120,16 @@ public class PermissionManager {
      */
     public boolean hasPermission(UUID uuid, String permission) {
         List<String> perms = playerPermissions.get(uuid);
-        if (perms == null) return false;
+        if (perms == null)
+            return false;
 
         // 1. Check for Super Wildcard
-        if (perms.contains("vanishpp.*")) return true;
+        if (perms.contains("vanishpp.*"))
+            return true;
 
         // 2. Check for Exact Match
-        if (perms.contains(permission)) return true;
+        if (perms.contains(permission))
+            return true;
 
         // 3. Check for Group Inheritance
         // Example: User wants "vanishpp.fly". We check if user has "vanishpp.abilities"
@@ -152,8 +156,10 @@ public class PermissionManager {
     }
 
     public boolean canSee(Player observer, Player target) {
-        if (!plugin.isVanished(target)) return true;
-        if (!hasPermission(observer, "vanishpp.see")) return false;
+        if (!plugin.isVanished(target))
+            return true;
+        if (!hasPermission(observer, "vanishpp.see"))
+            return false;
 
         ConfigManager cm = plugin.getConfigManager();
         if (cm.layeredPermsEnabled) {
@@ -167,7 +173,8 @@ public class PermissionManager {
     }
 
     private int getLevel(Player player, String prefix, int def) {
-        if (hasPermission(player, "vanishpp.*")) return plugin.getConfigManager().maxLevel;
+        if (hasPermission(player, "vanishpp.*"))
+            return plugin.getConfigManager().maxLevel;
 
         int max = plugin.getConfigManager().maxLevel;
         for (int i = max; i > 0; i--) {

@@ -26,7 +26,8 @@ public class ConfigManager {
     public String vanishMessage, unvanishMessage, noPermissionMessage, playerNotFoundMessage;
     public String vanishedOtherMessage, unvanishedOtherMessage, silentChestBlocked;
     public String pickupEnabledMessage, pickupDisabledMessage, chatLockedMessage, chatSentMessage, noChatPendingMessage;
-    public String vpermsReload, vpermsInvalidUsage, vpermsInvalidPermission, vpermsPermSet, vpermsPermRemoved, vpermsPermGetHas, vpermsPermGetDoesNotHave;
+    public String vpermsReload, vpermsInvalidUsage, vpermsInvalidPermission, vpermsPermSet, vpermsPermRemoved,
+            vpermsPermGetHas, vpermsPermGetDoesNotHave;
     public String silentJoinMessage, silentQuitMessage, staffVanishMessage, staffUnvanishMessage;
     public String fakeJoinMessage, fakeQuitMessage;
 
@@ -52,12 +53,18 @@ public class ConfigManager {
     public List<String> updateCheckerList;
     public Map<String, Boolean> defaultRules = new HashMap<>();
 
-    public ConfigManager(Vanishpp plugin) { this.plugin = plugin; }
-    public FileConfiguration getConfig() { return config; }
+    public ConfigManager(Vanishpp plugin) {
+        this.plugin = plugin;
+    }
+
+    public FileConfiguration getConfig() {
+        return config;
+    }
 
     public void load() {
         File configFile = new File(plugin.getDataFolder(), "config.yml");
-        if (!configFile.exists()) plugin.saveDefaultConfig();
+        if (!configFile.exists())
+            plugin.saveDefaultConfig();
 
         YamlConfiguration initialLoad = YamlConfiguration.loadConfiguration(configFile);
         int currentVersion = initialLoad.getInt("config-version", 1);
@@ -81,22 +88,30 @@ public class ConfigManager {
         }
     }
 
-    public void logMigrationChange(String note) { this.migrationNotes.add(note); }
+    public void logMigrationChange(String note) {
+        this.migrationNotes.add(note);
+    }
 
     public void sendMigrationReport(Player player) {
-        if (!migratedThisBoot) return;
+        if (!migratedThisBoot)
+            return;
         List<String> hidden = plugin.getDataManager().getConfig().getStringList("acknowledged-notifications");
-        if (hidden.contains(player.getUniqueId().toString() + "_v" + LATEST_CONFIG_VERSION)) return;
+        if (hidden.contains(player.getUniqueId().toString() + "_v" + LATEST_CONFIG_VERSION))
+            return;
 
         player.sendMessage(Component.text(" "));
         player.sendMessage(Component.text("⚠ Vanish++ Config Migrated", NamedTextColor.GOLD, TextDecoration.BOLD));
-        player.sendMessage(Component.text("Structure updated to v" + LATEST_CONFIG_VERSION + ". Custom settings preserved.", NamedTextColor.YELLOW));
+        player.sendMessage(
+                Component.text("Structure updated to v" + LATEST_CONFIG_VERSION + ". Custom settings preserved.",
+                        NamedTextColor.YELLOW));
         for (String note : migrationNotes) {
-            player.sendMessage(Component.text(" • ", NamedTextColor.GOLD).append(Component.text(note, NamedTextColor.WHITE)));
+            player.sendMessage(
+                    Component.text(" • ", NamedTextColor.GOLD).append(Component.text(note, NamedTextColor.WHITE)));
         }
         player.sendMessage(Component.text("[CLICK TO HIDE PERMANENTLY]", NamedTextColor.RED, TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/vack migration"))
-                .hoverEvent(HoverEvent.showText(Component.text("Stop seeing this message on join", NamedTextColor.GRAY))));
+                .hoverEvent(
+                        HoverEvent.showText(Component.text("Stop seeing this message on join", NamedTextColor.GRAY))));
         player.sendMessage(Component.text(" "));
     }
 
@@ -180,6 +195,11 @@ public class ConfigManager {
         }
     }
 
-    public int getLatestVersion() { return LATEST_CONFIG_VERSION; }
-    private String format(String m) { return m == null ? "" : m.replace("&", "§"); }
+    public int getLatestVersion() {
+        return LATEST_CONFIG_VERSION;
+    }
+
+    private String format(String m) {
+        return m == null ? "" : m.replace("&", "§");
+    }
 }
