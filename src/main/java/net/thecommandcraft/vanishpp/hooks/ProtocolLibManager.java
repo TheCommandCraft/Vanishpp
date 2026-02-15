@@ -207,7 +207,49 @@ public class ProtocolLibManager {
             }
         });
 
-        // 5. Server List Ping
+        // 5. Final Stealth Fix: Scrub SCOREBOARD_TEAM packets
+        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Server.SCOREBOARD_TEAM) {
+            @Override
+            public void onPacketSending(PacketEvent event) {
+                if (event.isCancelled()) return;
+                Player observer = event.getPlayer();
+                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see")) {
+                    // Staff see prefixes (handled by the other listener below)
+                    return;
+                }
+
+                try {
+                    PacketContainer packet = event.getPacket();
+                    int action = packet.getIntegers().read(0);
+                    
+                    // Actions: 0 (Create), 3 (Add Members), 4 (Remove Members)
+                    if (action == 0 || action == 3 || action == 4) {
+                        Collection<String> players = packet.getSpecificModifier(Collection.class).read(0);
+                        if (players != null) {
+                            List<String> scrubbed = new ArrayList<>();
+                            boolean changed = false;
+                            for (String name : players) {
+                                Player p = Bukkit.getPlayer(name);
+                                if (p != null && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                    changed = true;
+                                } else {
+                                    scrubbed.add(name);
+                                }
+                            }
+                            if (changed) {
+                                if (scrubbed.isEmpty() && action != 0) {
+                                    event.setCancelled(true);
+                                } else {
+                                    packet.getSpecificModifier(Collection.class).write(0, scrubbed);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        });
+
+        // 6. Server List Ping
         protocolManager.addPacketListener(
                 new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Status.Server.SERVER_INFO) {
                     @Override
