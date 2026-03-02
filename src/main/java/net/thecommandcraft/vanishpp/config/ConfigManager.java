@@ -122,8 +122,7 @@ public class ConfigManager {
     }
 
     private void loadValues() {
-        language = config.getString("language", "en");
-        languageManager.load(language);
+        languageManager.load();
 
         vanishMessage = languageManager.getMessage("vanish.self");
         unvanishMessage = languageManager.getMessage("vanish.unvanish-self");

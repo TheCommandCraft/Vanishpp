@@ -12,39 +12,24 @@ import java.nio.charset.StandardCharsets;
 public class LanguageManager {
     private final Vanishpp plugin;
     private FileConfiguration langConfig;
-    private final String defaultLang = "en";
 
     public LanguageManager(Vanishpp plugin) {
         this.plugin = plugin;
     }
 
-    public void load(String langCode) {
-        File langFolder = new File(plugin.getDataFolder(), "lang");
-        if (!langFolder.exists()) {
-            langFolder.mkdirs();
+    public void load() {
+        File msgFile = new File(plugin.getDataFolder(), "messages.yml");
+        if (!msgFile.exists()) {
+            plugin.saveResource("messages.yml", false);
         }
 
-        // Always save default language to the folder if it doesn't exist
-        File defFile = new File(langFolder, defaultLang + ".yml");
-        if (!defFile.exists()) {
-            plugin.saveResource("lang/" + defaultLang + ".yml", false);
-        }
+        langConfig = YamlConfiguration.loadConfiguration(msgFile);
 
-        File langFile = new File(langFolder, langCode + ".yml");
-        if (!langFile.exists()) {
-            // If requested language doesn't exist, we'll use whatever we have or fallback
-            // to internal
-            plugin.getLogger()
-                    .warning("Language file " + langCode + ".yml not found. Falling back to internal defaults.");
-        }
-
-        langConfig = YamlConfiguration.loadConfiguration(langFile);
-
-        // Fallback to internal English resources if keys are missing
-        InputStream defLangStream = plugin.getResource("lang/" + defaultLang + ".yml");
-        if (defLangStream != null) {
+        // Fallback to internal english resources if keys are missing
+        InputStream defMsgStream = plugin.getResource("messages.yml");
+        if (defMsgStream != null) {
             YamlConfiguration defConfig = YamlConfiguration
-                    .loadConfiguration(new InputStreamReader(defLangStream, StandardCharsets.UTF_8));
+                    .loadConfiguration(new InputStreamReader(defMsgStream, StandardCharsets.UTF_8));
             langConfig.setDefaults(defConfig);
         }
     }
