@@ -1,0 +1,25 @@
+name: Vanishpp
+version: '1.2.0'
+main: net.thecommandcraft.vanishpp.Vanishpp
+api-version: '1.21'
+authors: [ tcc ]
+description: The ultimate vanish plugin with anti-detection, hooks, and ProtocolLib support.
+folia-supported: true
+
+dependencies:
+  server:
+    ProtocolLib:
+      load: BEFORE
+      required: false
+    PlaceholderAPI:
+      load: BEFORE
+      required: false
+    Essentials:
+      load: BEFORE
+      required: false
+    SimpleVoiceChat:
+      load: BEFORE
+      required: false
+    TAB:
+      load: BEFORE
+      required: false

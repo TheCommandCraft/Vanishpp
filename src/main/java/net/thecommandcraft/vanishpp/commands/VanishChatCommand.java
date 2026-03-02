@@ -1,7 +1,5 @@
 package net.thecommandcraft.vanishpp.commands;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -12,10 +10,14 @@ import org.jetbrains.annotations.NotNull;
 
 public class VanishChatCommand implements CommandExecutor {
     private final Vanishpp plugin;
-    public VanishChatCommand(Vanishpp plugin) { this.plugin = plugin; }
+
+    public VanishChatCommand(Vanishpp plugin) {
+        this.plugin = plugin;
+    }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage("Players only.");
             return true;
@@ -25,15 +27,20 @@ public class VanishChatCommand implements CommandExecutor {
             if (plugin.pendingChatMessages.containsKey(player.getUniqueId())) {
                 String msg = plugin.pendingChatMessages.remove(player.getUniqueId());
 
-                // Add Metadata flag to bypass the PlayerListener check for exactly one tick/event
+                // Mark as confirmed for local chat listener
                 player.setMetadata("vanishpp_chat_bypass", new FixedMetadataValue(plugin, true));
+
+                // Mark as confirmed for DiscordSRV hook
+                if (plugin.getIntegrationManager().getDiscordSRV() != null) {
+                    plugin.getIntegrationManager().getDiscordSRV().setConfirmed(player.getUniqueId());
+                }
 
                 // Force player to say the message
                 player.chat(msg);
 
-                player.sendMessage(Component.text(plugin.getConfigManager().chatSentMessage, NamedTextColor.GREEN));
+                plugin.getMessageManager().sendMessage(player, plugin.getConfigManager().chatSentMessage);
             } else {
-                player.sendMessage(Component.text(plugin.getConfigManager().noChatPendingMessage, NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(player, plugin.getConfigManager().noChatPendingMessage);
             }
             return true;
         }

@@ -1,10 +1,5 @@
 package net.thecommandcraft.vanishpp.commands;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -55,9 +50,8 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
                 return true;
         }
 
-        sender.sendMessage(
-                Component.text("\n      Vanish++ Help Menu      ", NamedTextColor.GOLD, TextDecoration.BOLD));
-        sender.sendMessage(Component.text("Click a command to see details:", NamedTextColor.GRAY));
+        plugin.getMessageManager().sendMessage(sender, "\n<gold><bold>      Vanish++ Help Menu      ");
+        plugin.getMessageManager().sendMessage(sender, "<gray>Click a command to see details:");
 
         addHelpLine(sender, "vanish", "/vanish", "Toggle vanish state.");
         addHelpLine(sender, "vanishrules", "/vrules", "Configure personal ghost rules.");
@@ -67,18 +61,16 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
         addHelpLine(sender, "vperms", "/vperms", "Manage local permissions.");
         addHelpLine(sender, "vanishignore", "/vignore", "Stop ProtocolLib warnings.");
 
-        sender.sendMessage(Component.text("-------------------------------", NamedTextColor.GRAY));
+        plugin.getMessageManager().sendMessage(sender, "<gray>-------------------------------");
         return true;
     }
 
     private void addHelpLine(CommandSender sender, String internalName, String displayCmd, String desc) {
-        Component line = Component.text(" • ", NamedTextColor.GOLD)
-                .append(Component.text(displayCmd, NamedTextColor.AQUA, TextDecoration.BOLD)
-                        .clickEvent(ClickEvent.runCommand("/vhelp " + internalName))
-                        .hoverEvent(
-                                HoverEvent.showText(Component.text("Click for more details", NamedTextColor.YELLOW))))
-                .append(Component.text(" - " + desc, NamedTextColor.WHITE));
-        sender.sendMessage(line);
+        String line = " • <click:run_command:/vhelp " + internalName + ">" +
+                "<hover:show_text:'<yellow>Click for more details'><aqua><bold>" + displayCmd
+                + "</bold></aqua></hover></click> " +
+                "- <white>" + desc + "</white>";
+        plugin.getMessageManager().sendMessage(sender, line);
     }
 
     private boolean showDetailedHelp(CommandSender sender, String cmdName) {
@@ -86,32 +78,25 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
         if (cmd == null)
             return false;
 
-        sender.sendMessage(
-                Component.text("\n--- Command: " + cmd.getName() + " ---", NamedTextColor.GOLD, TextDecoration.BOLD));
-        sender.sendMessage(Component.text("Description: ", NamedTextColor.GRAY)
-                .append(Component.text(cmd.getDescription(), NamedTextColor.WHITE)));
-        sender.sendMessage(Component.text("Usage: ", NamedTextColor.GRAY)
-                .append(Component.text(cmd.getUsage(), NamedTextColor.YELLOW)));
+        plugin.getMessageManager().sendMessage(sender, "\n<gold><bold>--- Command: " + cmd.getName() + " ---");
+        plugin.getMessageManager().sendMessage(sender, "<gray>Description: <white>" + cmd.getDescription());
+        plugin.getMessageManager().sendMessage(sender, "<gray>Usage: <yellow>" + cmd.getUsage());
 
         if (!cmd.getAliases().isEmpty()) {
-            sender.sendMessage(Component.text("Aliases: ", NamedTextColor.GRAY)
-                    .append(Component.text(String.join(", ", cmd.getAliases()), NamedTextColor.WHITE)));
+            plugin.getMessageManager().sendMessage(sender,
+                    "<gray>Aliases: <white>" + String.join(", ", cmd.getAliases()));
         }
 
-        sender.sendMessage(Component.text("Permission: ", NamedTextColor.GRAY).append(
-                Component.text(cmd.getPermission() != null ? cmd.getPermission() : "None", NamedTextColor.RED)));
+        plugin.getMessageManager().sendMessage(sender,
+                "<gray>Permission: <red>" + (cmd.getPermission() != null ? cmd.getPermission() : "None"));
 
-        Component buttons = Component.text("\n")
-                .append(Component.text("[BACK TO HELP]", NamedTextColor.GRAY, TextDecoration.BOLD)
-                        .clickEvent(ClickEvent.runCommand("/vhelp"))
-                        .hoverEvent(HoverEvent.showText(Component.text("Return to list", NamedTextColor.GRAY))))
-                .append(Component.text("   "))
-                .append(Component.text("[USE COMMAND]", NamedTextColor.GREEN, TextDecoration.BOLD)
-                        .clickEvent(ClickEvent.suggestCommand("/" + cmd.getName() + " "))
-                        .hoverEvent(HoverEvent.showText(Component.text("Fill in chat box", NamedTextColor.GREEN))));
+        String buttons = "\n<click:run_command:/vhelp><hover:show_text:'<gray>Return to list'><gray><bold>[BACK TO HELP]</bold></gray></hover></click>   "
+                +
+                "<click:suggest_command:/ " + cmd.getName()
+                + " ><hover:show_text:'<green>Fill in chat box'><green><bold>[USE COMMAND]</bold></green></hover></click>";
 
-        sender.sendMessage(buttons);
-        sender.sendMessage(Component.text("-------------------------------", NamedTextColor.GRAY));
+        plugin.getMessageManager().sendMessage(sender, buttons);
+        plugin.getMessageManager().sendMessage(sender, "<gray>-------------------------------");
         return true;
     }
 

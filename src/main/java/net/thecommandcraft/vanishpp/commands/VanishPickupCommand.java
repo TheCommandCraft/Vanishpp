@@ -13,25 +13,30 @@ import org.jetbrains.annotations.NotNull;
 
 public class VanishPickupCommand implements CommandExecutor {
     private final Vanishpp plugin;
-    public VanishPickupCommand(Vanishpp plugin) { this.plugin = plugin; }
+
+    public VanishPickupCommand(Vanishpp plugin) {
+        this.plugin = plugin;
+    }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         Player target;
 
         if (args.length > 0) {
             if (!sender.hasPermission("vanishpp.pickup.others")) {
-                sender.sendMessage(Component.text("You do not have permission to toggle pickup for others.", NamedTextColor.RED));
+                sender.sendMessage(
+                        Component.text("You do not have permission to toggle pickup for others.", NamedTextColor.RED));
                 return true;
             }
             target = Bukkit.getPlayer(args[0]);
             if (target == null) {
-                sender.sendMessage(Component.text("Player not found.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, "Player not found.");
                 return true;
             }
         } else {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(Component.text("Console must specify a player.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, "Console must specify a player.");
                 return true;
             }
             target = (Player) sender;
@@ -43,13 +48,13 @@ public class VanishPickupCommand implements CommandExecutor {
 
         rules.setRule(target, RuleManager.CAN_PICKUP_ITEMS, newValue);
 
-        Component msg = newValue
-                ? Component.text(plugin.getConfigManager().pickupEnabledMessage, NamedTextColor.GREEN)
-                : Component.text(plugin.getConfigManager().pickupDisabledMessage, NamedTextColor.RED);
+        String msg = newValue
+                ? plugin.getLanguageManager().getMessage("pickup.enabled")
+                : plugin.getLanguageManager().getMessage("pickup.disabled");
 
-        target.sendMessage(msg);
+        plugin.getMessageManager().sendMessage(target, msg);
         if (!target.equals(sender)) {
-            sender.sendMessage(Component.text("Toggled pickup for " + target.getName() + ": " + newValue, NamedTextColor.GOLD));
+            plugin.getMessageManager().sendMessage(sender, "Toggled pickup for " + target.getName() + ": " + newValue);
         }
 
         return true;

@@ -2,15 +2,11 @@ package net.thecommandcraft.vanishpp.listeners;
 
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
 import net.thecommandcraft.vanishpp.config.RuleManager;
+import net.thecommandcraft.vanishpp.utils.LanguageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
@@ -33,7 +29,6 @@ import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.util.Vector;
 
-import java.time.Duration;
 import java.util.*;
 
 public class PlayerListener implements Listener {
@@ -82,16 +77,17 @@ public class PlayerListener implements Listener {
 
             // 2. ProtocolLib Warning
             if (!plugin.hasProtocolLib() && player.isOp() && !plugin.isWarningIgnored(player)) {
-                player.sendMessage(
-                        Component.text("█▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀█", NamedTextColor.DARK_RED, TextDecoration.BOLD));
-                player.sendMessage(
-                        Component.text(" CRITICAL DEPENDENCY MISSING", NamedTextColor.RED, TextDecoration.BOLD));
-                player.sendMessage(Component.text(" ProtocolLib is NOT installed.", NamedTextColor.YELLOW));
-                player.sendMessage(Component.text(" ⚠ YOU ARE NOT FULLY HIDDEN! ⚠", NamedTextColor.RED));
-                player.sendMessage(
-                        Component.text("█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█", NamedTextColor.DARK_RED, TextDecoration.BOLD));
-                Title title = Title.title(Component.text("⚠ WARNING ⚠", NamedTextColor.RED),
-                        Component.text("ProtocolLib Missing!", NamedTextColor.YELLOW));
+                LanguageManager lm = config.getLanguageManager();
+                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.box-top"));
+                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.header"));
+                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.line"));
+                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.sub"));
+                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.box-bottom"));
+
+                Title title = Title.title(
+                        plugin.getMessageManager().parse(lm.getMessage("warnings.protocollib-missing-title"), player),
+                        plugin.getMessageManager().parse(lm.getMessage("warnings.protocollib-missing-subtitle"),
+                                player));
                 player.showTitle(title);
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
             }
@@ -146,12 +142,9 @@ public class PlayerListener implements Listener {
                 String msgContent = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
                         .serialize(event.message());
                 plugin.pendingChatMessages.put(player.getUniqueId(), msgContent);
-                player.sendMessage(Component.text(config.chatLockedMessage, NamedTextColor.RED)
-                        .append(Component.text(" [CONFIRM]", NamedTextColor.GREEN, TextDecoration.BOLD)
-                                .clickEvent(ClickEvent.runCommand("/vchat confirm")))
-                        .append(Component.text(" or ", NamedTextColor.GRAY))
-                        .append(Component.text("[ENABLE CHAT]", NamedTextColor.GOLD, TextDecoration.BOLD)
-                                .clickEvent(ClickEvent.runCommand("/vrules can_chat true"))));
+
+                String message = config.getLanguageManager().getMessage("chat.locked");
+                plugin.getMessageManager().sendMessage(player, message);
             }
         }
     }
@@ -222,7 +215,8 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_PICKUP_ITEMS)) {
             event.setCancelled(true);
             plugin.triggerActionBarWarning(event.getPlayer(),
-                    Component.text("✖ Arrow Pickup Blocked", NamedTextColor.RED));
+                    plugin.getMessageManager().parse(config.getLanguageManager().getMessage("pickup.blocked-actionbar"),
+                            event.getPlayer()));
         }
     }
 
@@ -362,24 +356,25 @@ public class PlayerListener implements Listener {
     }
 
     private void sendRuleDeny(Player p, String ruleName, String actionName) {
+        LanguageManager lm = config.getLanguageManager();
         plugin.triggerActionBarWarning(p,
-                Component.text("✖ Action Blocked: " + actionName, NamedTextColor.RED, TextDecoration.BOLD));
+                plugin.getMessageManager()
+                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionName), p));
         if (!rules.getRule(p, RuleManager.SHOW_NOTIFICATIONS))
             return;
         UUID uuid = p.getUniqueId();
         long now = System.currentTimeMillis();
         Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
         playerCooldowns.put(ruleName, now);
-        Component message = Component.text("Vanish blocked " + actionName + ". ", NamedTextColor.RED)
-                .append(Component.text("[ENABLE]", NamedTextColor.GREEN, TextDecoration.BOLD)
-                        .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true")))
-                .append(Component.text(" | ", NamedTextColor.GRAY))
-                .append(Component.text("[ENABLE 1m]", NamedTextColor.YELLOW, TextDecoration.BOLD)
-                        .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60")));
-        p.sendMessage(message);
+
+        String message = lm.getMessage("warnings.vanish-blocked")
+                .replace("%action%", actionName)
+                .replace("%rule%", ruleName);
+        plugin.getMessageManager().sendMessage(p, message);
+
         if (!hasSeenDisableTip.contains(uuid)) {
             hasSeenDisableTip.add(uuid);
-            p.sendMessage(Component.text("Tip: Type /vignore to disable these warnings.", NamedTextColor.GRAY));
+            plugin.getMessageManager().sendMessage(p, lm.getMessage("warnings.ignore-tip"));
         }
     }
 }

@@ -97,6 +97,14 @@ public class MigrationManager {
                 configManager.logMigrationChange("Enabled Titan God Mode features.");
             case 3:
                 configManager.logMigrationChange("Optimized rule feedback by removing alert rate-limiting.");
+            case 4:
+                configManager.logMigrationChange("Added setting to persist flight mode after unvanishing.");
+            case 5:
+                migrateRefactor(oldC, newC, "invisibility-features.allow-flight", "flight-control.vanish-enable-fly");
+                migrateRefactor(oldC, newC, "invisibility-features.disable-flight-on-unvanish",
+                        "flight-control.unvanish-disable-fly");
+                configManager
+                        .logMigrationChange("Restructured flight settings into dedicated 'flight-control' section.");
                 break;
         }
     }

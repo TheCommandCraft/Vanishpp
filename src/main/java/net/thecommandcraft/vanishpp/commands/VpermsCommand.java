@@ -27,8 +27,7 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
     private static final List<String> VALID_PERMISSIONS = List.of(
             "vanishpp.vanish",
             "vanishpp.see",
-            "vanishpp.vanish.others"
-    );
+            "vanishpp.vanish.others");
 
     private static final List<String> ACTIONS = List.of("set", "remove", "get");
 
@@ -39,32 +38,33 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         if (!sender.hasPermission("vanishpp.manageperms")) {
-            sender.sendMessage(configManager.noPermissionMessage);
+            plugin.getMessageManager().sendMessage(sender, configManager.noPermissionMessage);
             return true;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             permissionManager.load();
-            sender.sendMessage(configManager.vpermsReload);
+            plugin.getMessageManager().sendMessage(sender, configManager.vpermsReload);
             return true;
         }
 
         if (args.length != 3) {
-            sender.sendMessage(configManager.vpermsInvalidUsage);
+            plugin.getMessageManager().sendMessage(sender, configManager.vpermsInvalidUsage);
             return true;
         }
 
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            sender.sendMessage(configManager.playerNotFoundMessage);
+            plugin.getMessageManager().sendMessage(sender, configManager.playerNotFoundMessage);
             return true;
         }
 
         String permission = args[1].toLowerCase();
         if (!VALID_PERMISSIONS.contains(permission)) {
-            sender.sendMessage(configManager.vpermsInvalidPermission);
+            plugin.getMessageManager().sendMessage(sender, configManager.vpermsInvalidPermission);
             return true;
         }
 
@@ -74,25 +74,25 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
         switch (action) {
             case "set":
                 permissionManager.addPermission(targetUUID, permission);
-                sender.sendMessage(configManager.vpermsPermSet
+                plugin.getMessageManager().sendMessage(sender, configManager.vpermsPermSet
                         .replace("%perm%", permission)
                         .replace("%player%", target.getName()));
                 break;
             case "remove":
                 permissionManager.removePermission(targetUUID, permission);
-                sender.sendMessage(configManager.vpermsPermRemoved
+                plugin.getMessageManager().sendMessage(sender, configManager.vpermsPermRemoved
                         .replace("%perm%", permission)
                         .replace("%player%", target.getName()));
                 break;
             case "get":
                 boolean hasPerm = permissionManager.hasPermission(targetUUID, permission);
                 String message = hasPerm ? configManager.vpermsPermGetHas : configManager.vpermsPermGetDoesNotHave;
-                sender.sendMessage(message
+                plugin.getMessageManager().sendMessage(sender, message
                         .replace("%perm%", permission)
                         .replace("%player%", target.getName()));
                 break;
             default:
-                sender.sendMessage(configManager.vpermsInvalidUsage);
+                plugin.getMessageManager().sendMessage(sender, configManager.vpermsInvalidUsage);
                 break;
         }
 
@@ -101,11 +101,12 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
 
     @Nullable
     @Override
-    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         final List<String> completions = new ArrayList<>();
         if (args.length == 1) {
             List<String> suggestions = new ArrayList<>();
-            for(Player p : Bukkit.getOnlinePlayers()){
+            for (Player p : Bukkit.getOnlinePlayers()) {
                 suggestions.add(p.getName());
             }
             suggestions.add("reload");

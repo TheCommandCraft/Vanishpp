@@ -7,7 +7,7 @@ services:
     volumes:
       - .:/app
       - maven-repo:/root/.m2
-    command: mvn clean test
+    command: mvn clean package
 
 volumes:
   maven-repo:

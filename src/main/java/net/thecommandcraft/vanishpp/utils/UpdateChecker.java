@@ -5,13 +5,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.Component;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
-import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
@@ -41,13 +37,14 @@ public class UpdateChecker {
 
         plugin.getLogger().info("Checking for updates on Modrinth...");
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        plugin.getVanishScheduler().runAsync(() -> {
             try {
                 // Modrinth API v2
                 URL url = new URL("https://api.modrinth.com/v2/project/" + PROJECT_ID + "/version");
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
-                connection.setRequestProperty("User-Agent", "TheCommandCraft/Vanishpp/" + plugin.getDescription().getVersion());
+                connection.setRequestProperty("User-Agent",
+                        "TheCommandCraft/Vanishpp/" + plugin.getDescription().getVersion());
 
                 int responseCode = connection.getResponseCode();
                 if (responseCode == 200) {
@@ -70,7 +67,8 @@ public class UpdateChecker {
                                 this.updateAvailable = true;
                                 plugin.getLogger().warning("--------------------------------------------------");
                                 plugin.getLogger().warning("A new version of Vanish++ is available: " + remoteVersion);
-                                plugin.getLogger().warning("Download at: https://modrinth.com/plugin/" + PROJECT_ID + "/version/" + remoteVersion);
+                                plugin.getLogger().warning("Download at: https://modrinth.com/plugin/" + PROJECT_ID
+                                        + "/version/" + remoteVersion);
                                 plugin.getLogger().warning("--------------------------------------------------");
                             } else {
                                 plugin.getLogger().info("You are running the latest version.");
@@ -98,8 +96,10 @@ public class UpdateChecker {
                 int v1 = i < currentParts.length ? Integer.parseInt(currentParts[i]) : 0;
                 int v2 = i < remoteParts.length ? Integer.parseInt(remoteParts[i]) : 0;
 
-                if (v2 > v1) return true;
-                if (v2 < v1) return false;
+                if (v2 > v1)
+                    return true;
+                if (v2 < v1)
+                    return false;
             }
         } catch (NumberFormatException e) {
             return !current.equalsIgnoreCase(remote);
@@ -108,7 +108,8 @@ public class UpdateChecker {
     }
 
     public void notifyPlayer(Player player) {
-        if (!updateAvailable) return;
+        if (!updateAvailable)
+            return;
 
         ConfigManager cm = plugin.getConfigManager();
         boolean shouldNotify = false;
@@ -126,22 +127,27 @@ public class UpdateChecker {
         }
 
         if (shouldNotify) {
+            LanguageManager lm = plugin.getConfigManager().getLanguageManager();
             // Play Notification Sound
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 2.0f);
 
             player.sendMessage(Component.empty());
-            player.sendMessage(Component.text("Vanish++ Update Available!", NamedTextColor.GREEN, TextDecoration.BOLD));
-            player.sendMessage(Component.text("Current: ", NamedTextColor.GRAY)
-                    .append(Component.text(plugin.getDescription().getVersion(), NamedTextColor.RED)));
-            player.sendMessage(Component.text("Latest: ", NamedTextColor.GRAY)
-                    .append(Component.text(latestVersion, NamedTextColor.GREEN)));
+            plugin.getMessageManager().sendMessage(player, lm.getMessage("update.available"));
+            plugin.getMessageManager().sendMessage(player, lm.getMessage("update.current")
+                    .replace("%version%", plugin.getDescription().getVersion()));
+            plugin.getMessageManager().sendMessage(player, lm.getMessage("update.latest")
+                    .replace("%version%", latestVersion));
 
             // New Link Structure: /plugin/ID/version/VERSION
             String link = "https://modrinth.com/plugin/" + PROJECT_ID + "/version/" + latestVersion;
 
-            player.sendMessage(Component.text("[CLICK TO DOWNLOAD]", NamedTextColor.GOLD, TextDecoration.BOLD)
-                    .clickEvent(ClickEvent.openUrl(link))
-                    .hoverEvent(HoverEvent.showText(Component.text("Go to Modrinth Version " + latestVersion, NamedTextColor.YELLOW))));
+            String downloadBtn = lm.getMessage("update.download")
+                    .replace("%version%", latestVersion);
+            String hoverText = lm.getMessage("update.hover")
+                    .replace("%version%", latestVersion);
+
+            player.sendMessage(plugin.getMessageManager().parse("<click:open_url:" + link + ">" +
+                    "<hover:show_text:'" + hoverText + "'>" + downloadBtn + "</hover></click>", player));
             player.sendMessage(Component.empty());
         }
     }
