@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **DiscordSRV Compatibility:** Fixed an issue where vanished players would appear in DiscordSRV join/quit messages.
 - **Fly Mode Logic:** Improved flight persistence on unvanish when configured.
+- **Automated Test Suite:** Fixed outdated assertions in `FeatureTest` and `MigrationTest` to properly account for the new v6 configuration and localized command outputs.
+- **Build Environment:** Resolved Dockerized Maven `PluginResolutionException` errors by purging corrupted cache volumes, ensuring a stable, reproducible build pipeline for the `vanishpp-1.2.0.jar`.
 
 ## [1.1.4] - 2026-02-15
 
