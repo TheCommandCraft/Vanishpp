@@ -24,10 +24,12 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
     private final PermissionManager permissionManager;
     private final ConfigManager configManager;
 
-    private static final List<String> VALID_PERMISSIONS = List.of(
-            "vanishpp.vanish",
-            "vanishpp.see",
-            "vanishpp.vanish.others");
+    private List<String> getValidPermissions() {
+        return plugin.getDescription().getPermissions().stream()
+                .filter(p -> p.getName().startsWith("vanishpp."))
+                .map(org.bukkit.permissions.Permission::getName)
+                .toList();
+    }
 
     private static final List<String> ACTIONS = List.of("set", "remove", "get");
 
@@ -63,7 +65,7 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
         }
 
         String permission = args[1].toLowerCase();
-        if (!VALID_PERMISSIONS.contains(permission)) {
+        if (!getValidPermissions().contains(permission)) {
             plugin.getMessageManager().sendMessage(sender, configManager.vpermsInvalidPermission);
             return true;
         }
@@ -112,7 +114,7 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
             suggestions.add("reload");
             StringUtil.copyPartialMatches(args[0], suggestions, completions);
         } else if (args.length == 2) {
-            StringUtil.copyPartialMatches(args[1], VALID_PERMISSIONS, completions);
+            StringUtil.copyPartialMatches(args[1], getValidPermissions(), completions);
         } else if (args.length == 3) {
             StringUtil.copyPartialMatches(args[2], ACTIONS, completions);
         }
