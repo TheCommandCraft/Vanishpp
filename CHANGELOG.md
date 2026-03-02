@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.0] - 2026-02-25
+## [1.1.4] - 2026-03-02
 
 ### Added
 - **Full Localization (i18n):** Complete multi-language support.
@@ -14,20 +14,6 @@ All notable changes to this project will be documented in this file.
 - **Folia Support:** Rewritten scheduler and event handling to support Folia's multi-threaded region architecture.
 - **Config Reload:** Added `/vreload` command to apply configuration and language changes instantly without server restarts.
 - **Interactive Reports:** Professional clickable components in all command outputs.
-
-### Changed
-- **Config Structure:** Significant cleanup of `config.yml`. Legacy message blocks removed in favor of `lang/*.yml`.
-- **Performance:** Optimized visibility checks and metadata handling for better server performance.
-
-### Fixed
-- **DiscordSRV Compatibility:** Fixed an issue where vanished players would appear in DiscordSRV join/quit messages.
-- **Fly Mode Logic:** Improved flight persistence on unvanish when configured.
-- **Automated Test Suite:** Fixed outdated assertions in `FeatureTest` and `MigrationTest` to properly account for the new v6 configuration and localized command outputs.
-- **Build Environment:** Resolved Dockerized Maven `PluginResolutionException` errors by purging corrupted cache volumes, ensuring a stable, reproducible build pipeline for the `vanishpp-1.2.0.jar`.
-
-## [1.1.4] - 2026-02-15
-
-### Added
 - **Titan Stealth Engine:** Absolute packet-level invisibility for vanished administrators. The server now acts as if the vanished player does not exist in the network data.
     - **Tab List & Info Filtering:** Blocked `PLAYER_INFO` and `PLAYER_INFO_UPDATE` packets to prevent any tab list flicker or presence detection.
     - **Ghost-Proof Spawning:** Intercepted `SPAWN_ENTITY` and `NAMED_ENTITY_SPAWN` to ensure vanished players are never spawned on unauthorized clients.
@@ -40,7 +26,15 @@ All notable changes to this project will be documented in this file.
 - **Config Logic:** `vanishMessage`, `unvanishMessage`, `fakeJoinMessage`, and `fakeQuitMessage` logic updated. Setting these to `"false"`, `"none"`, or leaving them empty in `config.yml` now properly disables the message.
 - **Persistence:** Acknowledging the plugin hiding warning now saves the preference to `data.yml` specifically for the current version.
 
+### Changed
+- **Config Structure:** Significant cleanup of `config.yml`. Legacy message blocks removed in favor of `lang/*.yml`.
+- **Performance:** Optimized visibility checks and metadata handling for better server performance.
+
 ### Fixed
+- **DiscordSRV Compatibility:** Fixed an issue where vanished players would appear in DiscordSRV join/quit messages.
+- **Fly Mode Logic:** Improved flight persistence on unvanish when configured.
+- **Automated Test Suite:** Fixed outdated assertions in `FeatureTest` and `MigrationTest` to properly account for the new v6 configuration and localized command outputs.
+- **Build Environment:** Resolved Dockerized Maven `PluginResolutionException` errors by purging corrupted cache volumes, ensuring a stable, reproducible build pipeline for the `vanishpp-1.1.4.jar`.
 - **Dependency Resolution:** Fixed an issue where the ProtocolLib dependency was not correctly detected on first install.
 
 ## [1.1.3] - 2026-02-02
