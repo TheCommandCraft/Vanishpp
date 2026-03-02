@@ -1,7 +1,5 @@
 package net.thecommandcraft.vanishpp.commands;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -19,22 +17,23 @@ public class VanishIgnoreCommand implements CommandExecutor {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         Player target;
 
         if (args.length > 0) {
             if (!sender.hasPermission("vanishpp.ignorewarning.others")) {
-                sender.sendMessage(Component.text("Permission denied.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, "<red>Permission denied.");
                 return true;
             }
             target = Bukkit.getPlayer(args[0]);
             if (target == null) {
-                sender.sendMessage(Component.text("Player not found.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, "<red>Player not found.");
                 return true;
             }
         } else {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(Component.text("Console must specify a player.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, "<red>Console must specify a player.");
                 return true;
             }
             target = (Player) sender;
@@ -42,12 +41,15 @@ public class VanishIgnoreCommand implements CommandExecutor {
 
         if (plugin.isWarningIgnored(target)) {
             plugin.setWarningIgnored(target, false);
-            target.sendMessage(Component.text("You will now receive ProtocolLib warnings again.", NamedTextColor.GREEN));
-            if (!target.equals(sender)) sender.sendMessage(Component.text(target.getName() + " will receive warnings.", NamedTextColor.GREEN));
+            plugin.getMessageManager().sendMessage(target, "<green>You will now receive ProtocolLib warnings again.");
+            if (!target.equals(sender))
+                plugin.getMessageManager().sendMessage(sender,
+                        "<green>" + target.getName() + " will receive warnings.");
         } else {
             plugin.setWarningIgnored(target, true);
-            target.sendMessage(Component.text("You will no longer receive ProtocolLib warnings.", NamedTextColor.RED));
-            if (!target.equals(sender)) sender.sendMessage(Component.text(target.getName() + " will ignore warnings.", NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(target, "<red>You will no longer receive ProtocolLib warnings.");
+            if (!target.equals(sender))
+                plugin.getMessageManager().sendMessage(sender, "<red>" + target.getName() + " will ignore warnings.");
         }
         return true;
     }

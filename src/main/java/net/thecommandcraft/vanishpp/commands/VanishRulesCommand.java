@@ -1,7 +1,5 @@
 package net.thecommandcraft.vanishpp.commands;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.config.RuleManager;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
@@ -26,9 +24,11 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /vrules [player] <rule> [true|false] [seconds]", NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("rules.usage"));
             return true;
         }
 
@@ -37,33 +37,42 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
 
         String firstArg = args[0].toLowerCase();
         RuleManager rules = plugin.getRuleManager();
-        boolean isRule = rules.getAvailableRules().contains(firstArg) || firstArg.equals("all") || firstArg.equals("none");
+        boolean isRule = rules.getAvailableRules().contains(firstArg) || firstArg.equals("all")
+                || firstArg.equals("none");
 
         if (isRule) {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(Component.text("Console must specify a player.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("ignore-warning.console-specify"));
                 return true;
             }
             target = (Player) sender;
         } else {
             target = Bukkit.getPlayer(firstArg);
             if (target == null) {
-                sender.sendMessage(Component.text("Player not found or invalid rule.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("rules.not-found"));
                 return true;
             }
             if (!sender.hasPermission("vanishpp.rules.others")) {
-                sender.sendMessage(Component.text("Permission denied.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("no-permission"));
                 return true;
             }
             argOffset = 1;
         }
 
         if (args.length <= argOffset) {
-            sender.sendMessage(Component.text("Rules for " + target.getName() + ":", NamedTextColor.GOLD));
+            plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().getLanguageManager()
+                    .getMessage("rules.header").replace("%player%", target.getName()));
             for (String r : rules.getAvailableRules()) {
-                boolean current = rules.getRule(target, r);
-                NamedTextColor color = current ? NamedTextColor.GREEN : NamedTextColor.RED;
-                sender.sendMessage(Component.text(" - " + r + ": " + current, color));
+                boolean currentR = rules.getRule(target, r);
+                String color = currentR ? "green" : "red";
+                String statusKey = currentR ? "rules.status-on" : "rules.status-off";
+                String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("rules.line")
+                                .replace("%rule%", r).replace("%color%", color).replace("%status%", status));
             }
             return true;
         }
@@ -75,29 +84,41 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             boolean value = rule.equals("all");
             if (args.length > argOffset + 1) {
                 String valStr = args[argOffset + 1].toLowerCase();
-                if (valStr.equals("true")) value = true;
-                else if (valStr.equals("false")) value = false;
+                if (valStr.equals("true"))
+                    value = true;
+                else if (valStr.equals("false"))
+                    value = false;
             }
             rules.setAllRules(target, value);
-            if (plugin.isVanished(target)) plugin.applyVanishEffects(target);
-            sender.sendMessage(Component.text("Set ALL rules for " + target.getName() + " to: " + value, value ? NamedTextColor.GREEN : NamedTextColor.RED));
+            if (plugin.isVanished(target))
+                plugin.applyVanishEffects(target);
+            String statusKey = value ? "rules.status-on" : "rules.status-off";
+            String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("rules.set")
+                            .replace("%rule%", "ALL").replace("%player%", target.getName())
+                            .replace("%status%", status));
             return true;
         }
 
         if (!rules.getAvailableRules().contains(rule)) {
-            sender.sendMessage(Component.text("Invalid rule name.", NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("rules.invalid-name"));
             return true;
         }
 
         // Get or Set
         if (args.length == argOffset + 1) {
-            boolean current = rules.getRule(target, rule);
-            NamedTextColor color = current ? NamedTextColor.GREEN : NamedTextColor.RED;
-            sender.sendMessage(Component.text(rule + " is: " + current, color));
+            boolean currentVal = rules.getRule(target, rule);
+            String statusKey = currentVal ? "rules.status-on" : "rules.status-off";
+            String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
+            plugin.getMessageManager().sendMessage(sender,
+                    rule + " is: <" + (currentVal ? "green" : "red") + ">" + status);
         } else {
             String valStr = args[argOffset + 1].toLowerCase();
             if (!valStr.equals("true") && !valStr.equals("false")) {
-                sender.sendMessage(Component.text("Value must be 'true' or 'false'.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("rules.invalid-value"));
                 return true;
             }
             boolean newValue = Boolean.parseBoolean(valStr);
@@ -110,13 +131,23 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 try {
                     int seconds = Integer.parseInt(args[argOffset + 2]);
                     plugin.scheduleRuleRevert(target, rule, oldValue, seconds);
-                    sender.sendMessage(Component.text("Set " + rule + " to " + newValue + " for " + seconds + "s.", NamedTextColor.YELLOW));
+                    String statusKey = newValue ? "rules.status-on" : "rules.status-off";
+                    String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
+                    plugin.getMessageManager().sendMessage(sender,
+                            plugin.getConfigManager().getLanguageManager().getMessage("rules.set-temp")
+                                    .replace("%rule%", rule).replace("%player%", target.getName())
+                                    .replace("%status%", status).replace("%seconds%", String.valueOf(seconds)));
                 } catch (NumberFormatException e) {
-                    sender.sendMessage(Component.text("Invalid seconds.", NamedTextColor.RED));
+                    plugin.getMessageManager().sendMessage(sender,
+                            plugin.getConfigManager().getLanguageManager().getMessage("rules.invalid-seconds"));
                 }
             } else {
-                NamedTextColor color = newValue ? NamedTextColor.GREEN : NamedTextColor.RED;
-                sender.sendMessage(Component.text("Set " + rule + " to " + newValue, color));
+                String statusKey = newValue ? "rules.status-on" : "rules.status-off";
+                String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("rules.set")
+                                .replace("%rule%", rule).replace("%player%", target.getName())
+                                .replace("%status%", status));
             }
 
             if (rule.equals(RuleManager.MOB_TARGETING) && plugin.isVanished(target)) {
@@ -128,13 +159,16 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
     }
 
     @Override
-    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+            @NotNull String label, @NotNull String[] args) {
         RuleManager rules = plugin.getRuleManager();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) completions.add(p.getName());
+            for (Player p : Bukkit.getOnlinePlayers())
+                completions.add(p.getName());
             completions.addAll(rules.getAvailableRules());
-            completions.add("all"); completions.add("none");
+            completions.add("all");
+            completions.add("none");
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }
         return new ArrayList<>();

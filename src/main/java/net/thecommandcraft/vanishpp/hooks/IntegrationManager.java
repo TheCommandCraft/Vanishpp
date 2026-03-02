@@ -18,6 +18,7 @@ public class IntegrationManager {
     private final Vanishpp plugin;
     private Essentials essentials;
     private DynmapAPI dynmap;
+    private DiscordSRVHook discordSRV;
 
     public IntegrationManager(Vanishpp plugin) {
         this.plugin = plugin;
@@ -40,6 +41,18 @@ public class IntegrationManager {
             new VanishExpansion(plugin).register();
             plugin.getLogger().info("Hooked into PlaceholderAPI.");
         }
+
+        if (Bukkit.getPluginManager().getPlugin("DiscordSRV") != null) {
+            this.discordSRV = new DiscordSRVHook(plugin);
+            this.discordSRV.register();
+            plugin.getLogger().info("Hooked into DiscordSRV.");
+        }
+    }
+
+    public void unregister() {
+        if (discordSRV != null) {
+            discordSRV.unregister();
+        }
     }
 
     public void updateHooks(Player player, boolean isVanished) {
@@ -53,10 +66,19 @@ public class IntegrationManager {
         if (dynmap != null) {
             dynmap.assertPlayerInvisibility(player, isVanished, plugin);
         }
+
+        if (discordSRV != null) {
+            if (isVanished) {
+                discordSRV.sendFakeQuit(player);
+            } else {
+                discordSRV.sendFakeJoin(player);
+            }
+        }
     }
 
     public String getEssentialsJoinMessage() {
-        if (essentials == null) return null;
+        if (essentials == null)
+            return null;
         try {
             String m = essentials.getSettings().getCustomJoinMessage();
             return (m != null && !m.equals("none")) ? m.replace("&", "§") : null;
@@ -66,13 +88,18 @@ public class IntegrationManager {
     }
 
     public String getEssentialsQuitMessage() {
-        if (essentials == null) return null;
+        if (essentials == null)
+            return null;
         try {
             String m = essentials.getSettings().getCustomQuitMessage();
             return (m != null && !m.equals("none")) ? m.replace("&", "§") : null;
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    public DiscordSRVHook getDiscordSRV() {
+        return discordSRV;
     }
 
     private static class VanishExpansion extends PlaceholderExpansion {
@@ -110,11 +137,13 @@ public class IntegrationManager {
         @Override
         public String onPlaceholderRequest(Player player, @NotNull String identifier) {
             if (identifier.equalsIgnoreCase("is_vanished")) {
-                if (player == null) return "";
+                if (player == null)
+                    return "";
                 return plugin.isVanished(player) ? "Yes" : "No";
             }
             if (identifier.equalsIgnoreCase("is_vanished_bool")) {
-                if (player == null) return "false";
+                if (player == null)
+                    return "false";
                 return String.valueOf(plugin.isVanished(player));
             }
             if (identifier.equalsIgnoreCase("vanished_count")) {
@@ -127,12 +156,14 @@ public class IntegrationManager {
                 return String.valueOf(Math.max(0, total - onlineVanished));
             }
             if (identifier.equalsIgnoreCase("pickup")) {
-                if (player == null) return "";
+                if (player == null)
+                    return "";
                 boolean canPickup = plugin.getRuleManager().getRule(player, RuleManager.CAN_PICKUP_ITEMS);
                 return canPickup ? "Enabled" : "Disabled";
             }
             if (identifier.equalsIgnoreCase("prefix")) {
-                if (player == null) return "";
+                if (player == null)
+                    return "";
                 if (plugin.isVanished(player)) {
                     return plugin.getConfigManager().vanishTabPrefix;
                 }

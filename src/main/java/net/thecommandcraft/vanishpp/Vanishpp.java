@@ -7,6 +7,7 @@ import net.thecommandcraft.vanishpp.config.*;
 import net.thecommandcraft.vanishpp.listeners.*;
 import net.thecommandcraft.vanishpp.hooks.*;
 import net.thecommandcraft.vanishpp.utils.*;
+import net.thecommandcraft.vanishpp.storage.*;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.command.CommandSender;
@@ -15,7 +16,6 @@ import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 import org.bukkit.event.EventHandler;
@@ -30,17 +30,18 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private Set<UUID> ignoredWarningPlayers;
 
     private ConfigManager configManager;
-    private DataManager dataManager;
+    private StorageProvider storageProvider;
+    private RedisStorage redisStorage;
     private PermissionManager permissionManager;
     private RuleManager ruleManager;
     private IntegrationManager integrationManager;
-    private Object protocolLibManager;
     private TabPluginHook tabPluginHook;
     private UpdateChecker updateChecker;
+    private PluginHider pluginHider;
+    private MessageManager messageManager;
 
     private Team vanishTeam;
-    private BukkitTask actionBarTask;
-    private BukkitTask syncTask;
+    private VanishScheduler vanishScheduler;
     private VoiceChatHook voiceChatHook;
 
     public final Map<UUID, String> pendingChatMessages = new HashMap<>();
@@ -49,22 +50,35 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        // 1. Load Data/Config Managers
-        this.dataManager = new DataManager(this);
-        this.dataManager.load();
+        // 0. Folia Detection
+        boolean isFolia = false;
+        try {
+            Class.forName("io.papermc.paper.threadedregions.RegionScheduler");
+            isFolia = true;
+        } catch (ClassNotFoundException ignored) {
+        }
 
+        if (isFolia) {
+            this.vanishScheduler = new FoliaSchedulerBridge(this);
+            getLogger().info("Folia environment detected. Using Regional Scheduler.");
+        } else {
+            this.vanishScheduler = new BukkitSchedulerBridge(this);
+            getLogger().info("Standard Bukkit/Paper environment detected. Using Legacy Scheduler.");
+        }
+
+        // 1. Load Data/Config Managers
         this.configManager = new ConfigManager(this);
         configManager.load();
+
+        this.messageManager = new MessageManager(this);
+
+        initStorage();
 
         this.permissionManager = new PermissionManager(this);
         permissionManager.load();
 
         this.ruleManager = new RuleManager(this);
         ruleManager.load();
-
-        // 2. Load Persistent Sets
-        this.vanishedPlayers = loadUuidSet(dataManager.getConfig().getStringList("vanished-players"));
-        this.ignoredWarningPlayers = loadUuidSet(dataManager.getConfig().getStringList("ignored-warnings"));
 
         // 3. Load Hooks
         this.integrationManager = new IntegrationManager(this);
@@ -100,6 +114,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         this.getCommand("vanishhelp").setExecutor(new VanishHelpCommand(this));
         this.getCommand("vanishconfig").setExecutor(new VanishConfigCommand(this));
         this.getCommand("vack").setExecutor(new VanishAckCommand(this));
+        this.getCommand("vanishreload").setExecutor(new VanishReloadCommand(this));
 
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
@@ -131,12 +146,16 @@ public class Vanishpp extends JavaPlugin implements Listener {
         startSyncTask();
 
         // 7. Restore Player State
+        this.vanishedPlayers = storageProvider.getVanishedPlayers();
+        this.ignoredWarningPlayers = new HashSet<>(); // Loaded per-player from storage on demand or pre-load
+
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null && p.isOnline()) {
                 applyVanishEffects(p);
                 integrationManager.updateHooks(p, true);
-                tabPluginHook.update(p, true);
+                if (tabPluginHook != null)
+                    tabPluginHook.update(p, true);
                 updateVanishVisibility(p);
             }
         }
@@ -144,37 +163,84 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getLogger().info("Vanish++ " + getDescription().getVersion() + " enabled.");
     }
 
-    private void hookProtocolLib() {
-        ProtocolLibManager manager = new ProtocolLibManager(this);
-        manager.load();
-        this.protocolLibManager = manager;
-    }
+    public void reloadPluginConfig() {
+        configManager.load();
 
-    private PluginHider pluginHider; // Hook ref for reload if needed
+        // Refresh action bar state
+        if (vanishScheduler != null) {
+            vanishScheduler.cancelAllTasks();
+            startActionBarTask();
+            startSyncTask();
+        }
+    }
 
     @Override
     public void onDisable() {
-        if (actionBarTask != null)
-            actionBarTask.cancel();
-        if (syncTask != null)
-            syncTask.cancel();
+        if (storageProvider != null) {
+            storageProvider.shutdown();
+        }
+        if (redisStorage != null) {
+            redisStorage.shutdown();
+        }
+        if (vanishScheduler != null) {
+            vanishScheduler.cancelAllTasks();
+        }
+        if (vanishTeam != null) {
+            vanishTeam.unregister();
+        }
+        if (integrationManager != null) {
+            integrationManager.unregister();
+        }
+    }
 
-        for (UUID uuid : vanishedPlayers) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null && p.isOnline()) {
-                p.setInvisible(false);
-                p.setSilent(false);
-                p.setCollidable(true);
-                p.playerListName(null);
-                p.removePotionEffect(PotionEffectType.NIGHT_VISION);
-                p.removeMetadata("vanished", this);
-                tabPluginHook.update(p, false);
+    private void initStorage() {
+        String type = configManager.getConfig().getString("storage.type", "YAML").toUpperCase();
+        if (type.equals("MYSQL") || type.equals("POSTGRESQL")) {
+            this.storageProvider = new SqlStorage(this, type);
+        } else {
+            this.storageProvider = new YamlStorage(this);
+        }
+
+        try {
+            this.storageProvider.init();
+        } catch (Exception e) {
+            getLogger().severe("FAILED TO INITIALIZE STORAGE: " + e.getMessage());
+            getLogger().severe("Falling back to YAML storage.");
+            this.storageProvider = new YamlStorage(this);
+            try {
+                this.storageProvider.init();
+            } catch (Exception ignored) {
             }
         }
 
-        saveDataSync();
-        if (vanishTeam != null)
-            vanishTeam.unregister();
+        if (configManager.getConfig().getBoolean("storage.redis.enabled", false)) {
+            this.redisStorage = new RedisStorage(this);
+            this.redisStorage.init();
+        }
+    }
+
+    public void handleNetworkVanishSync(UUID uuid, boolean vanish) {
+        Player p = Bukkit.getPlayer(uuid);
+        if (vanish) {
+            vanishedPlayers.add(uuid);
+            if (p != null && p.isOnline()) {
+                applyVanishEffects(p);
+                integrationManager.updateHooks(p, true);
+                if (tabPluginHook != null)
+                    tabPluginHook.update(p, true);
+                updateVanishVisibility(p);
+            }
+        } else {
+            vanishedPlayers.remove(uuid);
+            if (p != null && p.isOnline()) {
+                removeVanishEffects(p);
+            }
+        }
+    }
+
+    private void hookProtocolLib() {
+        ProtocolLibManager manager = new ProtocolLibManager(this);
+        manager.load();
     }
 
     // --- PUBLIC API GETTERS ---
@@ -190,6 +256,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return updateChecker;
     }
 
+    public LanguageManager getLanguageManager() {
+        return configManager.getLanguageManager();
+    }
+
     public boolean hasProtocolLib() {
         return hasProtocolLib;
     }
@@ -202,8 +272,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return configManager;
     }
 
-    public DataManager getDataManager() {
-        return dataManager;
+    public StorageProvider getStorageProvider() {
+        return storageProvider;
+    }
+
+    public IntegrationManager getIntegrationManager() {
+        return integrationManager;
     }
 
     public PermissionManager getPermissionManager() {
@@ -218,6 +292,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return Collections.unmodifiableSet(vanishedPlayers);
     }
 
+    public VanishScheduler getVanishScheduler() {
+        return vanishScheduler;
+    }
+
+    public MessageManager getMessageManager() {
+        return messageManager;
+    }
+
     // --- CORE LOGIC ---
     private void setupTeams() {
         Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
@@ -225,7 +307,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (this.vanishTeam == null)
             this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
 
-        vanishTeam.prefix(Component.empty()); // Prefix handled by packets for staff only
+        vanishTeam.prefix(Component.empty());
         vanishTeam.setCanSeeFriendlyInvisibles(true);
         vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
     }
@@ -233,15 +315,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private void startActionBarTask() {
         if (!configManager.actionBarEnabled)
             return;
-        Component actionBarComponent = Component.text(configManager.actionBarText);
-        this.actionBarTask = getServer().getScheduler().runTaskTimer(this, () -> {
+        vanishScheduler.runTimerGlobal(() -> {
             long now = System.currentTimeMillis();
             for (UUID uuid : vanishedPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline()) {
                     long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
-                    if (now > pausedUntil)
-                        p.sendActionBar(actionBarComponent);
+                    if (now > pausedUntil) {
+                        p.sendActionBar(messageManager.parse(configManager.actionBarText, p));
+                    }
                 }
             }
         }, 0L, 20L);
@@ -253,7 +335,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     private void startSyncTask() {
-        this.syncTask = getServer().getScheduler().runTaskTimer(this, () -> {
+        vanishScheduler.runTimerGlobal(() -> {
             for (UUID uuid : vanishedPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline())
@@ -267,10 +349,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         vanishTeam.addEntry(player.getName());
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
 
-        // Tab Prefix for staff
         if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
-            player.playerListName(
-                    Component.text(configManager.vanishTabPrefix).append(Component.text(player.getName())));
+            player.playerListName(messageManager.parse(configManager.vanishTabPrefix + player.getName(), player));
         }
 
         if (configManager.disableBlockTriggering)
@@ -289,7 +369,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
-        // TITAN STEALTH ENGINE
         player.setInvisible(true);
         player.setSilent(true);
         player.setCollidable(false);
@@ -302,9 +381,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (voiceChatHook != null)
             voiceChatHook.updateVanishState(player, true);
         integrationManager.updateHooks(player, true);
-        tabPluginHook.update(player, true);
+        if (tabPluginHook != null)
+            tabPluginHook.update(player, true);
         updateVanishVisibility(player);
-        saveDataAsynchronously();
+
+        storageProvider.setVanished(player.getUniqueId(), true);
+        if (redisStorage != null)
+            redisStorage.broadcastVanish(player.getUniqueId(), true);
     }
 
     public void removeVanishEffects(Player player) {
@@ -329,17 +412,27 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION))
             player.removePotionEffect(PotionEffectType.NIGHT_VISION);
-        if (player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR) {
-            player.setAllowFlight(false);
-            player.setFlying(false);
+        if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
+                && player.getGameMode() != GameMode.SPECTATOR) {
+
+            // Fix for Issue #3: Preserve fly if they have permission via ranks/Essentials
+            boolean hasFlyPerm = player.hasPermission("essentials.fly") || player.hasPermission("bukkit.command.fly");
+            if (!hasFlyPerm) {
+                player.setAllowFlight(false);
+                player.setFlying(false);
+            }
         }
 
         if (voiceChatHook != null)
             voiceChatHook.updateVanishState(player, false);
         integrationManager.updateHooks(player, false);
-        tabPluginHook.update(player, false);
+        if (tabPluginHook != null)
+            tabPluginHook.update(player, false);
         updateVanishVisibility(player);
-        saveDataAsynchronously();
+
+        storageProvider.setVanished(player.getUniqueId(), false);
+        if (redisStorage != null)
+            redisStorage.broadcastVanish(player.getUniqueId(), false);
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {
@@ -351,25 +444,16 @@ public class Vanishpp extends JavaPlugin implements Listener {
             String fakeMsg = configManager.fakeQuitMessage;
             if (isValidMessage(fakeMsg)) {
                 String finalMsg = fakeMsg.replace("%player%", player.getName())
-                        .replace("%displayname%", player.getDisplayName()); // Legacy support
+                        .replace("%displayname%", player.getDisplayName());
                 broadcastToUnaware(Component.text(finalMsg), player);
-            } else if (configManager.simulateEssentialsMessages) {
-                String essMsg = integrationManager.getEssentialsQuitMessage();
-                if (isValidMessage(essMsg)) {
-                    // Essentials placeholders usually handled by Essentials, but we do basic
-                    // replacement
-                    String finalMsg = essMsg.replace("{PLAYER}", player.getName())
-                            .replace("{USERNAME}", player.getName())
-                            .replace("{vp}", ""); // Strip potential vanity tags if any
-                    broadcastToUnaware(Component.text(finalMsg), player);
-                } else {
-                    broadcastToUnaware(Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW,
-                            player.displayName()), player);
-                }
             } else {
                 broadcastToUnaware(
                         Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()),
                         player);
+            }
+            // Send to Discord
+            if (integrationManager.getDiscordSRV() != null) {
+                integrationManager.getDiscordSRV().sendFakeQuit(player);
             }
         }
         notifyStaff(player, executor, true);
@@ -382,20 +466,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 String finalMsg = fakeMsg.replace("%player%", player.getName())
                         .replace("%displayname%", player.getDisplayName());
                 broadcastToUnaware(Component.text(finalMsg), player);
-            } else if (configManager.simulateEssentialsMessages) {
-                String essMsg = integrationManager.getEssentialsJoinMessage();
-                if (isValidMessage(essMsg)) {
-                    String finalMsg = essMsg.replace("{PLAYER}", player.getName())
-                            .replace("{USERNAME}", player.getName())
-                            .replace("{vp}", "");
-                    broadcastToUnaware(Component.text(finalMsg), player);
-                } else {
-                    broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW,
-                            player.displayName()), player);
-                }
             } else {
                 broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW,
                         player.displayName()), player);
+            }
+            // Send to Discord
+            if (integrationManager.getDiscordSRV() != null) {
+                integrationManager.getDiscordSRV().sendFakeJoin(player);
             }
         }
         removeVanishEffects(player);
@@ -442,7 +519,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void scheduleRuleRevert(Player player, String rule, boolean originalValue, int seconds) {
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        vanishScheduler.runLaterGlobal(() -> {
             ruleManager.setRule(player, rule, originalValue);
             if (player.isOnline())
                 player.sendMessage(Component.text("Temporary rule '" + rule + "' has expired.", NamedTextColor.YELLOW));
@@ -454,7 +531,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         String msg = event.getMessage().toLowerCase();
         if (msg.startsWith("/op ") || msg.startsWith("/deop ") || msg.startsWith("/lp user ")
                 || msg.startsWith("/luckperms user ")) {
-            Bukkit.getScheduler().runTaskLater(this, () -> {
+            vanishScheduler.runLaterGlobal(() -> {
                 for (UUID uuid : vanishedPlayers) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null)
@@ -467,7 +544,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void togglePickup(Player player) {
         boolean current = ruleManager.getRule(player, RuleManager.CAN_PICKUP_ITEMS);
         ruleManager.setRule(player, RuleManager.CAN_PICKUP_ITEMS, !current);
-        saveDataAsynchronously();
     }
 
     public boolean isWarningIgnored(Player player) {
@@ -475,36 +551,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void setWarningIgnored(Player player, boolean ignored) {
-        if (ignored)
+        if (ignored) {
             ignoredWarningPlayers.add(player.getUniqueId());
-        else
+            storageProvider.addAcknowledgement(player.getUniqueId(), "protocol-lib-warning");
+        } else {
             ignoredWarningPlayers.remove(player.getUniqueId());
-        saveDataAsynchronously();
-    }
-
-    private void saveDataSync() {
-        List<String> uuidStrings = vanishedPlayers.stream().map(UUID::toString).toList();
-        dataManager.getConfig().set("vanished-players", uuidStrings);
-        List<String> ignoredStrings = ignoredWarningPlayers.stream().map(UUID::toString).toList();
-        dataManager.getConfig().set("ignored-warnings", ignoredStrings);
-        dataManager.save();
-        ruleManager.save();
-    }
-
-    private void saveDataAsynchronously() {
-        Bukkit.getScheduler().runTaskAsynchronously(this, this::saveDataSync);
-    }
-
-    private Set<UUID> loadUuidSet(List<String> list) {
-        Set<UUID> set = new HashSet<>();
-        if (list == null)
-            return set;
-        for (String s : list) {
-            try {
-                set.add(UUID.fromString(s));
-            } catch (Exception ignored) {
-            }
         }
-        return set;
     }
 }

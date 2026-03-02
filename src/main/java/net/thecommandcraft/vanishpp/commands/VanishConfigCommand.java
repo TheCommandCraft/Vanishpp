@@ -1,7 +1,5 @@
 package net.thecommandcraft.vanishpp.commands;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -24,27 +22,27 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         if (!sender.hasPermission("vanishpp.config")) {
-            sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(sender, "<red>No permission.");
             return true;
         }
 
         if (args.length < 1) {
-            sender.sendMessage(Component.text("Usage: /vconfig <key> [value]", NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(sender, "<red>Usage: /vconfig <key> [value]");
             return true;
         }
 
         String path = args[0];
         if (!plugin.getConfig().contains(path)) {
-            sender.sendMessage(Component.text("Invalid config path!", NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(sender, "<red>Invalid config path!");
             return true;
         }
 
         if (args.length == 1) {
             Object val = plugin.getConfig().get(path);
-            sender.sendMessage(Component.text(path + " is currently: ", NamedTextColor.GOLD)
-                    .append(Component.text(val.toString(), NamedTextColor.WHITE)));
+            plugin.getMessageManager().sendMessage(sender, "<gold>" + path + " is currently: <white>" + val.toString());
             return true;
         }
 
@@ -61,12 +59,13 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
         }
 
         plugin.getConfigManager().setAndSave(path, newValue);
-        sender.sendMessage(Component.text("Successfully updated " + path + " to " + valInput, NamedTextColor.GREEN));
+        plugin.getMessageManager().sendMessage(sender, "<green>Successfully updated " + path + " to " + valInput);
         return true;
     }
 
     @Override
-    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+            @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
             List<String> keys = new ArrayList<>(plugin.getConfig().getKeys(true));
             keys.removeIf(k -> k.equals("config-version") || k.startsWith("data"));

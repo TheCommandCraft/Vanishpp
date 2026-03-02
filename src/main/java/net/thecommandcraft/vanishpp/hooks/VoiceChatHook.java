@@ -20,7 +20,8 @@ public class VoiceChatHook implements Listener {
         this.plugin = plugin;
 
         // Use ServicesManager to get the API registration
-        RegisteredServiceProvider<BukkitVoicechatService> provider = Bukkit.getServicesManager().getRegistration(BukkitVoicechatService.class);
+        RegisteredServiceProvider<BukkitVoicechatService> provider = Bukkit.getServicesManager()
+                .getRegistration(BukkitVoicechatService.class);
         if (provider != null) {
             BukkitVoicechatService service = provider.getProvider();
             service.registerPlugin(new VoiceChatPlugin(this));
@@ -32,8 +33,10 @@ public class VoiceChatHook implements Listener {
     }
 
     public void updateVanishState(Player player, boolean isVanished) {
-        if (api == null) return;
-        if (!plugin.getConfigManager().voiceChatIsolate) return;
+        if (api == null)
+            return;
+        if (!plugin.getConfigManager().voiceChatIsolate)
+            return;
 
         VoicechatConnection connection = api.getConnectionOf(player.getUniqueId());
         if (connection != null) {
@@ -43,7 +46,7 @@ public class VoiceChatHook implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (plugin.isVanished(event.getPlayer())) {
                 updateVanishState(event.getPlayer(), true);
             }
@@ -52,10 +55,15 @@ public class VoiceChatHook implements Listener {
 
     private static class VoiceChatPlugin implements de.maxhenkel.voicechat.api.VoicechatPlugin {
         private final VoiceChatHook hook;
-        public VoiceChatPlugin(VoiceChatHook hook) { this.hook = hook; }
+
+        public VoiceChatPlugin(VoiceChatHook hook) {
+            this.hook = hook;
+        }
 
         @Override
-        public String getPluginId() { return "vanishpp"; }
+        public String getPluginId() {
+            return "vanishpp";
+        }
 
         @Override
         public void registerEvents(de.maxhenkel.voicechat.api.events.EventRegistration registration) {

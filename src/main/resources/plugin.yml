@@ -55,6 +55,11 @@ commands:
     description: Internal command to acknowledge and hide notifications.
     usage: /vack <type>
     permission: vanishpp.see
+  vanishreload:
+    description: Reloads the plugin configuration.
+    usage: /vanishreload
+    permission: vanishpp.reload
+    aliases: [ vreload ]
 
 permissions:
   vanishpp.*:
@@ -84,6 +89,7 @@ permissions:
       vanishpp.ignorewarning.others: true
       vanishpp.config: true
       vanishpp.update: true
+      vanishpp.reload: true
 
   vanishpp.vanish:
     description: Allows a player to vanish themselves.

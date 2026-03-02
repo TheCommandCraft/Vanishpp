@@ -32,7 +32,7 @@ public class MobAiManager implements Listener {
     @EventHandler
     public void onSpawn(EntitySpawnEvent event) {
         if (event.getEntity() instanceof Mob mob) {
-            Bukkit.getScheduler().runTask(plugin, () -> injectSafeAi(mob));
+            plugin.getVanishScheduler().runGlobal(() -> injectSafeAi(mob));
         }
     }
 

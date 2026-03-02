@@ -1,10 +1,7 @@
 package net.thecommandcraft.vanishpp.commands;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
@@ -23,36 +20,40 @@ public class VanishAckCommand implements TabExecutor {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player)) return true;
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
+        if (!(sender instanceof Player))
+            return true;
         Player p = (Player) sender;
 
-        if (args.length == 0) return true;
+        if (args.length == 0)
+            return true;
 
         String action = args[0];
 
         if (action.equals("migration")) {
-            plugin.getDataManager().getConfig().getStringList("acknowledged-notifications").add(p.getUniqueId().toString() + "_v" + plugin.getConfigManager().getLatestVersion());
-            plugin.getDataManager().save();
-            p.sendMessage(Component.text("Notification acknowledged.", NamedTextColor.GREEN));
+            plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                    "migration_v" + plugin.getConfigManager().getLatestVersion());
+            plugin.getMessageManager().sendMessage(p, "<green>Notification acknowledged.");
         } else if (action.equals("disable_hiding")) {
-             if (!p.hasPermission("vanishpp.config")) {
-                 p.sendMessage(Component.text("No permission.", NamedTextColor.RED));
-                 return true;
-             }
-             plugin.getConfigManager().setAndSave("hide-announcements.hide-from-plugin-list", false);
-             p.sendMessage(Component.text("Vanish++ is now VISIBLE in the plugin list.", NamedTextColor.GREEN));
+            if (!p.hasPermission("vanishpp.config")) {
+                plugin.getMessageManager().sendMessage(p, "<red>No permission.");
+                return true;
+            }
+            plugin.getConfigManager().setAndSave("hide-announcements.hide-from-plugin-list", false);
+            plugin.getMessageManager().sendMessage(p, "<green>Vanish++ is now VISIBLE in the plugin list.");
         } else if (action.equals("acknowledge_hiding")) {
-            plugin.getDataManager().getConfig().getStringList("acknowledged-notifications").add(p.getUniqueId().toString() + "_hiding_v" + plugin.getConfigManager().getLatestVersion());
-            plugin.getDataManager().save();
-            p.sendMessage(Component.text("Notification dismissed for this version.", NamedTextColor.GRAY)); 
+            plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                    "hiding_v" + plugin.getConfigManager().getLatestVersion());
+            plugin.getMessageManager().sendMessage(p, "<gray>Notification dismissed for this version.");
         }
 
         return true;
     }
 
     @Override
-    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+            @NotNull String label, @NotNull String[] args) {
         return Collections.emptyList();
     }
 }

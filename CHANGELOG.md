@@ -2,7 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.5] - 2026-02-15
+## [1.2.0] - 2026-02-25
+
+### Added
+- **Full Localization (i18n):** Complete multi-language support.
+    - All messages and system reports moved to `lang/en.yml`.
+    - Automatic fallback system for missing keys.
+    - Simplified `config.yml` with a new `language` toggle.
+- **Rich Text Support:** Integrated **MiniMessage** for modern, easy-to-read chat formatting using tags (e.g., `<red>`, `<bold>`, `<click>`).
+- **PlaceholderAPI Integration:** Full support for dynamic placeholders in all plugin messages and the Action Bar.
+- **Folia Support:** Rewritten scheduler and event handling to support Folia's multi-threaded region architecture.
+- **Config Reload:** Added `/vreload` command to apply configuration and language changes instantly without server restarts.
+- **Interactive Reports:** Professional clickable components in all command outputs.
+
+### Changed
+- **Config Structure:** Significant cleanup of `config.yml`. Legacy message blocks removed in favor of `lang/*.yml`.
+- **Performance:** Optimized visibility checks and metadata handling for better server performance.
+
+### Fixed
+- **DiscordSRV Compatibility:** Fixed an issue where vanished players would appear in DiscordSRV join/quit messages.
+- **Fly Mode Logic:** Improved flight persistence on unvanish when configured.
+
+## [1.1.4] - 2026-02-15
 
 ### Added
 - **Titan Stealth Engine:** Absolute packet-level invisibility for vanished administrators. The server now acts as if the vanished player does not exist in the network data.
@@ -12,10 +33,6 @@ All notable changes to this project will be documented in this file.
     - **Movement & Velocity Filtering:** Blocked `ENTITY_VELOCITY`, `REL_ENTITY_MOVE`, `ENTITY_LOOK`, `ENTITY_TELEPORT`, and `ENTITY_HEAD_ROTATION` to eliminate coordinate-level leaks.
     - **Action Scrubber:** Intercepted `COLLECT` (item pickups) and `SET_PASSENGERS` (mounting) to scrub vanished names even when they are not the primary entity.
     - **Team Scrubbing:** Intercepted `SCOREBOARD_TEAM` to remove vanished names from any raw team packets sent to non-staff.
-
-## [1.1.4] - 2026-02-04
-
-### Added
 - **Plugin Hiding:** "Vanishpp" is now hidden from `/plugins` (or `/pl`) for non-OPs. Administrators see a filtered list with a delayed interactive notification to temporarily unhide or acknowledge the feature.
 - **Strict Command Permissions:** All commands now enforce strict permissions in `plugin.yml`. Unauthorized players cannot see commands in Tab-Complete.
 - **Config Logic:** `vanishMessage`, `unvanishMessage`, `fakeJoinMessage`, and `fakeQuitMessage` logic updated. Setting these to `"false"`, `"none"`, or leaving them empty in `config.yml` now properly disables the message.

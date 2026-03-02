@@ -1,7 +1,5 @@
 package net.thecommandcraft.vanishpp.commands;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -23,9 +21,10 @@ public class VanishListCommand implements CommandExecutor {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         if (!sender.hasPermission("vanishpp.list")) {
-            sender.sendMessage(Component.text(plugin.getConfigManager().noPermissionMessage, NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
             return true;
         }
 
@@ -38,10 +37,10 @@ public class VanishListCommand implements CommandExecutor {
         }
 
         if (names.isEmpty()) {
-            sender.sendMessage(Component.text("There are no vanished players online.", NamedTextColor.YELLOW));
+            plugin.getMessageManager().sendMessage(sender, "<yellow>There are no vanished players online.");
         } else {
-            sender.sendMessage(Component.text("Vanished Players (" + names.size() + "):", NamedTextColor.GOLD));
-            sender.sendMessage(Component.text(String.join(", ", names), NamedTextColor.GRAY));
+            plugin.getMessageManager().sendMessage(sender, "<gold>Vanished Players (" + names.size() + "):");
+            plugin.getMessageManager().sendMessage(sender, "<gray>" + String.join(", ", names));
         }
 
         return true;

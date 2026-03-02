@@ -19,32 +19,34 @@ public class VanishCommand implements CommandExecutor {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
         Player target;
 
         // Case 1: Targeting another player (or Console usage)
         if (args.length > 0) {
             if (!sender.hasPermission("vanishpp.vanish.others")) {
-                sender.sendMessage(Component.text(plugin.getConfigManager().noPermissionMessage, NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
                 return true;
             }
 
             target = Bukkit.getPlayer(args[0]);
             if (target == null) {
-                sender.sendMessage(Component.text(plugin.getConfigManager().playerNotFoundMessage, NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().playerNotFoundMessage);
                 return true;
             }
         }
         // Case 2: Toggling self
         else {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(Component.text("Console must specify a player: /vanish <player>", NamedTextColor.RED));
+                sender.sendMessage(
+                        Component.text("Console must specify a player: /vanish <player>", NamedTextColor.RED));
                 return true;
             }
             target = (Player) sender;
 
             if (!sender.hasPermission("vanishpp.vanish")) {
-                sender.sendMessage(Component.text(plugin.getConfigManager().noPermissionMessage, NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
                 return true;
             }
         }
@@ -62,7 +64,7 @@ public class VanishCommand implements CommandExecutor {
             // Notify executor if they are not the target
             if (!target.equals(executor)) {
                 String msg = plugin.getConfigManager().unvanishedOtherMessage.replace("%player%", target.getName());
-                executor.sendMessage(Component.text(msg, NamedTextColor.GREEN));
+                plugin.getMessageManager().sendMessage(executor, msg);
             }
         } else {
             // Vanish
@@ -71,7 +73,7 @@ public class VanishCommand implements CommandExecutor {
             // Notify executor if they are not the target
             if (!target.equals(executor)) {
                 String msg = plugin.getConfigManager().vanishedOtherMessage.replace("%player%", target.getName());
-                executor.sendMessage(Component.text(msg, NamedTextColor.GREEN));
+                plugin.getMessageManager().sendMessage(executor, msg);
             }
         }
     }
