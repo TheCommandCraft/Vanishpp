@@ -4,9 +4,6 @@
 #                                                               #
 # ------------------------------------------------------------- #
 
-# --- [ SYSTEM ] ---
-# The language to use (e.g., en, de). Lang files are in the 'lang' folder.
-language: en
 
 # Configuration Version (Internal use for migrations)
 config-version: 6

@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: net.thecommandcraft.vanishpp.FeatureTest
 -------------------------------------------------------------------------------
-Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.210 s -- in net.thecommandcraft.vanishpp.FeatureTest
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.859 s -- in net.thecommandcraft.vanishpp.FeatureTest
