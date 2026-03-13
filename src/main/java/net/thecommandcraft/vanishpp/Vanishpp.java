@@ -512,6 +512,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (permissionManager.hasPermission(p, "vanishpp.see"))
                 p.sendMessage(comp);
         }
+        Bukkit.getConsoleSender().sendMessage(comp);
     }
 
     public void updateVanishVisibility(Player subject) {
