@@ -26,7 +26,7 @@ It works perfectly out of the box with zero configuration required, but offers g
 Most plugins just hide you visually. **Vanish++ removes you physically.**
 
 *   **Titan God Mode:** While vanished, you are strictly invincible. You take no damage, are immune to all potion effects, and cannot burn. You are a spectator in survival mode.
-*   **Smart Mob AI (True Sight):** We inject custom AI goals into mobs. They don't just "not target" you—they look right through you. No head tracking, no awkward staring.
+*   **Smart Mob AI (True Sight):** We inject custom AI goals into mobs. They don't just "not target" you—they look right through you. No head tracking, no awkward staring. Mobs that had already locked on to you before you vanished also instantly lose you.
 *   **Projectile Pass-Through:** We don't use "teleport hacks." Using native Paper events, arrows, tridents, and snowballs fly **physically through** your body. It is impossible to hit a vanished player.
 *   **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you. You are a ghost.
 *   **No Physical Triggers:** You can walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration or block update.
@@ -55,6 +55,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Native TAB Plugin Support:** If you use **TAB (by NEZNAMY)**, Vanish++ hooks directly into it to display your vanish prefix automatically. No manual Placeholder configuration required.
 *   **Legacy Plugin Support:** Even without specific hooks, Vanish++ sets standard Bukkit Metadata (`"vanished"`). This means plugins like **CMI**, **TAB**, or custom skripts automatically respect your vanished status.
 *   **Silent Chests:** Open Chests, Shulker Boxes, Barrels, and Ender Chests silently. The lid animation **never plays** for others (utilizes temporary spectator switching).
+*   **DiscordSRV Integration:** Registers as a native vanish hook in DiscordSRV. Join and quit announcements are suppressed on Discord — even if you reconnect while already vanished. Staff notifications still appear in console and for players with the see permission.
 *   **Simple Voice Chat Integration:** Automatically isolates/mutes you in voice chat so you can't be heard or hear proximity chat while stalking.
 *   **Smart Item Pickup:** Toggle item pickup with `/vanishpickup`. Don't accidentally steal the diamonds you are watching a player mine.
 
@@ -148,7 +149,7 @@ Vanish++ is built for modern ecosystems.
 | **Paper**           | ✅ Recommended       | Best performance. Required for full physics/projectile support.    |
 | **Spigot**          | ⚠️ Compatible        | Works, but some advanced physics features may degrade.             |
 | **Purpur**          | ✅ Supported         | Fully compatible.                                                  |
-| **Folia**           | ❓ Untested          | Threading model not officially supported.                          |
+| **Folia**           | ✅ Supported         | Custom regional scheduler bridge included.                         |
 
 **Requirements:**
 *   **Java 21**
@@ -156,7 +157,7 @@ Vanish++ is built for modern ecosystems.
 
 **Optional Hooks:**
 *   **TAB (NEZNAMY)** (Native Support)
-*   PlaceholderAPI, Dynmap, EssentialsX, Simple Voice Chat
+*   PlaceholderAPI, Dynmap, EssentialsX, Simple Voice Chat, DiscordSRV
 
 **Just drop the JAR in your plugins folder.** No complex setup required. It works securely out of the box.
 

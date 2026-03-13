@@ -31,7 +31,9 @@ All notable changes to this project will be documented in this file.
 - **Performance:** Optimized visibility checks and metadata handling for better server performance.
 
 ### Fixed
-- **DiscordSRV Compatibility:** Fixed an issue where vanished players would appear in DiscordSRV join/quit messages.
+- **Mob Targeting on Vanish:** Mobs that had already acquired a player as their target before `/vanish` was used would continue attacking. Fixed by explicitly clearing all matching mob targets within 64 blocks the moment a player vanishes.
+- **DiscordSRV Full Integration:** Vanish++ now registers itself as a native `VanishHook` in DiscordSRV's plugin hook system. DiscordSRV's `PlayerUtil.isVanished()` now recognises our players, suppressing join/quit Discord announcements even when a player rejoins the server with a persisted vanish state. Previously only chat suppression and fake join/quit messages were handled.
+- **Console Staff Notification:** Console was silently excluded from vanish/unvanish staff notifications. It now receives the same message as staff players with `vanishpp.see`.
 - **Fly Mode Logic:** Improved flight persistence on unvanish when configured.
 - **Automated Test Suite:** Fixed outdated assertions in `FeatureTest` and `MigrationTest` to properly account for the new v6 configuration and localized command outputs.
 - **Build Environment:** Resolved Dockerized Maven `PluginResolutionException` errors by purging corrupted cache volumes, ensuring a stable, reproducible build pipeline for the `vanishpp-1.1.4.jar`.
