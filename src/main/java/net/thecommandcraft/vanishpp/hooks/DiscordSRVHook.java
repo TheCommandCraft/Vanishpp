@@ -4,15 +4,17 @@ import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.Subscribe;
 import github.scarsz.discordsrv.api.events.GameChatMessagePreProcessEvent;
 import github.scarsz.discordsrv.dependencies.jda.api.entities.TextChannel;
+import github.scarsz.discordsrv.hooks.vanish.VanishHook;
 import github.scarsz.discordsrv.util.DiscordUtil;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
-public class DiscordSRVHook {
+public class DiscordSRVHook implements VanishHook {
 
     private final Vanishpp plugin;
     private final Set<UUID> confirmedPlayers = new HashSet<>();
@@ -23,11 +25,27 @@ public class DiscordSRVHook {
 
     public void register() {
         DiscordSRV.api.subscribe(this);
-        plugin.getLogger().info("DiscordSRV hook registered for chat suppression.");
+        // Register as a vanish hook so DiscordSRV suppresses join/quit announcements
+        // for vanished players automatically via PlayerUtil.isVanished()
+        DiscordSRV.getPlugin().getPluginHooks().add(this);
+        plugin.getLogger().info("DiscordSRV hook registered.");
     }
 
     public void unregister() {
         DiscordSRV.api.unsubscribe(this);
+        DiscordSRV.getPlugin().getPluginHooks().remove(this);
+    }
+
+    // VanishHook — tells DiscordSRV whether a player is vanished
+    @Override
+    public boolean isVanished(Player player) {
+        return plugin.isVanished(player);
+    }
+
+    // PluginHook
+    @Override
+    public Plugin getPlugin() {
+        return plugin;
     }
 
     /**
