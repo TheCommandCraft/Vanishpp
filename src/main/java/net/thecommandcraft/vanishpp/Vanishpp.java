@@ -11,6 +11,8 @@ import net.thecommandcraft.vanishpp.storage.*;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -372,6 +374,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.setInvisible(true);
         player.setSilent(true);
         player.setCollidable(false);
+
+        // Clear existing mob targets that were already tracking this player before vanish
+        for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
+            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
+                mob.setTarget(null);
+            }
+        }
 
         if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
             player.setAllowFlight(true);
