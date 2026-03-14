@@ -12,6 +12,7 @@ import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
 import net.thecommandcraft.vanishpp.config.RuleManager;
 import net.thecommandcraft.vanishpp.utils.LanguageManager;
+import net.thecommandcraft.vanishpp.utils.StartupChecker;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
@@ -113,12 +114,43 @@ public class PlayerListener implements Listener {
 
             // 4. Setup / Config Sanity Warnings
             if (plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
-                java.util.List<String> warnings = plugin.getStartupWarnings();
+                java.util.List<StartupChecker.Warning> warnings = plugin.getStartupWarnings();
                 if (!warnings.isEmpty()) {
                     player.sendMessage(Component.text("⚠ Vanish++ Setup Issues:", NamedTextColor.RED));
-                    for (String w : warnings) {
+                    for (StartupChecker.Warning w : warnings) {
                         player.sendMessage(Component.text(" • ", NamedTextColor.GOLD)
-                                .append(Component.text(w, NamedTextColor.YELLOW)));
+                                .append(Component.text(w.message, NamedTextColor.YELLOW)));
+                        // Action buttons
+                        boolean hasButtons = false;
+                        Component buttons = Component.text("   ");
+                        if (w.configPath != null) {
+                            hasButtons = true;
+                            buttons = buttons
+                                    .append(Component.text("[Set to " + w.fixValue + "]",
+                                            NamedTextColor.GREEN, TextDecoration.BOLD)
+                                            .clickEvent(ClickEvent.runCommand(
+                                                    "/vconfig " + w.configPath + " " + w.fixValue))
+                                            .hoverEvent(HoverEvent.showText(Component.text(
+                                                    "Sets " + w.configPath + " to " + w.fixValue
+                                                    + " and saves config", NamedTextColor.GRAY))))
+                                    .append(Component.text("  "))
+                                    .append(Component.text("[Reload]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                                            .clickEvent(ClickEvent.runCommand("/vreload"))
+                                            .hoverEvent(HoverEvent.showText(Component.text(
+                                                    "Reload Vanish++ config after fixing", NamedTextColor.GRAY))));
+                        }
+                        if (w.installUrl != null) {
+                            hasButtons = true;
+                            buttons = buttons
+                                    .append(Component.text("[Install Plugin]",
+                                            NamedTextColor.GREEN, TextDecoration.BOLD)
+                                            .clickEvent(ClickEvent.openUrl(w.installUrl))
+                                            .hoverEvent(HoverEvent.showText(Component.text(
+                                                    "Open download page in browser", NamedTextColor.GRAY))));
+                        }
+                        if (hasButtons) {
+                            player.sendMessage(buttons);
+                        }
                     }
                 }
             }
@@ -130,6 +162,14 @@ public class PlayerListener implements Listener {
         if (config.godMode && event.getEntity() instanceof Player player) {
             if (plugin.isVanished(player))
                 event.setCancelled(true);
+        }
+    }
+
+    /** Prevent external velocity (knockback, explosions) from pushing vanished players when god mode is on. */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onVelocity(PlayerVelocityEvent event) {
+        if (config.godMode && plugin.isVanished(event.getPlayer())) {
+            event.setCancelled(true);
         }
     }
 
