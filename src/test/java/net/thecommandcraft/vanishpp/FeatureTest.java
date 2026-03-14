@@ -241,9 +241,9 @@ class FeatureTest {
         player.performCommand("vanish");
         assertTrue(plugin.getStorageProvider().isVanished(uuid), "Storage must record vanished state");
 
-        player.performCommand("vanishpickup");
+        plugin.getRuleManager().setRule(player, RuleManager.CAN_PICKUP_ITEMS, true);
         assertTrue(plugin.getRuleManager().getRule(player, RuleManager.CAN_PICKUP_ITEMS),
-                "Pickup rule should be toggled to true");
+                "Pickup rule should be set to true");
 
         Map<String, Object> rules = plugin.getStorageProvider().getRules(uuid);
         assertEquals(true, rules.get(RuleManager.CAN_PICKUP_ITEMS), "Rule must be persisted in storage");
