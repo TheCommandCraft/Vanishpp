@@ -30,6 +30,7 @@ public class ProtocolLibManager {
 
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         plugin.getLogger().info("Hooked into ProtocolLib.");
+        registerSilentChestListeners();
 
         // 1. Tab Scrubbing (Hiding vanished players from non-staff)
         protocolManager.addPacketListener(
@@ -312,6 +313,45 @@ public class ProtocolLibManager {
                         }
                     }
                 });
+    }
+
+    private void registerSilentChestListeners() {
+        // Suppress BLOCK_ACTION (chest open/close animation, shulker open/close animation)
+        // for non-seers when the block is in the silently-opened set
+        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
+                PacketType.Play.Server.BLOCK_ACTION) {
+            @Override
+            public void onPacketSending(PacketEvent event) {
+                if (event.isCancelled()) return;
+                if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.isEmpty()) return;
+                Player observer = event.getPlayer();
+                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see"))
+                    return;
+                try {
+                    PacketContainer packet = event.getPacket();
+                    BlockPosition pos = packet.getBlockPositionModifier().read(0);
+                    String blockKey = pos.getX() + "," + pos.getY() + "," + pos.getZ();
+                    if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.contains(blockKey))
+                        event.setCancelled(true);
+                } catch (Exception ignored) {}
+            }
+        });
+
+        // Suppress sound effects originating at silently-opened block positions
+        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
+                PacketType.Play.Server.NAMED_SOUND_EFFECT,
+                PacketType.Play.Server.ENTITY_SOUND_EFFECT) {
+            @Override
+            public void onPacketSending(PacketEvent event) {
+                if (event.isCancelled()) return;
+                if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.isEmpty()) return;
+                Player observer = event.getPlayer();
+                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see"))
+                    return;
+                // We can't easily correlate a sound to a specific block without more context,
+                // so we skip sound suppression here — ProtocolLib path at least hides the animation.
+            }
+        });
     }
 
     private Set<String> getVanishedNames() {

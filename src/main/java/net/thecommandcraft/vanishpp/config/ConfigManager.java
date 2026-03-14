@@ -153,11 +153,14 @@ public class ConfigManager {
         staffVanishMessage = languageManager.getMessage("staff.notify-vanish");
         staffUnvanishMessage = languageManager.getMessage("staff.notify-unvanish");
 
-        vanishTabPrefix = languageManager.getMessage("appearance.tab-prefix");
+        vanishTabPrefix = config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] ");
         vanishNametagPrefix = config.getString("vanish-appearance.nametag-prefix", "");
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
         actionBarText = languageManager.getMessage("appearance.action-bar");
-        adjustServerListCount = config.getBoolean("vanish-appearance.adjust-server-list-count");
+        // Support both old key name and new shorter name (Issue #21)
+        adjustServerListCount = config.contains("vanish-appearance.adjust-server-list")
+                ? config.getBoolean("vanish-appearance.adjust-server-list")
+                : config.getBoolean("vanish-appearance.adjust-server-list-count", true);
         vanishedPlayerFormat = languageManager.getMessage("appearance.vanished-player-format");
         hideFromServerList = config.getBoolean("vanish-effects.hide-from-server-list");
         hideRealQuit = config.getBoolean("vanish-effects.hide-real-quit-messages");
