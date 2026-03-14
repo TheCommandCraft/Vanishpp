@@ -74,6 +74,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
     *   *Afraid of leaking info?* Enable "Chat Confirmation".
     *   *Need to drop items?* Enable "Can Drop Items".
 *   **Heartbeat Synchronization:** Changed a permission in LuckPerms? Promoted someone via Console? The **Heartbeat Task** refreshes visuals instantly. No relogging required.
+*   **Setup Advisor:** On every startup, the plugin scans the active config and warns you if a hook is enabled but its dependency is missing, or if a PlaceholderAPI placeholder is used without PlaceholderAPI installed. Warnings are printed to the console *and* shown in-chat to all staff with `vanishpp.see` — so you always know when your setup is incomplete.
 *   **Dependency Warnings:** The plugin intelligently warns admins if ProtocolLib is missing, but allows you to silence these warnings permanently with `/vignore`.
 *   **Accidental Chat Prevention:** If enabled, typing in chat blocks the message and asks you to confirm with `/vchat confirm`. Never leak your presence by accident again.
 *   **Async Data Persistence:** All data is saved asynchronously. Server crash? Restart? Your vanish state is saved instantly. No accidental logins.

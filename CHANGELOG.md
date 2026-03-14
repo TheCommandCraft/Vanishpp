@@ -2,9 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.4] - 2026-03-02
+## [1.1.4] - 2026-03-14
 
 ### Added
+- **Setup Advisor (Config Sanity Checker):** On startup, Vanish++ now scans the active configuration and warns if:
+    - `hooks.simple-voice-chat.enabled` is `true` but SimpleVoiceChat is not installed.
+    - `hooks.essentials.simulate-join-leave` is `true` but EssentialsX is not installed.
+    - Any message string contains a PlaceholderAPI placeholder (`%token%`) but PlaceholderAPI is not installed.
+    - Warnings are printed to the console **and** shown in-chat to all players with `vanishpp.see` on their next login, making it easy to spot setup issues without reading logs.
+- **Comprehensive Automated Test Suite:** 143 unit tests across 6 test classes covering every feature — commands, event listeners, storage, permissions, rules, and integration scenarios. All tests pass on clean build.
 - **Full Localization (i18n):** Complete multi-language support.
     - All messages and system reports moved to `lang/en.yml`.
     - Automatic fallback system for missing keys.

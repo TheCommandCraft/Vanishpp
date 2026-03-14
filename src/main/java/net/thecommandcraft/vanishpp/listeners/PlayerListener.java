@@ -2,6 +2,8 @@ package net.thecommandcraft.vanishpp.listeners;
 
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
@@ -95,6 +97,18 @@ public class PlayerListener implements Listener {
             // 3. Update Check
             if (plugin.getUpdateChecker() != null) {
                 plugin.getUpdateChecker().notifyPlayer(player);
+            }
+
+            // 4. Setup / Config Sanity Warnings
+            if (plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
+                java.util.List<String> warnings = plugin.getStartupWarnings();
+                if (!warnings.isEmpty()) {
+                    player.sendMessage(Component.text("⚠ Vanish++ Setup Issues:", NamedTextColor.RED));
+                    for (String w : warnings) {
+                        player.sendMessage(Component.text(" • ", NamedTextColor.GOLD)
+                                .append(Component.text(w, NamedTextColor.YELLOW)));
+                    }
+                }
             }
         }, 5L);
     }
