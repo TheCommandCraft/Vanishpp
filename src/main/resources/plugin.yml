@@ -4,7 +4,8 @@ main: net.thecommandcraft.vanishpp.Vanishpp
 api-version: '1.21'
 authors: [ tcc ]
 description: The ultimate vanish plugin with anti-detection, hooks, and ProtocolLib support.
-softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB]
+folia-supported: true
+softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB, DiscordSRV]
 
 commands:
   vanish:
