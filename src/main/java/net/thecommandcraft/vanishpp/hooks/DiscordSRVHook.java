@@ -28,7 +28,6 @@ public class DiscordSRVHook implements VanishHook {
         // Register as a vanish hook so DiscordSRV suppresses join/quit announcements
         // for vanished players automatically via PlayerUtil.isVanished()
         DiscordSRV.getPlugin().getPluginHooks().add(this);
-        plugin.getLogger().info("DiscordSRV hook registered.");
     }
 
     public void unregister() {

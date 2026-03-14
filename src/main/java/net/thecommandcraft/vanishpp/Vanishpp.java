@@ -131,6 +131,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null && configManager.voiceChatEnabled) {
             this.voiceChatHook = new VoiceChatHook(this);
             getServer().getPluginManager().registerEvents(voiceChatHook, this);
+            getLogger().info("Hooked into Simple Voice Chat.");
         }
 
         // 6. Init Utils

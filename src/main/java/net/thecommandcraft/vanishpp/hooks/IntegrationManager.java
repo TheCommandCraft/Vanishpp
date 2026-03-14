@@ -43,9 +43,13 @@ public class IntegrationManager {
         }
 
         if (Bukkit.getPluginManager().getPlugin("DiscordSRV") != null) {
-            this.discordSRV = new DiscordSRVHook(plugin);
-            this.discordSRV.register();
-            plugin.getLogger().info("Hooked into DiscordSRV.");
+            try {
+                this.discordSRV = new DiscordSRVHook(plugin);
+                this.discordSRV.register();
+                plugin.getLogger().info("Hooked into DiscordSRV.");
+            } catch (Throwable e) {
+                plugin.getLogger().warning("DiscordSRV found but hook failed to load: " + e.getMessage());
+            }
         }
     }
 
@@ -65,14 +69,6 @@ public class IntegrationManager {
 
         if (dynmap != null) {
             dynmap.assertPlayerInvisibility(player, isVanished, plugin);
-        }
-
-        if (discordSRV != null) {
-            if (isVanished) {
-                discordSRV.sendFakeQuit(player);
-            } else {
-                discordSRV.sendFakeJoin(player);
-            }
         }
     }
 
