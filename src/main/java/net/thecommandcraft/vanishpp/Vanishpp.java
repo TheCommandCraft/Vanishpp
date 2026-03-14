@@ -49,6 +49,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public final Map<UUID, String> pendingChatMessages = new HashMap<>();
     private final Map<UUID, Long> actionBarPausedUntil = new HashMap<>();
     private boolean hasProtocolLib = false;
+    private List<String> startupWarnings = new ArrayList<>();
 
     @Override
     public void onEnable() {
@@ -101,6 +102,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
         } else {
             this.hasProtocolLib = false;
             getLogger().warning("ProtocolLib NOT found! Advanced features (Tab scrubbing) disabled.");
+        }
+
+        // Run config sanity checks after all hooks are resolved
+        this.startupWarnings = new StartupChecker(this).run();
+        for (String w : startupWarnings) {
+            getLogger().warning("[Setup Check] " + w);
         }
 
         setupTeams();
@@ -301,6 +308,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public MessageManager getMessageManager() {
         return messageManager;
+    }
+
+    public List<String> getStartupWarnings() {
+        return startupWarnings;
     }
 
     // --- CORE LOGIC ---
