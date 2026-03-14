@@ -17,6 +17,32 @@ import java.util.regex.Pattern;
  */
 public class StartupChecker {
 
+    /** A single startup warning with optional action metadata for interactive display. */
+    public static class Warning {
+        public final String message;
+        /** Config path to fix, or null if not applicable. */
+        public final String configPath;
+        /** Value to set at configPath, or null if not applicable. */
+        public final String fixValue;
+        /** Plugin download URL to open, or null if not applicable. */
+        public final String installUrl;
+
+        public Warning(String message, String configPath, String fixValue, String installUrl) {
+            this.message = message;
+            this.configPath = configPath;
+            this.fixValue = fixValue;
+            this.installUrl = installUrl;
+        }
+
+        public static Warning configFix(String msg, String path, String value) {
+            return new Warning(msg, path, value, null);
+        }
+
+        public static Warning pluginInstall(String msg, String url) {
+            return new Warning(msg, null, null, url);
+        }
+    }
+
     /**
      * VPP's own internal replacement tokens — these are NOT PlaceholderAPI
      * placeholders and must not trigger the missing-PAPI warning.
@@ -37,11 +63,11 @@ public class StartupChecker {
     }
 
     /**
-     * Runs all checks and returns a list of warning strings (plain-text, no colour
-     * codes). An empty list means no issues were found.
+     * Runs all checks and returns a list of warnings with optional action metadata.
+     * An empty list means no issues were found.
      */
-    public List<String> run() {
-        List<String> warnings = new ArrayList<>();
+    public List<Warning> run() {
+        List<Warning> warnings = new ArrayList<>();
         checkVoiceChat(warnings);
         checkEssentials(warnings);
         checkPapi(warnings);
@@ -52,27 +78,29 @@ public class StartupChecker {
     // Individual checks
     // -------------------------------------------------------------------------
 
-    private void checkVoiceChat(List<String> warnings) {
+    private void checkVoiceChat(List<Warning> warnings) {
         // Plugin registers under "voicechat" (bukkit jar name), fallback to "SimpleVoiceChat"
         if (plugin.getConfigManager().voiceChatEnabled
                 && Bukkit.getPluginManager().getPlugin("voicechat") == null
                 && Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") == null) {
-            warnings.add(
-                    "hooks.simple-voice-chat.enabled is 'true' in config.yml but SimpleVoiceChat is NOT installed. "
-                    + "Voice isolation will not work. Install the plugin or set the option to 'false'.");
+            warnings.add(Warning.configFix(
+                    "hooks.simple-voice-chat.enabled is 'true' but SimpleVoiceChat is NOT installed. "
+                    + "Voice isolation will not work. Set the option to 'false' or install the plugin.",
+                    "hooks.simple-voice-chat.enabled", "false"));
         }
     }
 
-    private void checkEssentials(List<String> warnings) {
+    private void checkEssentials(List<Warning> warnings) {
         if (plugin.getConfigManager().simulateEssentialsMessages
                 && Bukkit.getPluginManager().getPlugin("Essentials") == null) {
-            warnings.add(
-                    "hooks.essentials.simulate-join-leave is 'true' in config.yml but EssentialsX is NOT installed. "
-                    + "This setting has no effect. Install EssentialsX or set the option to 'false'.");
+            warnings.add(Warning.configFix(
+                    "hooks.essentials.simulate-join-leave is 'true' but EssentialsX is NOT installed. "
+                    + "This setting has no effect. Set to 'false' or install EssentialsX.",
+                    "hooks.essentials.simulate-join-leave", "false"));
         }
     }
 
-    private void checkPapi(List<String> warnings) {
+    private void checkPapi(List<Warning> warnings) {
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
             return; // PAPI present — placeholders will work fine
         }
@@ -95,10 +123,10 @@ public class StartupChecker {
             while (m.find()) {
                 String token = m.group(1);
                 if (!VPP_INTERNAL_TOKENS.contains(token)) {
-                    warnings.add(
-                            "A config/message string contains a PlaceholderAPI placeholder '%" + token + "%' "
-                            + "but PlaceholderAPI is NOT installed. The placeholder will appear as raw text. "
-                            + "Install PlaceholderAPI or remove the placeholder from your messages.");
+                    warnings.add(Warning.pluginInstall(
+                            "A config string contains a PlaceholderAPI placeholder '%" + token + "%' "
+                            + "but PlaceholderAPI is NOT installed. It will appear as raw text.",
+                            "https://modrinth.com/plugin/placeholderapi"));
                     return; // one warning for PAPI is enough
                 }
             }

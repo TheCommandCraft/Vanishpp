@@ -49,7 +49,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public final Map<UUID, String> pendingChatMessages = new HashMap<>();
     private final Map<UUID, Long> actionBarPausedUntil = new HashMap<>();
     private boolean hasProtocolLib = false;
-    private List<String> startupWarnings = new ArrayList<>();
+    private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
     /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
      *  Key format: "x,y,z" */
     public final Set<String> silentlyOpenedBlocks = new HashSet<>();
@@ -109,8 +109,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // Run config sanity checks after all hooks are resolved
         this.startupWarnings = new StartupChecker(this).run();
-        for (String w : startupWarnings) {
-            getLogger().warning("[Setup Check] " + w);
+        for (StartupChecker.Warning w : startupWarnings) {
+            getLogger().warning("[Setup Check] " + w.message);
         }
 
         setupTeams();
@@ -314,7 +314,7 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
         return messageManager;
     }
 
-    public List<String> getStartupWarnings() {
+    public List<StartupChecker.Warning> getStartupWarnings() {
         return startupWarnings;
     }
 
