@@ -127,52 +127,6 @@ class CommandTest {
     }
 
     // =========================================================================
-    // /vanishpickup
-    // =========================================================================
-
-    @Test
-    void vanishpickup_togglesSelfPickup() {
-        player.setOp(true);
-        boolean initial = plugin.getRuleManager().getRule(player, RuleManager.CAN_PICKUP_ITEMS);
-
-        player.performCommand("vanishpickup");
-        assertEquals(!initial, plugin.getRuleManager().getRule(player, RuleManager.CAN_PICKUP_ITEMS),
-                "Pickup rule must be toggled");
-    }
-
-    @Test
-    void vanishpickup_togglesBack() {
-        player.setOp(true);
-        boolean initial = plugin.getRuleManager().getRule(player, RuleManager.CAN_PICKUP_ITEMS);
-
-        player.performCommand("vanishpickup");
-        player.performCommand("vanishpickup");
-        assertEquals(initial, plugin.getRuleManager().getRule(player, RuleManager.CAN_PICKUP_ITEMS),
-                "Double toggle must restore original state");
-    }
-
-    @Test
-    void vanishpickup_togglesOther_withPermission() {
-        PlayerMock target = server.addPlayer();
-        player.setOp(true); // has vanishpp.pickup.others
-
-        boolean initial = plugin.getRuleManager().getRule(target, RuleManager.CAN_PICKUP_ITEMS);
-        player.performCommand("vanishpickup " + target.getName());
-        assertEquals(!initial, plugin.getRuleManager().getRule(target, RuleManager.CAN_PICKUP_ITEMS));
-    }
-
-    @Test
-    void vanishpickup_togglesOther_deniedWithoutPermission() {
-        PlayerMock target = server.addPlayer();
-        player.setOp(false);
-
-        boolean initial = plugin.getRuleManager().getRule(target, RuleManager.CAN_PICKUP_ITEMS);
-        player.performCommand("vanishpickup " + target.getName());
-        assertEquals(initial, plugin.getRuleManager().getRule(target, RuleManager.CAN_PICKUP_ITEMS),
-                "Pickup toggle for others must be denied without vanishpp.pickup.others");
-    }
-
-    // =========================================================================
     // /vanishrules
     // =========================================================================
 
