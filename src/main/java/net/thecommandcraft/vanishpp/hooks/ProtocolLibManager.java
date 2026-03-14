@@ -180,9 +180,8 @@ public class ProtocolLibManager {
         // 3. Tab List & Info Filtering logic removed because native hidePlayer()
         // handles it correctly.
 
-        // 4. Ghost-Proof Spawning (Hiding SPAWN_ENTITY / NAMED_ENTITY_SPAWN)
+        // 4. Ghost-Proof Spawning (Hiding SPAWN_ENTITY — NAMED_ENTITY_SPAWN removed in 1.21)
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
-                PacketType.Play.Server.NAMED_ENTITY_SPAWN,
                 PacketType.Play.Server.SPAWN_ENTITY) {
             @Override
             public void onPacketSending(PacketEvent event) {
