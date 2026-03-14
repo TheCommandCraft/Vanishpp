@@ -135,7 +135,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
             getLogger().warning("Could not register Mob AI Manager: " + e.getMessage());
         }
 
-        if (Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null && configManager.voiceChatEnabled) {
+        boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
+                || Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null;
+        if (hasVoiceChat && configManager.voiceChatEnabled) {
             this.voiceChatHook = new VoiceChatHook(this);
             getServer().getPluginManager().registerEvents(voiceChatHook, this);
             getLogger().info("Hooked into Simple Voice Chat.");

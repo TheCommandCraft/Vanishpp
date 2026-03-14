@@ -53,7 +53,9 @@ public class StartupChecker {
     // -------------------------------------------------------------------------
 
     private void checkVoiceChat(List<String> warnings) {
+        // Plugin registers under "voicechat" (bukkit jar name), fallback to "SimpleVoiceChat"
         if (plugin.getConfigManager().voiceChatEnabled
+                && Bukkit.getPluginManager().getPlugin("voicechat") == null
                 && Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") == null) {
             warnings.add(
                     "hooks.simple-voice-chat.enabled is 'true' in config.yml but SimpleVoiceChat is NOT installed. "
