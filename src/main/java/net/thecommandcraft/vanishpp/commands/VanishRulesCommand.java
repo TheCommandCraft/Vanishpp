@@ -50,8 +50,14 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
         } else {
             target = Bukkit.getPlayer(firstArg);
             if (target == null) {
-                plugin.getMessageManager().sendMessage(sender,
-                        plugin.getConfigManager().getLanguageManager().getMessage("rules.not-found"));
+                // If it looks like a rule attempt (args[1] is true/false), give a better error
+                if (args.length > 1 && (args[1].equalsIgnoreCase("true") || args[1].equalsIgnoreCase("false"))) {
+                    plugin.getMessageManager().sendMessage(sender,
+                            plugin.getConfigManager().getLanguageManager().getMessage("rules.invalid-name"));
+                } else {
+                    plugin.getMessageManager().sendMessage(sender,
+                            plugin.getConfigManager().getLanguageManager().getMessage("player-not-found"));
+                }
                 return true;
             }
             if (!sender.hasPermission("vanishpp.rules.others")) {
@@ -82,12 +88,16 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
         // Handle ALL / NONE
         if (rule.equals("all") || rule.equals("none")) {
             boolean value = rule.equals("all");
-            if (args.length > argOffset + 1) {
-                String valStr = args[argOffset + 1].toLowerCase();
-                if (valStr.equals("true"))
-                    value = true;
-                else if (valStr.equals("false"))
-                    value = false;
+            int nextIdx = argOffset + 1;
+            if (args.length > nextIdx) {
+                String valStr = args[nextIdx].toLowerCase();
+                if (valStr.equals("true")) { value = true; nextIdx++; }
+                else if (valStr.equals("false")) { value = false; nextIdx++; }
+            }
+            // Allow trailing player name: /vrules all true <player>
+            if (args.length > nextIdx && sender.hasPermission("vanishpp.rules.others")) {
+                Player namedTarget = Bukkit.getPlayer(args[nextIdx]);
+                if (namedTarget != null) target = namedTarget;
             }
             rules.setAllRules(target, value);
             if (plugin.isVanished(target))

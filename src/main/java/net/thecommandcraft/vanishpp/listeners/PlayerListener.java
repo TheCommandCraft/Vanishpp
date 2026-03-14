@@ -3,7 +3,10 @@ package net.thecommandcraft.vanishpp.listeners;
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
@@ -58,6 +61,15 @@ public class PlayerListener implements Listener {
             plugin.updateVanishVisibility(player);
             if (config.hideRealJoin)
                 event.joinMessage(null);
+            // Notify staff that a vanished player silently joined
+            String joinMsg = config.getLanguageManager().getMessage("staff.silent-join")
+                    .replace("%player%", player.getName());
+            Component joinComp = plugin.getMessageManager().parse(joinMsg, player);
+            for (Player staff : Bukkit.getOnlinePlayers()) {
+                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see"))
+                    staff.sendMessage(joinComp);
+            }
+            Bukkit.getConsoleSender().sendMessage(joinComp);
         }
 
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
@@ -132,12 +144,22 @@ public class PlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onQuit(PlayerQuitEvent event) {
-        UUID uuid = event.getPlayer().getUniqueId();
-        if (plugin.isVanished(event.getPlayer())) {
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
             silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
+            // Notify staff that a vanished player silently left
+            String quitMsg = config.getLanguageManager().getMessage("staff.silent-quit")
+                    .replace("%player%", player.getName());
+            Component quitComp = plugin.getMessageManager().parse(quitMsg, player);
+            for (Player staff : Bukkit.getOnlinePlayers()) {
+                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see"))
+                    staff.sendMessage(quitComp);
+            }
+            Bukkit.getConsoleSender().sendMessage(quitComp);
         }
         ruleNotificationCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
@@ -149,6 +171,8 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(player)) {
             if (player.hasMetadata("vanishpp_chat_bypass")) {
                 player.removeMetadata("vanishpp_chat_bypass", plugin);
+                // Still allow, but restrict to seers with prefix
+                applyVanishChatFilter(event, player);
                 return;
             }
             if (!rules.getRule(player, RuleManager.CAN_CHAT)) {
@@ -159,8 +183,23 @@ public class PlayerListener implements Listener {
 
                 String message = config.getLanguageManager().getMessage("chat.locked");
                 plugin.getMessageManager().sendMessage(player, message);
+                return;
             }
+            // CAN_CHAT is true — show only to seers with [Vanished] prefix
+            applyVanishChatFilter(event, player);
         }
+    }
+
+    private void applyVanishChatFilter(AsyncChatEvent event, Player player) {
+        // Remove non-seers from audience
+        event.viewers().removeIf(viewer ->
+            viewer instanceof Player obs && !plugin.getPermissionManager().hasPermission(obs, "vanishpp.see")
+        );
+        // Add [Vanished] prefix for seers
+        Component prefix = plugin.getMessageManager().parse(config.vanishTabPrefix, player);
+        event.renderer((source, displayName, message, audience) ->
+            prefix.append(displayName).append(Component.text(": ")).append(message)
+        );
     }
 
     @EventHandler
@@ -255,9 +294,12 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onMobTarget(EntityTargetLivingEntityEvent event) {
         if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
-            event.setCancelled(true);
-            if (event.getEntity() instanceof org.bukkit.entity.Mob mob)
-                mob.setTarget(null);
+            // Only cancel targeting if mob_targeting rule is OFF (false = mobs ignore vanished player)
+            if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
+                event.setCancelled(true);
+                if (event.getEntity() instanceof org.bukkit.entity.Mob mob)
+                    mob.setTarget(null);
+            }
         }
     }
 
@@ -307,8 +349,28 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void onBedEnter(PlayerBedEnterEvent event) {
-        if (config.preventSleeping && plugin.isVanished(event.getPlayer()))
+        Player p = event.getPlayer();
+        if (!plugin.isVanished(p)) return;
+        if (config.preventSleeping || !rules.getRule(p, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
+            if (!rules.getRule(p, RuleManager.CAN_INTERACT))
+                sendRuleDeny(p, RuleManager.CAN_INTERACT, "sleeping");
+        }
+    }
+
+    @EventHandler
+    public void onMount(org.bukkit.event.entity.EntityMountEvent event) {
+        if (event.getEntity() instanceof Player p && plugin.isVanished(p)
+                && !rules.getRule(p, RuleManager.CAN_INTERACT)) {
+            event.setCancelled(true);
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "mounting");
+        }
+    }
+
+    @EventHandler
+    public void onAdvancement(org.bukkit.event.player.PlayerAdvancementDoneEvent event) {
+        if (plugin.isVanished(event.getPlayer()))
+            event.message(null);
     }
 
     @EventHandler
@@ -334,21 +396,47 @@ public class PlayerListener implements Listener {
         if (block == null)
             return;
         Material type = block.getType();
-        if (type == Material.CHEST || type == Material.TRAPPED_CHEST || type == Material.BARREL
-                || type.name().endsWith("SHULKER_BOX")) {
-            event.setCancelled(true);
+        boolean isContainer = type == Material.CHEST || type == Material.TRAPPED_CHEST || type == Material.BARREL
+                || type.name().endsWith("SHULKER_BOX") || type == Material.ENDER_CHEST;
+        if (!isContainer) return;
+
+        event.setCancelled(true);
+
+        if (plugin.hasProtocolLib()) {
+            // ProtocolLib available: suppress block action/sound packets, open normally
+            String blockKey = block.getX() + "," + block.getY() + "," + block.getZ();
+            plugin.silentlyOpenedBlocks.add(blockKey);
+            Inventory inv = (type == Material.ENDER_CHEST) ? player.getEnderChest()
+                    : (block.getState() instanceof Container c ? c.getInventory() : null);
+            if (inv != null) {
+                silentChestViewers.put(player.getUniqueId(), player.getGameMode()); // track for close event
+                player.openInventory(inv);
+            } else {
+                plugin.silentlyOpenedBlocks.remove(blockKey);
+            }
+        } else {
+            // No ProtocolLib: use spectator mode fallback, warn player
             GameMode original = player.getGameMode();
             if (original != GameMode.SPECTATOR) {
                 silentChestViewers.put(player.getUniqueId(), original);
                 player.setGameMode(GameMode.SPECTATOR);
             }
-            Inventory inv = (block.getState() instanceof Container c) ? c.getInventory()
-                    : (type == Material.ENDER_CHEST ? player.getEnderChest() : null);
-            if (inv != null)
+            Inventory inv = (type == Material.ENDER_CHEST) ? player.getEnderChest()
+                    : (block.getState() instanceof Container c ? c.getInventory() : null);
+            if (inv != null) {
                 player.openInventory(inv);
-            else {
-                if (original != GameMode.SPECTATOR)
-                    player.setGameMode(original);
+                // Show install link for better experience
+                net.kyori.adventure.text.Component msg = net.kyori.adventure.text.Component
+                        .text("⚠ Install ", NamedTextColor.YELLOW)
+                        .append(net.kyori.adventure.text.Component.text("[ProtocolLib]", NamedTextColor.AQUA,
+                                TextDecoration.UNDERLINED)
+                                .clickEvent(ClickEvent.openUrl("https://www.spigotmc.org/resources/protocollib.1997/"))
+                                .hoverEvent(HoverEvent.showText(net.kyori.adventure.text.Component.text(
+                                        "Click to open SpigotMC download page", NamedTextColor.GRAY))))
+                        .append(net.kyori.adventure.text.Component.text(" to move items in silent chests.", NamedTextColor.YELLOW));
+                player.sendMessage(msg);
+            } else {
+                if (original != GameMode.SPECTATOR) player.setGameMode(original);
                 silentChestViewers.remove(player.getUniqueId());
             }
         }
@@ -360,14 +448,32 @@ public class PlayerListener implements Listener {
             Player p = (Player) event.getPlayer();
             GameMode gm = silentChestViewers.remove(p.getUniqueId());
             if (p.isOnline()) {
-                p.setGameMode(gm);
-                if (config.enableFly && gm != GameMode.CREATIVE && gm != GameMode.SPECTATOR && plugin.isVanished(p)) {
-                    p.setAllowFlight(true);
-                    p.setFlying(true);
+                // Restore game mode only if we switched to spectator (ProtocolLib path keeps original game mode)
+                if (gm != GameMode.SPECTATOR && p.getGameMode() == GameMode.SPECTATOR) {
+                    p.setGameMode(gm);
+                    if (config.enableFly && gm != GameMode.CREATIVE && plugin.isVanished(p)) {
+                        p.setAllowFlight(true);
+                        p.setFlying(true);
+                    }
                 }
             }
         }
+        // Clean up any silently opened block (ProtocolLib path)
+        // Find the block key by checking nearby blocks — InventoryCloseEvent doesn't give block info
+        // We rely on the block being cleaned up when tracked in handleSilentChest.
+        // Remove all keys that are no longer tracked by any open viewer.
+        if (!plugin.hasProtocolLib()) return;
+        // For ProtocolLib path: remove block tracking when no viewer is watching it
+        // (A simpler approach: clear when the specific viewer closes)
+        // We store block key per viewer by tracking in silentChestViewers key
+        // Since we can't easily get the block from InventoryCloseEvent, we clear all
+        // silently tracked blocks when no viewers remain — safe enough for now
+        if (silentChestViewers.isEmpty()) {
+            plugin.silentlyOpenedBlocks.clear();
+        }
     }
+
+    private static final long RULE_NOTIFY_COOLDOWN_MS = 3000;
 
     private void sendRuleDeny(Player p, String ruleName, String actionName) {
         LanguageManager lm = config.getLanguageManager();
@@ -379,12 +485,24 @@ public class PlayerListener implements Listener {
         UUID uuid = p.getUniqueId();
         long now = System.currentTimeMillis();
         Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
+        // Enforce cooldown — don't spam the same message more than once per 3 seconds
+        if (now - playerCooldowns.getOrDefault(ruleName, 0L) < RULE_NOTIFY_COOLDOWN_MS)
+            return;
         playerCooldowns.put(ruleName, now);
 
         String message = lm.getMessage("warnings.vanish-blocked")
                 .replace("%action%", actionName)
                 .replace("%rule%", ruleName);
         plugin.getMessageManager().sendMessage(p, message);
+
+        // Interactive buttons: [Allow 1m] and [Allow permanently]
+        Component allow1m = Component.text("[Allow 1m]", NamedTextColor.GREEN, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
+                .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' for 60 seconds", NamedTextColor.GRAY)));
+        Component allowPerm = Component.text("[Allow permanently]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
+                .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' permanently", NamedTextColor.GRAY)));
+        p.sendMessage(allow1m.append(Component.text("  ")).append(allowPerm));
 
         if (!hasSeenDisableTip.contains(uuid)) {
             hasSeenDisableTip.add(uuid);

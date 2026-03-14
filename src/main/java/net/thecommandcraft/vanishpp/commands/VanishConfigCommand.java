@@ -35,13 +35,13 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
         }
 
         String path = args[0];
-        if (!plugin.getConfig().contains(path)) {
+        if (!plugin.getConfigManager().getConfig().contains(path)) {
             plugin.getMessageManager().sendMessage(sender, "<red>Invalid config path!");
             return true;
         }
 
         if (args.length == 1) {
-            Object val = plugin.getConfig().get(path);
+            Object val = plugin.getConfigManager().getConfig().get(path);
             plugin.getMessageManager().sendMessage(sender, "<gold>" + path + " is currently: <white>" + val.toString());
             return true;
         }
@@ -67,7 +67,7 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
-            List<String> keys = new ArrayList<>(plugin.getConfig().getKeys(true));
+            List<String> keys = new ArrayList<>(plugin.getConfigManager().getConfig().getKeys(true));
             keys.removeIf(k -> k.equals("config-version") || k.startsWith("data"));
             return StringUtil.copyPartialMatches(args[0], keys, new ArrayList<>());
         }

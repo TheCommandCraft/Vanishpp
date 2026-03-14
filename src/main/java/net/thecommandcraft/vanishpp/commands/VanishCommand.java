@@ -7,10 +7,16 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.util.StringUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-public class VanishCommand implements CommandExecutor {
+import java.util.ArrayList;
+import java.util.List;
+
+public class VanishCommand implements CommandExecutor, TabCompleter {
 
     private final Vanishpp plugin;
 
@@ -46,7 +52,8 @@ public class VanishCommand implements CommandExecutor {
             target = (Player) sender;
 
             if (!sender.hasPermission("vanishpp.vanish")) {
-                plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
+                // Stay stealthy — pretend the command doesn't exist
+                sender.sendMessage(Component.text("Unknown command. Type \"/help\" for help.", NamedTextColor.RED));
                 return true;
             }
         }
@@ -54,6 +61,17 @@ public class VanishCommand implements CommandExecutor {
         // Toggle Logic
         toggleVanish(target, sender);
         return true;
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+            @NotNull String label, @NotNull String[] args) {
+        if (args.length == 1 && sender.hasPermission("vanishpp.vanish.others")) {
+            List<String> names = new ArrayList<>();
+            for (Player p : Bukkit.getOnlinePlayers()) names.add(p.getName());
+            return StringUtil.copyPartialMatches(args[0], names, new ArrayList<>());
+        }
+        return new ArrayList<>();
     }
 
     private void toggleVanish(Player target, CommandSender executor) {

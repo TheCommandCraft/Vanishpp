@@ -27,11 +27,6 @@ commands:
     usage: /vanishchat confirm
     permission: vanishpp.chat
     aliases: [ vchat ]
-  vanishpickup:
-    description: Toggles item pickup while vanished.
-    usage: /vanishpickup [player]
-    permission: vanishpp.pickup
-    aliases: [ vpickup, tipu ]
   vanishignore:
     description: Toggles the ProtocolLib missing warning on join.
     usage: /vanishignore [player]
@@ -91,6 +86,7 @@ permissions:
       vanishpp.config: true
       vanishpp.update: true
       vanishpp.reload: true
+      vanishpp.help: true
 
   vanishpp.vanish:
     description: Allows a player to vanish themselves.
@@ -151,4 +147,19 @@ permissions:
     default: op
   vanishpp.help:
     description: Allows using the help menu.
+    default: op
+  vanishpp.reload:
+    description: Allows using /vreload.
+    default: op
+  vanishpp.no-raid:
+    description: Prevents triggering raids while vanished.
+    default: op
+  vanishpp.no-sculk:
+    description: Prevents activating sculk sensors while vanished.
+    default: op
+  vanishpp.no-trample:
+    description: Prevents trampling farmland while vanished.
+    default: op
+  vanishpp.join-vanished:
+    description: Allows joining the server already vanished.
     default: op

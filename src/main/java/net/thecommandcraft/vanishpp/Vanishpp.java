@@ -50,6 +50,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private final Map<UUID, Long> actionBarPausedUntil = new HashMap<>();
     private boolean hasProtocolLib = false;
     private List<String> startupWarnings = new ArrayList<>();
+    /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
+     *  Key format: "x,y,z" */
+    public final Set<String> silentlyOpenedBlocks = new HashSet<>();
 
     @Override
     public void onEnable() {
@@ -117,8 +120,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         this.getCommand("vperms").setExecutor(new VpermsCommand(this));
         this.getCommand("vanishrules").setExecutor(new VanishRulesCommand(this));
         this.getCommand("vanishchat").setExecutor(new VanishChatCommand(this));
-        this.getCommand("vanishpickup").setExecutor(new VanishPickupCommand(this));
-        this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
+this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
         this.getCommand("vanishlist").setExecutor(new VanishListCommand(this));
         this.getCommand("vanishhelp").setExecutor(new VanishHelpCommand(this));
         this.getCommand("vanishconfig").setExecutor(new VanishConfigCommand(this));
@@ -323,15 +325,24 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (this.vanishTeam == null)
             this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
 
-        vanishTeam.prefix(Component.empty());
+        refreshTeamPrefix();
         vanishTeam.setCanSeeFriendlyInvisibles(true);
         vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
     }
 
+    public void refreshTeamPrefix() {
+        if (vanishTeam == null) return;
+        String raw = configManager.vanishNametagPrefix;
+        if (raw != null && !raw.isEmpty()) {
+            vanishTeam.prefix(messageManager.parse(raw, null));
+        } else {
+            vanishTeam.prefix(Component.empty());
+        }
+    }
+
     private void startActionBarTask() {
-        if (!configManager.actionBarEnabled)
-            return;
         vanishScheduler.runTimerGlobal(() -> {
+            if (!configManager.actionBarEnabled) return;
             long now = System.currentTimeMillis();
             for (UUID uuid : vanishedPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
@@ -385,18 +396,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
-        player.setInvisible(true);
-        player.setSilent(true);
         player.setCollidable(false);
 
-        // Clear existing mob targets that were already tracking this player before vanish
-        for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
-            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                mob.setTarget(null);
+        // Clear existing mob targets only if mob_targeting rule is OFF
+        if (!ruleManager.getRule(player, RuleManager.MOB_TARGETING)) {
+            for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
+                if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
+                    mob.setTarget(null);
+                }
             }
         }
 
         if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
+            // Store pre-vanish fly state so we can restore it exactly on unvanish
+            player.setMetadata("vanishpp_pre_vanish_fly",
+                    new FixedMetadataValue(this, player.getAllowFlight()));
             player.setAllowFlight(true);
             player.setFlying(true);
         }
@@ -429,22 +443,19 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (vanishTeam.hasEntry(player.getName()))
             vanishTeam.removeEntry(player.getName());
 
-        player.setInvisible(false);
-        player.setSilent(false);
         player.setCollidable(true);
 
         if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION))
             player.removePotionEffect(PotionEffectType.NIGHT_VISION);
         if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
                 && player.getGameMode() != GameMode.SPECTATOR) {
-
-            // Fix for Issue #3: Preserve fly if they have permission via ranks/Essentials
-            boolean hasFlyPerm = player.hasPermission("essentials.fly") || player.hasPermission("bukkit.command.fly");
-            if (!hasFlyPerm) {
-                player.setAllowFlight(false);
-                player.setFlying(false);
-            }
+            // Restore exactly the fly state that existed before vanish
+            boolean hadFly = player.hasMetadata("vanishpp_pre_vanish_fly")
+                    && (boolean) player.getMetadata("vanishpp_pre_vanish_fly").get(0).value();
+            player.setAllowFlight(hadFly);
+            if (!hadFly) player.setFlying(false);
         }
+        player.removeMetadata("vanishpp_pre_vanish_fly", this);
 
         if (voiceChatHook != null)
             voiceChatHook.updateVanishState(player, false);
@@ -461,14 +472,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void vanishPlayer(Player player, CommandSender executor) {
         applyVanishEffects(player);
         if (isValidMessage(configManager.vanishMessage)) {
-            player.sendMessage(Component.text(configManager.vanishMessage));
+            player.sendMessage(messageManager.parse(configManager.vanishMessage, player));
         }
         if (configManager.broadcastFakeQuit) {
             String fakeMsg = configManager.fakeQuitMessage;
             if (isValidMessage(fakeMsg)) {
                 String finalMsg = fakeMsg.replace("%player%", player.getName())
                         .replace("%displayname%", player.getDisplayName());
-                broadcastToUnaware(Component.text(finalMsg), player);
+                broadcastToUnaware(messageManager.parse(finalMsg, player), player);
             } else {
                 broadcastToUnaware(
                         Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()),
@@ -488,7 +499,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (isValidMessage(fakeMsg)) {
                 String finalMsg = fakeMsg.replace("%player%", player.getName())
                         .replace("%displayname%", player.getDisplayName());
-                broadcastToUnaware(Component.text(finalMsg), player);
+                broadcastToUnaware(messageManager.parse(finalMsg, player), player);
             } else {
                 broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW,
                         player.displayName()), player);
@@ -500,7 +511,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         removeVanishEffects(player);
         if (isValidMessage(configManager.unvanishMessage)) {
-            player.sendMessage(Component.text(configManager.unvanishMessage));
+            player.sendMessage(messageManager.parse(configManager.unvanishMessage, player));
         }
         notifyStaff(player, executor, false);
     }
@@ -521,7 +532,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             return;
         String template = isVanishing ? configManager.staffVanishMessage : configManager.staffUnvanishMessage;
         String notification = template.replace("%player%", subject.getName()).replace("%staff%", executor.getName());
-        Component comp = Component.text(notification);
+        Component comp = messageManager.parse(notification, subject);
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (permissionManager.hasPermission(p, "vanishpp.see"))
                 p.sendMessage(comp);

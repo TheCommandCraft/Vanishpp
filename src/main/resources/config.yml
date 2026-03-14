@@ -29,8 +29,8 @@ vanish-appearance:
   tab-prefix: "&7[VANISHED] "
 
   # Prefix shown above the player's head (via Scoreboard Teams).
-  # Note: This is only visible to those who can see the vanished player.
-  nametag-prefix: ""
+  # Visible to players with vanishpp.see who have the vanished player shown to them.
+  nametag-prefix: "&7[V] "
 
   # Action Bar announcement while vanished.
   action-bar:
@@ -40,7 +40,7 @@ vanish-appearance:
     text: "&bYou are currently VANISHED"
 
   # Whether to hide vanished players from the server's online player count.
-  adjust-server-list-count: true
+  adjust-server-list: true
 
 # --- [ FLIGHT MANAGEMENT ] ---
 # Configuration for flight behavior relating to vanish status.

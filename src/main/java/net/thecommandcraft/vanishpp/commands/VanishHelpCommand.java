@@ -48,6 +48,10 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
 
             if (showDetailedHelp(sender, sub))
                 return true;
+
+            // Unknown sub-command — acknowledge it before showing the list
+            plugin.getMessageManager().sendMessage(sender,
+                    "<red>Unknown command '<white>" + args[0] + "<red>'. Showing full list:");
         }
 
         plugin.getMessageManager().sendMessage(sender, "\n<gold><bold>      Vanish++ Help Menu      ");
@@ -100,9 +104,14 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private static final List<String> KNOWN_COMMANDS = List.of(
+            "vanish", "vrules", "vconfig", "vlist", "vperms", "vignore", "vhelp", "vreload", "vack");
+
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
-        return new ArrayList<>(); // Basic help doesn't need completion currently
+        if (args.length == 1)
+            return StringUtil.copyPartialMatches(args[0], KNOWN_COMMANDS, new ArrayList<>());
+        return new ArrayList<>();
     }
 }
