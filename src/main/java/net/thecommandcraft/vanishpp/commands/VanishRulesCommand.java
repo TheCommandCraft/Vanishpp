@@ -172,6 +172,9 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
         RuleManager rules = plugin.getRuleManager();
+        List<String> booleans = List.of("true", "false");
+        List<String> durations = List.of("30", "60", "120", "300", "600");
+
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             for (Player p : Bukkit.getOnlinePlayers())
@@ -181,6 +184,52 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             completions.add("none");
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }
+
+        String arg0 = args[0].toLowerCase();
+        boolean arg0IsPlayer = Bukkit.getPlayer(arg0) != null;
+        boolean arg0IsRule = rules.getAvailableRules().contains(arg0);
+        boolean arg0IsAllNone = arg0.equals("all") || arg0.equals("none");
+
+        if (args.length == 2) {
+            if (arg0IsPlayer) {
+                List<String> completions = new ArrayList<>(rules.getAvailableRules());
+                completions.add("all");
+                completions.add("none");
+                return StringUtil.copyPartialMatches(args[1], completions, new ArrayList<>());
+            } else if (arg0IsRule || arg0IsAllNone) {
+                return StringUtil.copyPartialMatches(args[1], new ArrayList<>(booleans), new ArrayList<>());
+            }
+        }
+
+        if (args.length == 3) {
+            String arg1 = args[1].toLowerCase();
+            boolean arg1IsRuleOrAllNone = rules.getAvailableRules().contains(arg1)
+                    || arg1.equals("all") || arg1.equals("none");
+            boolean arg1IsBool = arg1.equals("true") || arg1.equals("false");
+
+            if (arg0IsPlayer && arg1IsRuleOrAllNone) {
+                return StringUtil.copyPartialMatches(args[2], new ArrayList<>(booleans), new ArrayList<>());
+            } else if ((arg0IsRule || arg0IsAllNone) && arg1IsBool) {
+                List<String> completions = new ArrayList<>(durations);
+                if (arg0IsAllNone && sender.hasPermission("vanishpp.rules.others")) {
+                    for (Player p : Bukkit.getOnlinePlayers())
+                        completions.add(p.getName());
+                }
+                return StringUtil.copyPartialMatches(args[2], completions, new ArrayList<>());
+            }
+        }
+
+        if (args.length == 4) {
+            String arg1 = args[1].toLowerCase();
+            String arg2 = args[2].toLowerCase();
+            boolean arg1IsRuleOrAllNone = rules.getAvailableRules().contains(arg1)
+                    || arg1.equals("all") || arg1.equals("none");
+            boolean arg2IsBool = arg2.equals("true") || arg2.equals("false");
+            if (arg0IsPlayer && arg1IsRuleOrAllNone && arg2IsBool) {
+                return StringUtil.copyPartialMatches(args[3], new ArrayList<>(durations), new ArrayList<>());
+            }
+        }
+
         return new ArrayList<>();
     }
 }

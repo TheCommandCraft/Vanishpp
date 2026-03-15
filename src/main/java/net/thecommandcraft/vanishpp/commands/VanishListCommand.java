@@ -36,10 +36,12 @@ public class VanishListCommand implements CommandExecutor {
             }
         }
 
+        var lm = plugin.getConfigManager().getLanguageManager();
         if (names.isEmpty()) {
-            plugin.getMessageManager().sendMessage(sender, "<yellow>There are no vanished players online.");
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("config.no-vanished-online"));
         } else {
-            plugin.getMessageManager().sendMessage(sender, "<gold>Vanished Players (" + names.size() + "):");
+            plugin.getMessageManager().sendMessage(sender,
+                    lm.getMessage("config.vanished-list-header").replace("%count%", String.valueOf(names.size())));
             plugin.getMessageManager().sendMessage(sender, "<gray>" + String.join(", ", names));
         }
 
