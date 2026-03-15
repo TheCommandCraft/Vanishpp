@@ -337,10 +337,11 @@ public class ProtocolLibManager {
             }
         });
 
-        // Suppress sound effects originating at silently-opened block positions
+        // Suppress sound effects originating at silently-opened block positions.
+        // NAMED_SOUND_EFFECT sends XYZ as fixed-point ints (actual coord * 8).
+        // Dividing by 8 (>> 3) gives the block coordinate to match against tracked blocks.
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
-                PacketType.Play.Server.NAMED_SOUND_EFFECT,
-                PacketType.Play.Server.ENTITY_SOUND_EFFECT) {
+                PacketType.Play.Server.NAMED_SOUND_EFFECT) {
             @Override
             public void onPacketSending(PacketEvent event) {
                 if (event.isCancelled()) return;
@@ -348,8 +349,16 @@ public class ProtocolLibManager {
                 Player observer = event.getPlayer();
                 if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see"))
                     return;
-                // We can't easily correlate a sound to a specific block without more context,
-                // so we skip sound suppression here — ProtocolLib path at least hides the animation.
+                try {
+                    PacketContainer packet = event.getPacket();
+                    // Fixed-point XYZ: divide by 8 to get block coordinate
+                    int bx = packet.getIntegers().read(0) >> 3;
+                    int by = packet.getIntegers().read(1) >> 3;
+                    int bz = packet.getIntegers().read(2) >> 3;
+                    String blockKey = bx + "," + by + "," + bz;
+                    if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.contains(blockKey))
+                        event.setCancelled(true);
+                } catch (Exception ignored) {}
             }
         });
     }
