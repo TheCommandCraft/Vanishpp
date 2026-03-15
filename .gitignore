@@ -1,0 +1,30 @@
+# Build output
+target/
+
+# IDE
+.idea/
+*.iml
+
+# Claude Code local settings
+.claude/
+
+# Test server runtime data
+testserver_clean/world/
+testserver_clean/world_nether/
+testserver_clean/world_the_end/
+testserver_clean/logs/
+testserver_clean/cache/
+testserver_clean/plugins/.paper-remapped/
+testserver_clean/plugins/spark/tmp/
+testserver_clean/plugins/bStats/
+testserver_clean/plugins/ProtocolLib/
+testserver_clean/plugins/Essentials/userdata/
+testserver_clean/plugins/Essentials/usermap.bin
+testserver_clean/plugins/Essentials/uuids.bin
+testserver_clean/plugins/Vanishpp/data.yml
+testserver_clean/plugins/TAB/anti-override.log
+testserver_clean/plugins/TAB/playerdata.yml
+testserver_clean/plugins/TAB/skincache.yml
+testserver_clean/plugins/DiscordSRV/
+testserver_clean/plugins/voicechat/
+testserver_clean/plugins/.var-list-manifest.json

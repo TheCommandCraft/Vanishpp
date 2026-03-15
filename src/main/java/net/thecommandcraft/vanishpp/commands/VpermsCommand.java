@@ -72,26 +72,27 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
 
         String action = args[2].toLowerCase();
         UUID targetUUID = target.getUniqueId();
+        String playerName = target.getName() != null ? target.getName() : args[0];
 
         switch (action) {
             case "set":
                 permissionManager.addPermission(targetUUID, permission);
                 plugin.getMessageManager().sendMessage(sender, configManager.vpermsPermSet
                         .replace("%perm%", permission)
-                        .replace("%player%", target.getName()));
+                        .replace("%player%", playerName));
                 break;
             case "remove":
                 permissionManager.removePermission(targetUUID, permission);
                 plugin.getMessageManager().sendMessage(sender, configManager.vpermsPermRemoved
                         .replace("%perm%", permission)
-                        .replace("%player%", target.getName()));
+                        .replace("%player%", playerName));
                 break;
             case "get":
                 boolean hasPerm = permissionManager.hasPermission(targetUUID, permission);
                 String message = hasPerm ? configManager.vpermsPermGetHas : configManager.vpermsPermGetDoesNotHave;
                 plugin.getMessageManager().sendMessage(sender, message
                         .replace("%perm%", permission)
-                        .replace("%player%", target.getName()));
+                        .replace("%player%", playerName));
                 break;
             default:
                 plugin.getMessageManager().sendMessage(sender, configManager.vpermsInvalidUsage);

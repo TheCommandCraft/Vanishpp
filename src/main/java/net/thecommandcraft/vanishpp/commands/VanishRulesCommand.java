@@ -100,8 +100,13 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 if (namedTarget != null) target = namedTarget;
             }
             rules.setAllRules(target, value);
-            if (plugin.isVanished(target))
-                plugin.applyVanishEffects(target);
+            if (plugin.isVanished(target)) {
+                try {
+                    plugin.applyVanishEffects(target);
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Error re-applying vanish effects: " + e.getMessage());
+                }
+            }
             String statusKey = value ? "rules.status-on" : "rules.status-off";
             String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
             plugin.getMessageManager().sendMessage(sender,
@@ -161,7 +166,11 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             }
 
             if (rule.equals(RuleManager.MOB_TARGETING) && plugin.isVanished(target)) {
-                plugin.applyVanishEffects(target);
+                try {
+                    plugin.applyVanishEffects(target);
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Error re-applying vanish effects: " + e.getMessage());
+                }
             }
         }
 

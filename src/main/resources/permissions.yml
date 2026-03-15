@@ -31,8 +31,6 @@
 # --- Rules & Configuration ---
 # - 'vanishpp.rules'         : Use /vrules to toggle personal settings.
 # - 'vanishpp.rules.others'  : Use /vrules on other players.
-# - 'vanishpp.pickup'        : Use /vpickup (toggle item pickup).
-# - 'vanishpp.pickup.others' : Use /vpickup on others.
 #
 # --- Abilities (Bypass Restrictions) ---
 # - 'vanishpp.silentchest'   : Open chests silently (no animation).

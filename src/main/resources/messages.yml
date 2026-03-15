@@ -1,10 +1,13 @@
 # Vanish++ English Language File
-# Use Minecraft color codes (&c, &a, etc.) and PlaceholderAPI %placeholders%.
+# Supports MiniMessage tags (<red>, <bold>, etc.), legacy color codes (&c, &a, etc.),
+# and PlaceholderAPI %placeholders%.
 
 # --- [ GENERAL ] ---
 no-permission: "&cYou do not have permission to use this command."
 player-not-found: "&cPlayer not found."
 invalid-usage: "&cUsage: %usage%"
+console-specify: "&cConsole must specify a player."
+unknown-command: "&cUnknown command. Type \"/help\" for help."
 
 # --- [ VANISH COMMANDS ] ---
 vanish:
@@ -12,8 +15,6 @@ vanish:
   others: "&6You have vanished %player%."
   unvanish-self: "&6You are no longer vanished."
   unvanish-others: "&6You have unvanished %player%."
-  other-vanished: "&6You have vanished %player%." # Legacy key for compatibility if needed
-  other-unvanished: "&6You have unvanished %player%." # Legacy key for compatibility if needed
 
 # --- [ VPERMS COMMAND ] ---
 vperms:
@@ -35,30 +36,32 @@ update:
 
 # --- [ RULES COMMAND ] ---
 rules:
-  usage: "&cUsage: /vrules [player] <rule> [true|false] [seconds]"
-  invalid-name: "&cInvalid rule name."
+  usage: "&cUsage: /vrules [player] <rule> [true|false] [seconds] &7— omit seconds for permanent"
+  invalid-name: "&cInvalid rule name. Use /vrules to see available rules."
   invalid-value: "&cValue must be 'true' or 'false'."
-  invalid-seconds: "&cInvalid seconds."
+  invalid-seconds: "&cInvalid number of seconds."
   header: "&6Rules for %player%:"
-  line: " • %rule%: %color%%status%"
+  line: " • %rule%: <%color%>%status%"
   status-on: "ENABLED"
   status-off: "DISABLED"
   set: "&aRule '%rule%' for %player% set to %status%."
   set-temp: "&aRule '%rule%' for %player% set to %status% for %seconds%s."
   expired: "&eTemporary rule '%rule%' has expired."
 
-# --- [ CHAT & PICKUP ] ---
+# --- [ CHAT ] ---
 chat:
   locked: "&cYou are vanished! &7Type &b/vchat confirm &7to send this message."
   sent: "&aMessage sent."
   no-pending: "&cYou have no pending chat messages to confirm."
   usage: "&7Usage: &b/vchat confirm &7— send your pending vanish chat message."
+
+# --- [ PICKUP ] ---
 pickup:
   enabled: "&eItem pickup is now &aENABLED&e."
   disabled: "&eItem pickup is now &cDISABLED&e."
   blocked-actionbar: "&c✖ Item Pickup Blocked"
 
-# --- [ WARNINGS & REPORTS ] ---
+# --- [ WARNINGS & NOTIFICATIONS ] ---
 warnings:
   protocollib-missing-title: "&c⚠ WARNING ⚠"
   protocollib-missing-subtitle: "&eProtocolLib Missing!"
@@ -68,8 +71,10 @@ warnings:
   sub: "&c ⚠ YOU ARE NOT FULLY HIDDEN! ⚠"
   box-bottom: "&4&l█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█"
   action-blocked-actionbar: "&c&l✖ Action Blocked: %action%"
-  vanish-blocked: "&cVanish blocked %action%. Type /vrules %rule% true to enable."
-  ignore-tip: "&7Tip: Type &b/vignore&7 to disable these warnings."
+  vanish-blocked: "&cVanish blocked &e%action%&c. Use &b/vrules %rule% true &cto enable."
+  config-blocked: "&cVanish blocked &e%action%&c (config: &7%path%&c)."
+  ignore-tip: "&7Tip: Type &b/vrules show_notifications false &7to disable these messages."
+  setup-header: "&c⚠ Vanish++ Setup Issues:"
 
 # --- [ STAFF NOTIFICATIONS ] ---
 staff:
@@ -83,18 +88,31 @@ appearance:
   action-bar: "&bYou are currently VANISHED"
   vanished-player-format: "%prefix%&7%player%: %message%"
 
-# --- [ MISCELLANEOUS ] ---
+# --- [ CONFIG COMMAND ] ---
 config:
   reloaded: "&aVanish++ configuration reloaded successfully!"
-  updated: "&aSuccessfully updated %path% to %value%"
+  updated: "&aSuccessfully updated &e%path% &ato &f%value%"
   invalid-path: "&cInvalid config path!"
-  current-value: "&6%path% is currently: &f%value%"
+  current-value: "&6%path% &7is currently: &f%value%"
+  usage: "&cUsage: /vconfig <key> [value]"
+  sensitive-warning: "&c⚠ Warning: &e%path% &cis a sensitive setting. Changing it may affect server stability. Run the command again with &b--confirm &cto apply."
+
+# --- [ PLUGIN LIST ] ---
+plugins:
+  hidden-info: "&8Plugin list is filtered (Vanish++ hidden from non-staff)."
+
+# --- [ VANISHED LIST ] ---
+list:
   no-vanished-online: "&eThere are no vanished players online."
-  vanished-list-header: "&6Vanished Players (%count%):"
+  header: "&6Vanished Players (%count%):"
+
+# --- [ ACKNOWLEDGEMENT ] ---
 acknowledgement:
   acknowledged: "&aNotification acknowledged."
   hiding-dismissed: "&7Notification dismissed for this version."
   hiding-visible: "&aVanish++ is now VISIBLE in the plugin list."
+
+# --- [ IGNORE WARNING ] ---
 ignore-warning:
   protocol-denied: "&cPermission denied."
   player-not-found: "&cPlayer not found."
@@ -107,3 +125,18 @@ ignore-warning:
 # --- [ SILENT CHEST ] ---
 silent-chest:
   blocked: "&cYou cannot open this silently (Inventory Type not supported or protected)."
+
+# --- [ HELP MENU ] ---
+help:
+  header: "\n&6&l      Vanish++ Help Menu      "
+  subheader: "&7Click a command to see details:"
+  footer: "&7-------------------------------"
+  unknown-command: "&cUnknown command '&f%command%&c'. Showing full list:"
+  cmd-vanish: "Toggle vanish state."
+  cmd-vrules: "Configure personal vanish rules."
+  cmd-vconfig: "Change plugin settings live."
+  cmd-vlist: "List all vanished players."
+  cmd-vperms: "Manage local permissions."
+  cmd-vignore: "Stop ProtocolLib warnings."
+  cmd-vchat: "Confirm sending chat while vanished."
+  cmd-vreload: "Reload plugin configuration."

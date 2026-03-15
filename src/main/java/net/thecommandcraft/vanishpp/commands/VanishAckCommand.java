@@ -1,6 +1,7 @@
 package net.thecommandcraft.vanishpp.commands;
 
 import net.thecommandcraft.vanishpp.Vanishpp;
+import net.thecommandcraft.vanishpp.utils.LanguageManager;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
@@ -22,30 +23,42 @@ public class VanishAckCommand implements TabExecutor {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
-        if (!(sender instanceof Player))
+        if (!(sender instanceof Player p))
             return true;
-        Player p = (Player) sender;
 
-        if (args.length == 0)
+        LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+
+        // Smart: no args = acknowledge the latest notification
+        if (args.length == 0) {
+            // Default to acknowledging the most recent notification type
+            plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                    "hiding_v" + plugin.getConfigManager().getLatestVersion());
+            plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
             return true;
+        }
 
         String action = args[0];
 
-        if (action.equals("migration")) {
-            plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
-                    "migration_v" + plugin.getConfigManager().getLatestVersion());
-            plugin.getMessageManager().sendMessage(p, "<green>Notification acknowledged.");
-        } else if (action.equals("disable_hiding")) {
-            if (!p.hasPermission("vanishpp.config")) {
-                plugin.getMessageManager().sendMessage(p, "<red>No permission.");
-                return true;
+        switch (action) {
+            case "migration" -> {
+                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                        "migration_v" + plugin.getConfigManager().getLatestVersion());
+                plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
             }
-            plugin.getConfigManager().setAndSave("hide-announcements.hide-from-plugin-list", false);
-            plugin.getMessageManager().sendMessage(p, "<green>Vanish++ is now VISIBLE in the plugin list.");
-        } else if (action.equals("acknowledge_hiding")) {
-            plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
-                    "hiding_v" + plugin.getConfigManager().getLatestVersion());
-            plugin.getMessageManager().sendMessage(p, "<gray>Notification dismissed for this version.");
+            case "disable_hiding" -> {
+                if (!p.hasPermission("vanishpp.config")) {
+                    plugin.getMessageManager().sendMessage(p, lm.getMessage("no-permission"));
+                    return true;
+                }
+                plugin.getConfigManager().setAndSave("hide-announcements.hide-from-plugin-list", false);
+                plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.hiding-visible"));
+            }
+            case "acknowledge_hiding" -> {
+                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                        "hiding_v" + plugin.getConfigManager().getLatestVersion());
+                plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.hiding-dismissed"));
+            }
+            default -> plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
         }
 
         return true;

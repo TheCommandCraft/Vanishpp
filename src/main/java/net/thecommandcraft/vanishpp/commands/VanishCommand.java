@@ -45,15 +45,16 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
         // Case 2: Toggling self
         else {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(
-                        Component.text("Console must specify a player: /vanish <player>", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
                 return true;
             }
             target = (Player) sender;
 
             if (!sender.hasPermission("vanishpp.vanish")) {
                 // Stay stealthy — pretend the command doesn't exist
-                sender.sendMessage(Component.text("Unknown command. Type \"/help\" for help.", NamedTextColor.RED));
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
             }
         }

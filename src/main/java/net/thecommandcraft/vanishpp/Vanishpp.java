@@ -46,13 +46,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private VanishScheduler vanishScheduler;
     private VoiceChatHook voiceChatHook;
 
-    public final Map<UUID, String> pendingChatMessages = new HashMap<>();
-    private final Map<UUID, Long> actionBarPausedUntil = new HashMap<>();
+    public final Map<UUID, String> pendingChatMessages = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Long> actionBarPausedUntil = new java.util.concurrent.ConcurrentHashMap<>();
     private boolean hasProtocolLib = false;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
     /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
      *  Key format: "x,y,z" */
-    public final Set<String> silentlyOpenedBlocks = new HashSet<>();
+    public final Set<String> silentlyOpenedBlocks = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
 
     @Override
     public void onEnable() {
@@ -340,6 +340,16 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
         }
     }
 
+    /** Remove and re-add a player to the vanish team to force a scoreboard update packet to all observers. */
+    public void reapplyTeamEntry(Player player) {
+        if (vanishTeam == null) return;
+        String name = player.getName();
+        if (vanishTeam.hasEntry(name))
+            vanishTeam.removeEntry(name);
+        vanishTeam.addEntry(name);
+        refreshTeamPrefix();
+    }
+
     private void startActionBarTask() {
         vanishScheduler.runTimerGlobal(() -> {
             if (!configManager.actionBarEnabled) return;
@@ -363,10 +373,20 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
 
     private void startSyncTask() {
         vanishScheduler.runTimerGlobal(() -> {
-            for (UUID uuid : vanishedPlayers) {
+            for (UUID uuid : Set.copyOf(vanishedPlayers)) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline())
+                if (p != null && p.isOnline()) {
                     updateVanishVisibility(p);
+                    // Continuously clear mob targets for vanished players with mob_targeting OFF
+                    if (!ruleManager.getRule(p, RuleManager.MOB_TARGETING)) {
+                        for (Entity entity : p.getNearbyEntities(48, 48, 48)) {
+                            if (entity instanceof Mob mob && p.equals(mob.getTarget())) {
+                                mob.setTarget(null);
+                                mob.getPathfinder().stopPathfinding();
+                            }
+                        }
+                    }
+                }
             }
         }, 20L, 20L);
     }
@@ -403,6 +423,7 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
             for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
                 if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
                     mob.setTarget(null);
+                    mob.getPathfinder().stopPathfinding();
                 }
             }
         }
@@ -556,8 +577,11 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
     public void scheduleRuleRevert(Player player, String rule, boolean originalValue, int seconds) {
         vanishScheduler.runLaterGlobal(() -> {
             ruleManager.setRule(player, rule, originalValue);
-            if (player.isOnline())
-                player.sendMessage(Component.text("Temporary rule '" + rule + "' has expired.", NamedTextColor.YELLOW));
+            if (player.isOnline()) {
+                String msg = configManager.getLanguageManager().getMessage("rules.expired")
+                        .replace("%rule%", rule);
+                messageManager.sendMessage(player, msg);
+            }
         }, seconds * 20L);
     }
 
@@ -574,11 +598,6 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
                 }
             }, 10L);
         }
-    }
-
-    public void togglePickup(Player player) {
-        boolean current = ruleManager.getRule(player, RuleManager.CAN_PICKUP_ITEMS);
-        ruleManager.setRule(player, RuleManager.CAN_PICKUP_ITEMS, !current);
     }
 
     public boolean isWarningIgnored(Player player) {
