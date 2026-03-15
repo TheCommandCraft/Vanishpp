@@ -52,6 +52,7 @@ chat:
   locked: "&cYou are vanished! &7Type &b/vchat confirm &7to send this message."
   sent: "&aMessage sent."
   no-pending: "&cYou have no pending chat messages to confirm."
+  usage: "&7Usage: &b/vchat confirm &7— send your pending vanish chat message."
 pickup:
   enabled: "&eItem pickup is now &aENABLED&e."
   disabled: "&eItem pickup is now &cDISABLED&e."

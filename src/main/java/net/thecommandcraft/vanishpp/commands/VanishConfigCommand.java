@@ -35,14 +35,16 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
         }
 
         String path = args[0];
+        var lm = plugin.getConfigManager().getLanguageManager();
         if (!plugin.getConfigManager().getConfig().contains(path)) {
-            plugin.getMessageManager().sendMessage(sender, "<red>Invalid config path!");
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("config.invalid-path"));
             return true;
         }
 
         if (args.length == 1) {
             Object val = plugin.getConfigManager().getConfig().get(path);
-            plugin.getMessageManager().sendMessage(sender, "<gold>" + path + " is currently: <white>" + val.toString());
+            plugin.getMessageManager().sendMessage(sender,
+                    lm.getMessage("config.current-value").replace("%path%", path).replace("%value%", String.valueOf(val)));
             return true;
         }
 
@@ -59,7 +61,8 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
         }
 
         plugin.getConfigManager().setAndSave(path, newValue);
-        plugin.getMessageManager().sendMessage(sender, "<green>Successfully updated " + path + " to " + valInput);
+        plugin.getMessageManager().sendMessage(sender,
+                lm.getMessage("config.updated").replace("%path%", path).replace("%value%", valInput));
         return true;
     }
 
@@ -67,11 +70,23 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
-            List<String> keys = new ArrayList<>(plugin.getConfigManager().getConfig().getKeys(true));
-            keys.removeIf(k -> k.equals("config-version") || k.startsWith("data"));
+            var cfg = plugin.getConfigManager().getConfig();
+            List<String> keys = new ArrayList<>(cfg.getKeys(true));
+            // Keep only leaf values (not section containers)
+            keys.removeIf(k -> cfg.isConfigurationSection(k) || k.equals("config-version") || k.startsWith("data"));
             return StringUtil.copyPartialMatches(args[0], keys, new ArrayList<>());
         }
         if (args.length == 2) {
+            var cfg = plugin.getConfigManager().getConfig();
+            if (cfg.contains(args[0])) {
+                Object current = cfg.get(args[0]);
+                if (current instanceof Boolean) {
+                    return StringUtil.copyPartialMatches(args[1], Arrays.asList("true", "false"), new ArrayList<>());
+                } else if (current != null) {
+                    // Suggest the current value so the user can see/edit it
+                    return StringUtil.copyPartialMatches(args[1], List.of(current.toString()), new ArrayList<>());
+                }
+            }
             return Arrays.asList("true", "false");
         }
         return new ArrayList<>();

@@ -45,6 +45,8 @@ public class VanishChatCommand implements CommandExecutor {
             return true;
         }
 
-        return false;
+        plugin.getMessageManager().sendMessage(player,
+                plugin.getConfigManager().getLanguageManager().getMessage("chat.usage"));
+        return true;
     }
 }

@@ -43,6 +43,7 @@ public class PlayerListener implements Listener {
     private final ConfigManager config;
     private final RuleManager rules;
     private final Map<UUID, GameMode> silentChestViewers = new HashMap<>();
+    private final Map<UUID, String> silentChestBlockKeys = new HashMap<>(); // block key per viewer for cleanup
     private final Map<UUID, Map<String, Long>> ruleNotificationCooldowns = new HashMap<>();
     private final Set<UUID> hasSeenDisableTip = new HashSet<>();
 
@@ -189,6 +190,8 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
+            String blockKey = silentChestBlockKeys.remove(uuid);
+            if (blockKey != null) plugin.silentlyOpenedBlocks.remove(blockKey);
             silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
             // Notify staff that a vanished player silently left
@@ -449,7 +452,8 @@ public class PlayerListener implements Listener {
             Inventory inv = (type == Material.ENDER_CHEST) ? player.getEnderChest()
                     : (block.getState() instanceof Container c ? c.getInventory() : null);
             if (inv != null) {
-                silentChestViewers.put(player.getUniqueId(), player.getGameMode()); // track for close event
+                silentChestViewers.put(player.getUniqueId(), player.getGameMode());
+                silentChestBlockKeys.put(player.getUniqueId(), blockKey); // track which block for cleanup
                 player.openInventory(inv);
             } else {
                 plugin.silentlyOpenedBlocks.remove(blockKey);
@@ -484,32 +488,27 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        if (silentChestViewers.containsKey(event.getPlayer().getUniqueId())) {
-            Player p = (Player) event.getPlayer();
-            GameMode gm = silentChestViewers.remove(p.getUniqueId());
-            if (p.isOnline()) {
-                // Restore game mode only if we switched to spectator (ProtocolLib path keeps original game mode)
-                if (gm != GameMode.SPECTATOR && p.getGameMode() == GameMode.SPECTATOR) {
-                    p.setGameMode(gm);
-                    if (config.enableFly && gm != GameMode.CREATIVE && plugin.isVanished(p)) {
-                        p.setAllowFlight(true);
-                        p.setFlying(true);
-                    }
+        UUID uuid = event.getPlayer().getUniqueId();
+        if (!silentChestViewers.containsKey(uuid)) return;
+
+        Player p = (Player) event.getPlayer();
+        GameMode gm = silentChestViewers.remove(uuid);
+        String blockKey = silentChestBlockKeys.remove(uuid);
+
+        if (p.isOnline()) {
+            // Restore game mode only if we switched to spectator (non-ProtocolLib fallback path)
+            if (gm != GameMode.SPECTATOR && p.getGameMode() == GameMode.SPECTATOR) {
+                p.setGameMode(gm);
+                if (config.enableFly && gm != GameMode.CREATIVE && plugin.isVanished(p)) {
+                    p.setAllowFlight(true);
+                    p.setFlying(true);
                 }
             }
         }
-        // Clean up any silently opened block (ProtocolLib path)
-        // Find the block key by checking nearby blocks — InventoryCloseEvent doesn't give block info
-        // We rely on the block being cleaned up when tracked in handleSilentChest.
-        // Remove all keys that are no longer tracked by any open viewer.
-        if (!plugin.hasProtocolLib()) return;
-        // For ProtocolLib path: remove block tracking when no viewer is watching it
-        // (A simpler approach: clear when the specific viewer closes)
-        // We store block key per viewer by tracking in silentChestViewers key
-        // Since we can't easily get the block from InventoryCloseEvent, we clear all
-        // silently tracked blocks when no viewers remain — safe enough for now
-        if (silentChestViewers.isEmpty()) {
-            plugin.silentlyOpenedBlocks.clear();
+
+        // Remove only this specific block from the silently-opened set
+        if (blockKey != null) {
+            plugin.silentlyOpenedBlocks.remove(blockKey);
         }
     }
 
