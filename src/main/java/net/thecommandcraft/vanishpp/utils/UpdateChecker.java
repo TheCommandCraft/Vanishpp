@@ -48,34 +48,34 @@ public class UpdateChecker {
 
                 int responseCode = connection.getResponseCode();
                 if (responseCode == 200) {
-                    InputStreamReader reader = new InputStreamReader(connection.getInputStream());
-                    JsonElement element = JsonParser.parseReader(reader);
+                    try (InputStreamReader reader = new InputStreamReader(connection.getInputStream())) {
+                        JsonElement element = JsonParser.parseReader(reader);
 
-                    if (element.isJsonArray()) {
-                        JsonArray versions = element.getAsJsonArray();
-                        if (versions.size() > 0) {
-                            JsonObject latest = versions.get(0).getAsJsonObject();
-                            String remoteVersion = latest.get("version_number").getAsString();
-                            String currentVersion = plugin.getDescription().getVersion();
+                        if (element.isJsonArray()) {
+                            JsonArray versions = element.getAsJsonArray();
+                            if (versions.size() > 0) {
+                                JsonObject latest = versions.get(0).getAsJsonObject();
+                                String remoteVersion = latest.get("version_number").getAsString();
+                                String currentVersion = plugin.getDescription().getVersion();
 
-                            // Normalize versions
-                            String cleanRemote = remoteVersion.replaceAll("[^0-9.]", "");
-                            String cleanCurrent = currentVersion.replaceAll("[^0-9.]", "");
+                                // Normalize versions
+                                String cleanRemote = remoteVersion.replaceAll("[^0-9.]", "");
+                                String cleanCurrent = currentVersion.replaceAll("[^0-9.]", "");
 
-                            if (isVersionNewer(cleanCurrent, cleanRemote)) {
-                                this.latestVersion = remoteVersion;
-                                this.updateAvailable = true;
-                                plugin.getLogger().warning("--------------------------------------------------");
-                                plugin.getLogger().warning("A new version of Vanish++ is available: " + remoteVersion);
-                                plugin.getLogger().warning("Download at: https://modrinth.com/plugin/" + PROJECT_ID
-                                        + "/version/" + remoteVersion);
-                                plugin.getLogger().warning("--------------------------------------------------");
-                            } else {
-                                plugin.getLogger().info("You are running the latest version.");
+                                if (isVersionNewer(cleanCurrent, cleanRemote)) {
+                                    this.latestVersion = remoteVersion;
+                                    this.updateAvailable = true;
+                                    plugin.getLogger().warning("--------------------------------------------------");
+                                    plugin.getLogger().warning("A new version of Vanish++ is available: " + remoteVersion);
+                                    plugin.getLogger().warning("Download at: https://modrinth.com/plugin/" + PROJECT_ID
+                                            + "/version/" + remoteVersion);
+                                    plugin.getLogger().warning("--------------------------------------------------");
+                                } else {
+                                    plugin.getLogger().info("You are running the latest version.");
+                                }
                             }
                         }
                     }
-                    reader.close();
                 } else {
                     plugin.getLogger().warning("Failed to connect to Modrinth. Response Code: " + responseCode);
                 }

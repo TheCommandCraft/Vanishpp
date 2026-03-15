@@ -27,7 +27,7 @@ public class ConfigManager {
     // Messages
     public String vanishMessage, unvanishMessage, noPermissionMessage, playerNotFoundMessage;
     public String vanishedOtherMessage, unvanishedOtherMessage, silentChestBlocked;
-    public String pickupEnabledMessage, pickupDisabledMessage, chatLockedMessage, chatSentMessage, noChatPendingMessage;
+    public String chatLockedMessage, chatSentMessage, noChatPendingMessage;
     public String vpermsReload, vpermsInvalidUsage, vpermsInvalidPermission, vpermsPermSet, vpermsPermRemoved,
             vpermsPermGetHas, vpermsPermGetDoesNotHave;
     public String silentJoinMessage, silentQuitMessage, staffVanishMessage, staffUnvanishMessage;
@@ -131,8 +131,6 @@ public class ConfigManager {
         vanishedOtherMessage = languageManager.getMessage("vanish.others");
         unvanishedOtherMessage = languageManager.getMessage("vanish.unvanish-others");
         silentChestBlocked = languageManager.getMessage("silent-chest.blocked");
-        pickupEnabledMessage = languageManager.getMessage("pickup.enabled");
-        pickupDisabledMessage = languageManager.getMessage("pickup.disabled");
         chatLockedMessage = languageManager.getMessage("chat.locked");
         chatSentMessage = languageManager.getMessage("chat.sent");
         noChatPendingMessage = languageManager.getMessage("chat.no-pending");

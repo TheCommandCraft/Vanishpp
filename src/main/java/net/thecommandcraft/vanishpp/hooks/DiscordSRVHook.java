@@ -90,12 +90,16 @@ public class DiscordSRVHook implements VanishHook {
     }
 
     private void broadcastToDiscord(Player player, String message) {
-        String name = player.getName();
-        String formatted = "**" + name + "** " + message;
+        try {
+            String name = player.getName();
+            String formatted = "**" + name + "** " + message;
 
-        TextChannel channel = DiscordSRV.getPlugin().getMainTextChannel();
-        if (channel != null) {
-            DiscordUtil.sendMessage(channel, formatted);
+            TextChannel channel = DiscordSRV.getPlugin().getMainTextChannel();
+            if (channel != null) {
+                DiscordUtil.sendMessage(channel, formatted);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to send DiscordSRV message: " + e.getMessage());
         }
     }
 }

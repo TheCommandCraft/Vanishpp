@@ -42,7 +42,11 @@ public class MessageManager {
             message = legacyToMiniMessage(message);
         }
 
-        return miniMessage.deserialize(message);
+        try {
+            return miniMessage.deserialize(message);
+        } catch (Exception e) {
+            return Component.text(message);
+        }
     }
 
     /**

@@ -73,6 +73,13 @@ public class YamlStorage implements StorageProvider {
     @Override
     public Set<UUID> getVanishedPlayers() {
         return config.getStringList("vanished-players").stream()
+                .filter(s -> {
+                    try { UUID.fromString(s); return true; }
+                    catch (IllegalArgumentException e) {
+                        plugin.getLogger().warning("Ignoring invalid UUID in vanished-players: " + s);
+                        return false;
+                    }
+                })
                 .map(UUID::fromString)
                 .collect(Collectors.toSet());
     }

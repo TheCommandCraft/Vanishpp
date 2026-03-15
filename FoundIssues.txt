@@ -1,0 +1,57 @@
+1. Make each interaction the easiest it can be: For example: The Setup issues. It warned me correctly but it isn't
+the easiest it could be: It tells me that the hook is set to true in the settings (also highlight those values with
+colors to make it nice and readable) and then it tells me to install the plugin or set the option to false (also
+highlight that value). This can be made much easier! Make teh 'set the option to false' text a button to actually set
+it to false with feedback telling you it was set and in there a button to revert that change and it telling you to
+reload wiith also a button below. Also make iinstall the plugin a btuton where it opens
+https://modrinth.com/plugin/simple-voice-chat#download. As you can see by this; Everything should be the easiest for the user with interactive links and great explanation for fresh new users.
+
+2. All messages in chat have no color and the codes are visible.
+
+3. At unvanishing flight isn't revoked
+
+4. Nice permission error on /vanish for players without perm but make it to be stealthy so for players without permission it seems like the command doesn't even exist to hide that the server even has a vanish plugin.
+
+5. Add a [Vanished] prefix to players visible everywhere for ppl with permission on their name. It should not affect scoreboards for ppl without perms!
+
+6. Staff notifications are NOT visible in the console / logs.
+
+7. No staff silent join notifications.
+
+8. Again, when rules prevent stuff show that actively and attach a direct button to change the rule to allow that behavior or do that but only for one minute. Users must have the easiests of times with convenient features like those buttons!
+
+9. Add autofill to ALL COMMANDS AND EVERY VARIATION OF THEM!
+
+10. Ensure when properties are changed with the command for that they apply immediately.
+
+11. '/vrules mob_targeting true' does not work properly even after '/vreload'.
+
+12. Vanished players can be pushed by non vanished ones. The other way around works though.
+
+13. Vrule infos are spammed without cooldown!
+
+14. When entering a chest (in vanish) one cannot move items bc of spectator mode. Fix that with nto sending the chest packet to the other player that it was opened. if that is nto possible without protocollib then send a warning in chat on chest opening and use the old spectator method the warning should say to install protocollib for moving items undetected. Again for user comfort provide a direct button link to the page: https://www.spigotmc.org/resources/protocollib.1997/
+
+15. Enderchest are visible when opened as vanish it just opens normally not hidden from players shulker still plays sound but anim is hidden. 
+
+16. Advancements are not blocked for vanished players.
+
+17. When i do '/vrule a true' so i give it an invalid rule it just prints 'rules.not-found'! fix that that is a real message!
+
+18. Remove '/vpickup' unless it has a reason to exist other than the vrule 'can_pickup_items'.
+
+19. '/vrules all true TCC_STUDIOS' does not apply it to TCC_STUDIOS but to the player executing it.
+
+20. In tab the prefix is just the placeholder ID infront of the name.
+
+21. Rename adjust serverlist count to just adjust serverlist in the vconfig.
+
+22. Bed access is not blocked for vanished players even if rule is true, also mount horses is should also be blocked as well as interacting with entities and 
+
+23. The players doing '/plugins' are getting a fake not real looking list. This should really spoof the default list for the running plugin if possible, else get as close as possible. Also for players with perms the info that it is not showing is not displayed. Ops should get the same as normal players but with the info that its beign hidden and the button to change that in the config.
+
+24. The vanish prefix is missing from the nametag above vanished players.
+
+25. When in the 'vhelp' command an invalid command to get help on is entered it just shows the list. acknowledge that the given command was invalid then show the lsit instead.
+
+26. Perms for 'vlist' for example cannot be changed with the vperms command.

@@ -16,7 +16,6 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class PluginHider implements Listener {
@@ -64,16 +63,26 @@ public class PluginHider implements Listener {
                 nameComponents);
         player.sendMessage(header.append(list));
 
-        // If seer/op — also show info that the list is filtered
-        boolean isSeer = plugin.getPermissionManager().hasPermission(player, "vanishpp.see");
-        if (isSeer) {
-            Component info = Component.text("ℹ ", NamedTextColor.GRAY)
-                    .append(Component.text("Plugin list is filtered (Vanish++ hidden from non-staff).", NamedTextColor.DARK_GRAY))
-                    .append(Component.text(" "))
-                    .append(Component.text("[Disable hiding]", NamedTextColor.RED, TextDecoration.BOLD)
-                            .clickEvent(ClickEvent.runCommand("/vconfig hide-announcements.hide-from-plugin-list false"))
-                            .hoverEvent(HoverEvent.showText(Component.text("Sets hide-from-plugin-list to false", NamedTextColor.GRAY))));
-            player.sendMessage(info);
+        // Only show the "filtered" info to players with vanishpp.see permission
+        // AND who haven't acknowledged it for this version
+        if (plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
+            String ackKey = "hiding_v" + plugin.getConfigManager().getLatestVersion();
+            if (!plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), ackKey)) {
+                var lm = plugin.getConfigManager().getLanguageManager();
+                Component info = Component.text("ℹ ", NamedTextColor.GRAY)
+                        .append(plugin.getMessageManager().parse(lm.getMessage("plugins.hidden-info"), player))
+                        .append(Component.text(" "))
+                        .append(Component.text("[Disable hiding]", NamedTextColor.RED, TextDecoration.BOLD)
+                                .clickEvent(ClickEvent.runCommand("/vack disable_hiding"))
+                                .hoverEvent(HoverEvent.showText(
+                                        Component.text("Makes Vanish++ visible in /plugins", NamedTextColor.GRAY))))
+                        .append(Component.text("  "))
+                        .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                                .clickEvent(ClickEvent.runCommand("/vack acknowledge_hiding"))
+                                .hoverEvent(HoverEvent.showText(
+                                        Component.text("Hide this message", NamedTextColor.GRAY))));
+                player.sendMessage(info);
+            }
         }
     }
 }

@@ -181,6 +181,17 @@ storage:
     port: 6379
     password: ""
 
+# --- [ UPDATE CHECKER ] ---
+update-checker:
+  # Whether to check for plugin updates on startup.
+  enabled: true
+  # Modrinth project ID or slug.
+  modrinth-id: "vanishpp"
+  # How to decide who gets update notifications: PERMISSION or LIST.
+  notify-mode: "PERMISSION"
+  # If notify-mode is LIST, only these players get notifications.
+  notify-list: []
+
 # --- [ PERMISSIONS ] ---
 permissions:
   layered-permissions-enabled: true

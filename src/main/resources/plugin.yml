@@ -19,7 +19,7 @@ commands:
     permission: vanishpp.manageperms
   vanishrules:
     description: Configure personal vanish rules.
-    usage: /vanishrules [player] <rule> [true|false]
+    usage: /vanishrules [player] <rule> [true|false] [seconds]
     permission: vanishpp.rules
     aliases: [ vrules, vsettings ]
   vanishchat:
@@ -44,7 +44,7 @@ commands:
     aliases: [ vhelp ]
   vanishconfig:
     description: Edit config settings in-game.
-    usage: /vanishconfig <key> [value]
+    usage: /vanishconfig <key> [value] [--confirm]
     permission: vanishpp.config
     aliases: [ vconfig ]
   vack:

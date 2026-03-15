@@ -28,7 +28,8 @@ public class VanishReloadCommand implements CommandExecutor, TabCompleter {
         }
 
         plugin.reloadPluginConfig();
-        plugin.getMessageManager().sendMessage(sender, "<green>Vanish++ configuration reloaded successfully!");
+        plugin.getMessageManager().sendMessage(sender,
+                plugin.getConfigManager().getLanguageManager().getMessage("config.reloaded"));
         return true;
     }
 

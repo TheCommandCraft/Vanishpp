@@ -72,6 +72,18 @@ public class PlayerListener implements Listener {
                     staff.sendMessage(joinComp);
             }
             Bukkit.getConsoleSender().sendMessage(joinComp);
+
+            // Re-apply prefix after a longer delay so the client fully processes the join
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (player.isOnline() && plugin.isVanished(player)) {
+                    // Force re-add to team so the scoreboard update packet is sent to all observers
+                    plugin.reapplyTeamEntry(player);
+                    if (config.vanishTabPrefix != null && !config.vanishTabPrefix.isEmpty()) {
+                        player.playerListName(plugin.getMessageManager().parse(
+                                config.vanishTabPrefix + player.getName(), player));
+                    }
+                }
+            }, 20L);
         }
 
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
@@ -117,7 +129,8 @@ public class PlayerListener implements Listener {
             if (plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
                 java.util.List<StartupChecker.Warning> warnings = plugin.getStartupWarnings();
                 if (!warnings.isEmpty()) {
-                    player.sendMessage(Component.text("⚠ Vanish++ Setup Issues:", NamedTextColor.RED));
+                    plugin.getMessageManager().sendMessage(player,
+                            config.getLanguageManager().getMessage("warnings.setup-header"));
                     for (StartupChecker.Warning w : warnings) {
                         player.sendMessage(Component.text(" • ", NamedTextColor.GOLD)
                                 .append(Component.text(w.message, NamedTextColor.YELLOW)));
@@ -321,9 +334,19 @@ public class PlayerListener implements Listener {
         Player p = event.getPlayer();
         if (!plugin.isVanished(p))
             return;
-        if (event.getAction() == Action.PHYSICAL && !rules.getRule(p, RuleManager.CAN_TRIGGER_PHYSICAL))
-            event.setCancelled(true);
+        if (event.getAction() == Action.PHYSICAL) {
+            if (!rules.getRule(p, RuleManager.CAN_TRIGGER_PHYSICAL))
+                event.setCancelled(true);
+            return;
+        }
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) {
+            // Always block spawn eggs — spawning visible entities blows cover
+            if (event.hasItem() && event.getItem() != null
+                    && event.getItem().getType().name().endsWith("_SPAWN_EGG")) {
+                event.setCancelled(true);
+                sendRuleDeny(p, RuleManager.CAN_INTERACT, "using spawn eggs");
+                return;
+            }
             if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
                 event.setCancelled(true);
                 if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem())
@@ -334,14 +357,18 @@ public class PlayerListener implements Listener {
         }
     }
 
-    @EventHandler
-    public void onMobTarget(EntityTargetLivingEntityEvent event) {
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onMobTarget(EntityTargetEvent event) {
         if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
             // Only cancel targeting if mob_targeting rule is OFF (false = mobs ignore vanished player)
             if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
                 event.setCancelled(true);
-                if (event.getEntity() instanceof org.bukkit.entity.Mob mob)
+                event.setTarget(null);
+                if (event.getEntity() instanceof org.bukkit.entity.Mob mob) {
                     mob.setTarget(null);
+                    // Also stop pathfinding to prevent baby mobs from chasing after target is cleared
+                    mob.getPathfinder().stopPathfinding();
+                }
             }
         }
     }
@@ -351,6 +378,19 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
             sendRuleDeny(event.getPlayer(), RuleManager.CAN_INTERACT, "entity interaction");
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClick(org.bukkit.event.inventory.InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (!plugin.isVanished(player)) return;
+        if (!rules.getRule(player, RuleManager.CAN_INTERACT)) {
+            // Allow clicking in the player's own inventory, block external containers
+            if (event.getClickedInventory() != null
+                    && event.getClickedInventory().getType() != org.bukkit.event.inventory.InventoryType.PLAYER) {
+                event.setCancelled(true);
+            }
         }
     }
 
@@ -372,7 +412,15 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void onTabComplete(PlayerCommandSendEvent event) {
-        if (config.hideTabComplete && !plugin.getPermissionManager().hasPermission(event.getPlayer(), "vanishpp.see")) {
+        Player player = event.getPlayer();
+        if (!plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")) {
+            // Hide ALL vanish++ commands from non-staff to keep the plugin undetectable
+            Set<String> vanishCmds = Set.of("vanish", "v", "sv", "vperms", "vanishrules", "vrules",
+                    "vsettings", "vanishchat", "vchat", "vanishignore", "vignore", "vanishlist", "vlist",
+                    "vanishhelp", "vhelp", "vanishconfig", "vconfig", "vack", "vanishreload", "vreload");
+            event.getCommands().removeIf(cmd -> vanishCmds.contains(cmd) || cmd.startsWith("vanishpp:"));
+        }
+        if (config.hideTabComplete && !plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
             event.getCommands().removeIf(cmd -> cmd.contains(":"));
         }
     }
@@ -394,10 +442,12 @@ public class PlayerListener implements Listener {
     public void onBedEnter(PlayerBedEnterEvent event) {
         Player p = event.getPlayer();
         if (!plugin.isVanished(p)) return;
-        if (config.preventSleeping || !rules.getRule(p, RuleManager.CAN_INTERACT)) {
+        if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
-            if (!rules.getRule(p, RuleManager.CAN_INTERACT))
-                sendRuleDeny(p, RuleManager.CAN_INTERACT, "sleeping");
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "sleeping");
+        } else if (config.preventSleeping) {
+            event.setCancelled(true);
+            sendConfigDeny(p, "invisibility-features.prevent-sleeping", "sleeping");
         }
     }
 
@@ -512,7 +562,7 @@ public class PlayerListener implements Listener {
         }
     }
 
-    private static final long RULE_NOTIFY_COOLDOWN_MS = 3000;
+    private static final long RULE_NOTIFY_COOLDOWN_MS = 60000;
 
     private void sendRuleDeny(Player p, String ruleName, String actionName) {
         LanguageManager lm = config.getLanguageManager();
@@ -534,18 +584,43 @@ public class PlayerListener implements Listener {
                 .replace("%rule%", ruleName);
         plugin.getMessageManager().sendMessage(p, message);
 
-        // Interactive buttons: [Allow 1m] and [Allow permanently]
+        // Interactive buttons: [Allow 1m], [Allow permanently], [Hide notifications]
         Component allow1m = Component.text("[Allow 1m]", NamedTextColor.GREEN, TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
                 .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' for 60 seconds", NamedTextColor.GRAY)));
         Component allowPerm = Component.text("[Allow permanently]", NamedTextColor.AQUA, TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
                 .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' permanently", NamedTextColor.GRAY)));
-        p.sendMessage(allow1m.append(Component.text("  ")).append(allowPerm));
+        Component hideNotifs = Component.text("[Hide notifications]", NamedTextColor.GRAY)
+                .clickEvent(ClickEvent.runCommand("/vrules show_notifications false"))
+                .hoverEvent(HoverEvent.showText(Component.text("Disable all rule notifications", NamedTextColor.GRAY)));
+        p.sendMessage(allow1m.append(Component.text("  ")).append(allowPerm).append(Component.text("  ")).append(hideNotifs));
+    }
 
-        if (!hasSeenDisableTip.contains(uuid)) {
-            hasSeenDisableTip.add(uuid);
-            plugin.getMessageManager().sendMessage(p, lm.getMessage("warnings.ignore-tip"));
+    /** Notify player that a config-level setting blocked their action, with a button to change it. */
+    private void sendConfigDeny(Player p, String configPath, String actionName) {
+        LanguageManager lm = config.getLanguageManager();
+        plugin.triggerActionBarWarning(p,
+                plugin.getMessageManager()
+                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionName), p));
+        UUID uuid = p.getUniqueId();
+        long now = System.currentTimeMillis();
+        Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
+        if (now - playerCooldowns.getOrDefault(configPath, 0L) < RULE_NOTIFY_COOLDOWN_MS)
+            return;
+        playerCooldowns.put(configPath, now);
+
+        String message = lm.getMessage("warnings.config-blocked")
+                .replace("%action%", actionName)
+                .replace("%path%", configPath);
+        plugin.getMessageManager().sendMessage(p, message);
+
+        if (p.hasPermission("vanishpp.config")) {
+            Component changeBtn = Component.text("[Disable in config]", NamedTextColor.GREEN, TextDecoration.BOLD)
+                    .clickEvent(ClickEvent.runCommand("/vconfig " + configPath + " false"))
+                    .hoverEvent(HoverEvent.showText(
+                            Component.text("Sets " + configPath + " to false", NamedTextColor.GRAY)));
+            p.sendMessage(changeBtn);
         }
     }
 }

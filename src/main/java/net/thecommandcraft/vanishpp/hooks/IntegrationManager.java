@@ -31,10 +31,14 @@ public class IntegrationManager {
             plugin.getLogger().info("Hooked into EssentialsX.");
         }
 
-        Plugin dmap = Bukkit.getPluginManager().getPlugin("dynmap");
-        if (dmap instanceof DynmapAPI) {
-            this.dynmap = (DynmapAPI) dmap;
-            plugin.getLogger().info("Hooked into Dynmap.");
+        try {
+            Plugin dmap = Bukkit.getPluginManager().getPlugin("dynmap");
+            if (dmap instanceof DynmapAPI) {
+                this.dynmap = (DynmapAPI) dmap;
+                plugin.getLogger().info("Hooked into Dynmap.");
+            }
+        } catch (Throwable ignored) {
+            plugin.getLogger().warning("Dynmap found but hook failed to load.");
         }
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {

@@ -35,6 +35,11 @@ public class LanguageManager {
     }
 
     public String getMessage(String path) {
-        return langConfig.getString(path, path);
+        String msg = langConfig.getString(path);
+        if (msg == null) {
+            plugin.getLogger().warning("Missing message key: " + path);
+            return "<red>[Missing: " + path + "]";
+        }
+        return msg;
     }
 }

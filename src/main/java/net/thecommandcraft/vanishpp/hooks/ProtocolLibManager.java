@@ -281,38 +281,7 @@ public class ProtocolLibManager {
                     }
                 });
 
-        // 4. THE FIX: Intercept Team packets (Renamed to SCOREBOARD_TEAM in 5.3.0)
-        protocolManager.addPacketListener(
-                new PacketAdapter(plugin, ListenerPriority.HIGH, PacketType.Play.Server.SCOREBOARD_TEAM) {
-                    @Override
-                    public void onPacketSending(PacketEvent event) {
-                        Player observer = event.getPlayer();
-
-                        if (!ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer,
-                                "vanishpp.see")) {
-                            return;
-                        }
-
-                        PacketContainer packet = event.getPacket();
-                        String teamName = packet.getStrings().read(0);
-
-                        if (teamName != null && teamName.equals("Vanishpp_Vanished")) {
-                            try {
-                                int action = packet.getIntegers().read(0);
-                                if (action == 0 || action == 2) {
-                                    String prefix = ProtocolLibManager.this.plugin
-                                            .getConfigManager().vanishNametagPrefix;
-                                    if (prefix != null && !prefix.isEmpty()) {
-                                        packet.getChatComponents().write(1,
-                                                WrappedChatComponent.fromLegacyText(prefix));
-                                    }
-                                }
-                            } catch (Exception e) {
-                                // Ignore version mismatch
-                            }
-                        }
-                    }
-                });
+        // Native vanishTeam.prefix() handles the nametag prefix for staff already.
     }
 
     private void registerSilentChestListeners() {
@@ -325,8 +294,10 @@ public class ProtocolLibManager {
                 if (event.isCancelled()) return;
                 if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.isEmpty()) return;
                 Player observer = event.getPlayer();
-                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see"))
-                    return;
+                // Suppress chest lid animation for ALL non-openers (both staff and non-staff)
+                // The vanished player who opened it will see it, everyone else won't
+                if (ProtocolLibManager.this.plugin.isVanished(observer))
+                    return; // Don't suppress for the vanished opener
                 try {
                     PacketContainer packet = event.getPacket();
                     BlockPosition pos = packet.getBlockPositionModifier().read(0);
@@ -338,8 +309,7 @@ public class ProtocolLibManager {
         });
 
         // Suppress sound effects originating at silently-opened block positions.
-        // NAMED_SOUND_EFFECT sends XYZ as fixed-point ints (actual coord * 8).
-        // Dividing by 8 (>> 3) gives the block coordinate to match against tracked blocks.
+        // In 1.21+ the sound effect packet stores coordinates as fixed-point ints (actual coord * 8).
         protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
                 PacketType.Play.Server.NAMED_SOUND_EFFECT) {
             @Override
@@ -347,14 +317,36 @@ public class ProtocolLibManager {
                 if (event.isCancelled()) return;
                 if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.isEmpty()) return;
                 Player observer = event.getPlayer();
-                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer, "vanishpp.see"))
+                // Suppress sound for everyone except the vanished opener
+                if (ProtocolLibManager.this.plugin.isVanished(observer))
                     return;
                 try {
                     PacketContainer packet = event.getPacket();
-                    // Fixed-point XYZ: divide by 8 to get block coordinate
-                    int bx = packet.getIntegers().read(0) >> 3;
-                    int by = packet.getIntegers().read(1) >> 3;
-                    int bz = packet.getIntegers().read(2) >> 3;
+                    int bx, by, bz;
+                    // Try fixed-point ints first (coord * 8), fall back to direct ints
+                    try {
+                        int rawX = packet.getIntegers().read(0);
+                        int rawY = packet.getIntegers().read(1);
+                        int rawZ = packet.getIntegers().read(2);
+                        // If values are large (>= 256), they're fixed-point (*8)
+                        if (Math.abs(rawX) > 255 || Math.abs(rawY) > 255 || Math.abs(rawZ) > 255) {
+                            bx = rawX >> 3;
+                            by = rawY >> 3;
+                            bz = rawZ >> 3;
+                        } else {
+                            bx = rawX;
+                            by = rawY;
+                            bz = rawZ;
+                        }
+                    } catch (Exception e) {
+                        // Try float-based coordinates
+                        float fx = packet.getFloat().read(0);
+                        float fy = packet.getFloat().read(1);
+                        float fz = packet.getFloat().read(2);
+                        bx = (int) Math.floor(fx);
+                        by = (int) Math.floor(fy);
+                        bz = (int) Math.floor(fz);
+                    }
                     String blockKey = bx + "," + by + "," + bz;
                     if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.contains(blockKey))
                         event.setCancelled(true);
@@ -367,7 +359,7 @@ public class ProtocolLibManager {
         Set<String> names = new java.util.HashSet<>();
         for (UUID uuid : ProtocolLibManager.this.plugin.getRawVanishedPlayers()) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null)
+            if (p != null && p.getName() != null)
                 names.add(p.getName());
         }
         return names;

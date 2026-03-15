@@ -99,7 +99,11 @@ public class SqlStorage implements StorageProvider {
                 PreparedStatement ps = conn.prepareStatement("SELECT uuid FROM vpp_vanished");
                 ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                players.add(UUID.fromString(rs.getString("uuid")));
+                try {
+                    players.add(UUID.fromString(rs.getString("uuid")));
+                } catch (IllegalArgumentException e2) {
+                    plugin.getLogger().warning("Ignoring invalid UUID in database: " + rs.getString("uuid"));
+                }
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Database error: " + e.getMessage());
