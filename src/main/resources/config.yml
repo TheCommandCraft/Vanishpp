@@ -45,7 +45,7 @@ vanish-appearance:
   # If true, staff with vanishpp.see will see a glowing outline around vanished players.
   # The glow is injected per-packet via ProtocolLib and is invisible to non-staff.
   # Requires ProtocolLib.
-  staff-glow: false
+  staff-glow: true
 
 # --- [ FLIGHT MANAGEMENT ] ---
 # Configuration for flight behavior relating to vanish status.

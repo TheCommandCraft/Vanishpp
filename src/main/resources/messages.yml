@@ -50,7 +50,7 @@ rules:
 
 # --- [ CHAT ] ---
 chat:
-  locked: "&cYou are vanished! &7Type &b/vchat confirm &7to send this message."
+  locked: "<red>You are vanished! <gray>Click <click:run_command:'/vchat confirm'><aqua><underlined>[Confirm Send]</underlined></aqua></click> <gray>to send this message."
   sent: "&aMessage sent."
   no-pending: "&cYou have no pending chat messages to confirm."
   usage: "&7Usage: &b/vchat confirm &7— send your pending vanish chat message."

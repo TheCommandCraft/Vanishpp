@@ -91,7 +91,10 @@ public class PlayerListener implements Listener {
 
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
             Player v = plugin.getServer().getPlayer(uuid);
-            if (v != null && !plugin.getPermissionManager().canSee(player, v)) {
+            if (v == null) continue;
+            if (plugin.getPermissionManager().canSee(player, v)) {
+                player.showPlayer(plugin, v);
+            } else {
                 player.hidePlayer(plugin, v);
             }
         }
