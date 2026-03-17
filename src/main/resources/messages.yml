@@ -73,6 +73,7 @@ warnings:
   action-blocked-actionbar: "&c&l✖ Action Blocked: %action%"
   vanish-blocked: "&cVanish blocked &e%action%&c. Use &b/vrules %rule% true &cto enable."
   config-blocked: "&cVanish blocked &e%action%&c (config: &7%path%&c)."
+  spawn-egg-blocked: "&cSpawn eggs are always blocked while vanished to protect your cover."
   ignore-tip: "&7Tip: Type &b/vrules show_notifications false &7to disable these messages."
   setup-header: "&c⚠ Vanish++ Setup Issues:"
 

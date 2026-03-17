@@ -315,6 +315,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return messageManager;
     }
 
+    public TabPluginHook getTabPluginHook() {
+        return tabPluginHook;
+    }
+
     public List<StartupChecker.Warning> getStartupWarnings() {
         return startupWarnings;
     }

@@ -46,6 +46,9 @@ public class ConfigManager {
     public boolean preventRaid, preventSculk, preventTrample, hideTabComplete, preventSleeping, preventEntityInteract;
     public boolean preventAccidentalChat, godMode, preventPotions, disableFlyOnUnvanish;
 
+    // Appearance extras
+    public boolean staffGlowEnabled;
+
     // Hooks & System
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
     public boolean simulateEssentialsMessages;
@@ -153,6 +156,7 @@ public class ConfigManager {
 
         vanishTabPrefix = config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] ");
         vanishNametagPrefix = config.getString("vanish-appearance.nametag-prefix", "");
+        staffGlowEnabled = config.getBoolean("vanish-appearance.staff-glow", false);
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
         actionBarText = languageManager.getMessage("appearance.action-bar");
         // Support both old key name and new shorter name (Issue #21)
