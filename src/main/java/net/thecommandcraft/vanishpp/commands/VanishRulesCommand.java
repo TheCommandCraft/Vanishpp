@@ -127,8 +127,9 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             boolean currentVal = rules.getRule(target, rule);
             String statusKey = currentVal ? "rules.status-on" : "rules.status-off";
             String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
+            String color = currentVal ? "green" : "red";
             plugin.getMessageManager().sendMessage(sender,
-                    rule + " is: <" + (currentVal ? "green" : "red") + ">" + status);
+                    rule + " is: <" + color + ">" + status);
         } else {
             String valStr = args[argOffset + 1].toLowerCase();
             if (!valStr.equals("true") && !valStr.equals("false")) {

@@ -81,7 +81,8 @@ public class RedisStorage {
             plugin.getVanishScheduler().runGlobal(() -> {
                 plugin.handleNetworkVanishSync(uuid, action.equals("VANISH"));
             });
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to process Redis sync message: " + e.getMessage());
         }
     }
 }
