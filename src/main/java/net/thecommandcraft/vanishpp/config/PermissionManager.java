@@ -149,8 +149,14 @@ public class PermissionManager {
      * Checks permission via Bukkit (OP/Plugins) OR Custom File.
      */
     public boolean hasPermission(Player player, String permission) {
-        if (player.hasPermission(permission)) {
-            return true;
+        try {
+            if (player.hasPermission(permission)) {
+                return true;
+            }
+        } catch (UnsupportedOperationException ignored) {
+            // ProtocolLib creates temporary player stubs during Geyser/Floodgate login
+            // that throw UnsupportedOperationException on hasPermission — treat as no permission.
+            return false;
         }
         return hasPermission(player.getUniqueId(), permission);
     }
