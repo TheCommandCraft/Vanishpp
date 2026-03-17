@@ -73,17 +73,20 @@ public class PlayerListener implements Listener {
             }
             Bukkit.getConsoleSender().sendMessage(joinComp);
 
-            // Re-apply prefix after a longer delay so the client fully processes the join
+            // Re-apply prefix after TAB plugin and other hooks finish their own join processing.
+            // 60 ticks (3s) is enough to outlast TAB's async join pipeline on loaded servers.
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (player.isOnline() && plugin.isVanished(player)) {
-                    // Force re-add to team so the scoreboard update packet is sent to all observers
                     plugin.reapplyTeamEntry(player);
                     if (config.vanishTabPrefix != null && !config.vanishTabPrefix.isEmpty()) {
                         player.playerListName(plugin.getMessageManager().parse(
                                 config.vanishTabPrefix + player.getName(), player));
                     }
+                    // Re-notify TAB and other hooks after they've finished their own join logic
+                    plugin.getIntegrationManager().updateHooks(player, true);
+                    plugin.getTabPluginHook().update(player, true);
                 }
-            }, 20L);
+            }, 60L);
         }
 
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
@@ -267,6 +270,27 @@ public class PlayerListener implements Listener {
         }
     }
 
+    // Issue #1 — block throwable items (eggs, snowballs, ender pearls, bows, etc.)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        if (!(event.getEntity().getShooter() instanceof Player p)) return;
+        if (!plugin.isVanished(p)) return;
+        if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
+            event.setCancelled(true);
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "throwing items");
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onShootBow(org.bukkit.event.entity.EntityShootBowEvent event) {
+        if (!(event.getEntity() instanceof Player p)) return;
+        if (!plugin.isVanished(p)) return;
+        if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
+            event.setCancelled(true);
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "shooting bow");
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onProjectileHit(ProjectileHitEvent event) {
         if (!config.ignoreProjectiles)
@@ -341,18 +365,29 @@ public class PlayerListener implements Listener {
             return;
         }
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) {
-            // Always block spawn eggs — spawning visible entities blows cover
-            if (event.hasItem() && event.getItem() != null
-                    && event.getItem().getType().name().endsWith("_SPAWN_EGG")) {
-                event.setCancelled(true);
-                sendRuleDeny(p, RuleManager.CAN_INTERACT, "using spawn eggs");
-                return;
-            }
+            boolean isSpawnEgg = event.hasItem() && event.getItem() != null
+                    && event.getItem().getType().name().endsWith("_SPAWN_EGG");
+
             if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
+                // Interaction locked — block everything including spawn eggs; [Allow] buttons now work
                 event.setCancelled(true);
                 if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem())
-                    sendRuleDeny(p, RuleManager.CAN_INTERACT, "interaction");
-            } else if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+                    sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "using spawn eggs" : "interaction");
+                return;
+            }
+
+            // CAN_INTERACT is enabled — spawn eggs are still always blocked (would spawn a visible
+            // entity and blow cover). Show an informational message without [Allow] buttons.
+            if (isSpawnEgg) {
+                event.setCancelled(true);
+                String msg = config.getLanguageManager().getMessage("warnings.spawn-egg-blocked");
+                if (msg == null || msg.isEmpty())
+                    msg = "<red>Spawn eggs are always blocked while vanished to protect your cover.";
+                plugin.getMessageManager().sendMessage(p, msg);
+                return;
+            }
+
+            if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
                 handleSilentChest(event);
             }
         }

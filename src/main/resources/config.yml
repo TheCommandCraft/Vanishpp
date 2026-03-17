@@ -42,6 +42,11 @@ vanish-appearance:
   # Whether to hide vanished players from the server's online player count.
   adjust-server-list: true
 
+  # If true, staff with vanishpp.see will see a glowing outline around vanished players.
+  # The glow is injected per-packet via ProtocolLib and is invisible to non-staff.
+  # Requires ProtocolLib.
+  staff-glow: false
+
 # --- [ FLIGHT MANAGEMENT ] ---
 # Configuration for flight behavior relating to vanish status.
 flight-control:

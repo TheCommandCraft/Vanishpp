@@ -155,15 +155,17 @@ public class ProtocolLibManager {
                 try {
                     List<WrappedDataValue> values = new ArrayList<>(packet.getDataValueCollectionModifier().read(0));
                     boolean modified = false;
+                    boolean staffGlow = ProtocolLibManager.this.plugin.getConfigManager().staffGlowEnabled;
                     for (int i = 0; i < values.size(); i++) {
                         WrappedDataValue value = values.get(i);
                         if (value.getIndex() == 0) {
                             byte b = (byte) value.getValue();
-                            if ((b & 0x20) != 0) {
-                                values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(),
-                                        (byte) (b & ~0x20)));
-                                modified = true;
-                            }
+                            // Strip invisibility flag (0x20)
+                            b = (byte) (b & ~0x20);
+                            // Add glowing outline flag (0x40) so staff see a clear visual indicator
+                            if (staffGlow) b = (byte) (b | 0x40);
+                            values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(), b));
+                            modified = true;
                         } else if (value.getIndex() == 4) {
                             if ((boolean) value.getValue()) {
                                 values.set(i, new WrappedDataValue(value.getIndex(), value.getSerializer(), false));
