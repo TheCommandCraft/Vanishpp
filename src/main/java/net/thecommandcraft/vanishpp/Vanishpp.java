@@ -25,6 +25,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
 import java.util.*;
+import java.util.logging.Level;
 
 public class Vanishpp extends JavaPlugin implements Listener {
 
@@ -99,7 +100,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 this.hasProtocolLib = true;
                 getLogger().info("ProtocolLib hooked successfully.");
             } catch (Throwable e) {
-                getLogger().warning("ProtocolLib found but failed to hook: " + e.getMessage());
+                getLogger().log(Level.WARNING, "ProtocolLib found but failed to hook", e);
                 this.hasProtocolLib = false;
             }
         } else {
@@ -116,16 +117,16 @@ public class Vanishpp extends JavaPlugin implements Listener {
         setupTeams();
 
         // 4. Register Commands
-        this.getCommand("vanish").setExecutor(new VanishCommand(this));
-        this.getCommand("vperms").setExecutor(new VpermsCommand(this));
-        this.getCommand("vanishrules").setExecutor(new VanishRulesCommand(this));
-        this.getCommand("vanishchat").setExecutor(new VanishChatCommand(this));
-this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
-        this.getCommand("vanishlist").setExecutor(new VanishListCommand(this));
-        this.getCommand("vanishhelp").setExecutor(new VanishHelpCommand(this));
-        this.getCommand("vanishconfig").setExecutor(new VanishConfigCommand(this));
-        this.getCommand("vack").setExecutor(new VanishAckCommand(this));
-        this.getCommand("vanishreload").setExecutor(new VanishReloadCommand(this));
+        registerCommand("vanish", new VanishCommand(this));
+        registerCommand("vperms", new VpermsCommand(this));
+        registerCommand("vanishrules", new VanishRulesCommand(this));
+        registerCommand("vanishchat", new VanishChatCommand(this));
+        registerCommand("vanishignore", new VanishIgnoreCommand(this));
+        registerCommand("vanishlist", new VanishListCommand(this));
+        registerCommand("vanishhelp", new VanishHelpCommand(this));
+        registerCommand("vanishconfig", new VanishConfigCommand(this));
+        registerCommand("vack", new VanishAckCommand(this));
+        registerCommand("vanishreload", new VanishReloadCommand(this));
 
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
@@ -134,7 +135,7 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
         try {
             new MobAiManager(this).register();
         } catch (Throwable e) {
-            getLogger().warning("Could not register Mob AI Manager: " + e.getMessage());
+            getLogger().log(Level.WARNING, "Could not register Mob AI Manager", e);
         }
 
         boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
@@ -153,7 +154,7 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
             this.pluginHider = new PluginHider(this);
             this.pluginHider.register();
         } catch (Throwable e) {
-            getLogger().warning("Failed to initialize Plugin Hider: " + e.getMessage());
+            getLogger().log(Level.WARNING, "Failed to initialize Plugin Hider", e);
         }
 
         startActionBarTask();
@@ -318,9 +319,28 @@ this.getCommand("vanishignore").setExecutor(new VanishIgnoreCommand(this));
         return startupWarnings;
     }
 
+    private void registerCommand(String name, org.bukkit.command.CommandExecutor executor) {
+        org.bukkit.command.PluginCommand cmd = getCommand(name);
+        if (cmd == null) {
+            getLogger().warning("Command '" + name + "' is not defined in plugin.yml — skipping registration.");
+            return;
+        }
+        cmd.setExecutor(executor);
+    }
+
+    /** Cleans up per-player cached state. Call on player quit. */
+    public void cleanupPlayerCache(UUID uuid) {
+        actionBarPausedUntil.remove(uuid);
+    }
+
     // --- CORE LOGIC ---
     private void setupTeams() {
-        Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        org.bukkit.scoreboard.ScoreboardManager sm = Bukkit.getScoreboardManager();
+        if (sm == null) {
+            getLogger().severe("ScoreboardManager is null — cannot set up vanish team. Nametag features disabled.");
+            return;
+        }
+        Scoreboard mainScoreboard = sm.getMainScoreboard();
         this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
         if (this.vanishTeam == null)
             this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");

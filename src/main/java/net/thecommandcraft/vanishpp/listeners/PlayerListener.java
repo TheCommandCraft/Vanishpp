@@ -219,6 +219,7 @@ public class PlayerListener implements Listener {
         }
         ruleNotificationCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
+        plugin.cleanupPlayerCache(uuid);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
