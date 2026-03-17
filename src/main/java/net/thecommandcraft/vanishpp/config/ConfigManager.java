@@ -156,7 +156,7 @@ public class ConfigManager {
 
         vanishTabPrefix = config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] ");
         vanishNametagPrefix = config.getString("vanish-appearance.nametag-prefix", "");
-        staffGlowEnabled = config.getBoolean("vanish-appearance.staff-glow", false);
+        staffGlowEnabled = config.getBoolean("vanish-appearance.staff-glow", true);
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled");
         actionBarText = languageManager.getMessage("appearance.action-bar");
         // Support both old key name and new shorter name (Issue #21)

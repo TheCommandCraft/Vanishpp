@@ -396,12 +396,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     private void startSyncTask() {
+        // Visibility (show/hide) is now fully event-driven — triggered at vanish, unvanish,
+        // join, quit, and permission changes. This task is mob-targeting only.
         vanishScheduler.runTimerGlobal(() -> {
             for (UUID uuid : Set.copyOf(vanishedPlayers)) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline()) {
-                    updateVanishVisibility(p);
-                    // Continuously clear mob targets for vanished players with mob_targeting OFF
                     if (!ruleManager.getRule(p, RuleManager.MOB_TARGETING)) {
                         for (Entity entity : p.getNearbyEntities(48, 48, 48)) {
                             if (entity instanceof Mob mob && p.equals(mob.getTarget())) {
@@ -467,6 +467,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
             tabPluginHook.update(player, true);
         updateVanishVisibility(player);
 
+        // Instant action bar feedback — don't wait for the scheduler's next cycle
+        if (configManager.actionBarEnabled) {
+            player.sendActionBar(messageManager.parse(configManager.actionBarText, player));
+        }
+
         storageProvider.setVanished(player.getUniqueId(), true);
         if (redisStorage != null)
             redisStorage.broadcastVanish(player.getUniqueId(), true);
@@ -508,6 +513,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (tabPluginHook != null)
             tabPluginHook.update(player, false);
         updateVanishVisibility(player);
+
+        // Instantly clear the action bar — don't leave it showing until the next scheduler tick
+        player.sendActionBar(Component.empty());
 
         storageProvider.setVanished(player.getUniqueId(), false);
         if (redisStorage != null)

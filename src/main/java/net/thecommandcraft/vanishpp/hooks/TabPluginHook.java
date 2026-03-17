@@ -2,6 +2,7 @@ package net.thecommandcraft.vanishpp.hooks;
 
 import me.neznamy.tab.api.TabAPI;
 import me.neznamy.tab.api.TabPlayer;
+import me.neznamy.tab.api.nametag.NameTagManager;
 import me.neznamy.tab.api.tablist.TabListFormatManager;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
@@ -31,6 +32,7 @@ public class TabPluginHook {
             TabPlayer tabPlayer = api.getPlayer(player.getUniqueId());
 
             if (tabPlayer != null) {
+                // Tab list prefix
                 TabListFormatManager formatManager = api.getTabListFormatManager();
                 if (formatManager != null) {
                     if (isVanished) {
@@ -38,6 +40,17 @@ public class TabPluginHook {
                         formatManager.setPrefix(tabPlayer, prefix);
                     } else {
                         formatManager.setPrefix(tabPlayer, null);
+                    }
+                }
+
+                // Nametag prefix (above head) — TAB overrides scoreboard teams, so we must use its API
+                NameTagManager nameTagManager = api.getNameTagManager();
+                if (nameTagManager != null) {
+                    if (isVanished) {
+                        String nametagPrefix = plugin.getConfigManager().vanishNametagPrefix;
+                        nameTagManager.setPrefix(tabPlayer, nametagPrefix != null ? nametagPrefix : "");
+                    } else {
+                        nameTagManager.setPrefix(tabPlayer, null);
                     }
                 }
             }
