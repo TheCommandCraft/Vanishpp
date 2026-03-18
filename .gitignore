@@ -1,5 +1,6 @@
 # Build output
 target/
+dependency-reduced-pom.xml
 
 # IDE
 .idea/
@@ -8,12 +9,28 @@ target/
 # Claude Code local settings
 .claude/
 
+# Server runtime data (dev server)
+server-data/world/
+server-data/world_nether/
+server-data/world_the_end/
+server-data/logs/
+server-data/cache/
+server-data/plugins/.paper-remapped/
+server-data/plugins/spark/tmp/
+server-data/plugins/Vanishpp/data.yml
+server-data/usercache.json
+server-data/versions/
+server-data/libraries/
+
 # Test server runtime data
 testserver_clean/world/
 testserver_clean/world_nether/
 testserver_clean/world_the_end/
 testserver_clean/logs/
 testserver_clean/cache/
+testserver_clean/versions/
+testserver_clean/libraries/
+testserver_clean/usercache.json
 testserver_clean/plugins/.paper-remapped/
 testserver_clean/plugins/spark/tmp/
 testserver_clean/plugins/bStats/
@@ -28,3 +45,5 @@ testserver_clean/plugins/TAB/skincache.yml
 testserver_clean/plugins/DiscordSRV/
 testserver_clean/plugins/voicechat/
 testserver_clean/plugins/.var-list-manifest.json
+testserver_clean/plugins/Geyser-Spigot/
+testserver_clean/plugins/floodgate/

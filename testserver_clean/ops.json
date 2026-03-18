@@ -1,6 +1,18 @@
 [
   {
+    "uuid": "af3193a5-f44d-3ddb-aede-e9c77bdcbc49",
+    "name": "TheCommandCraft",
+    "level": 4,
+    "bypassesPlayerLimit": false
+  },
+  {
     "uuid": "76c5c55b-f065-4f27-b728-8cf8fd1ebf98",
+    "name": "TCC_STUDIOS",
+    "level": 4,
+    "bypassesPlayerLimit": false
+  },
+  {
+    "uuid": "2fe02d5c-ebc5-322b-b50f-f7e5c991ca7a",
     "name": "TCC_STUDIOS",
     "level": 4,
     "bypassesPlayerLimit": false
