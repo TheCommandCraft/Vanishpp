@@ -4,6 +4,7 @@
 - Add all other platform support
 - Make mod
 - make gui for the plugin
+- Make update checker check every day fixing the issue of not displaying for always online servers
 
 !!! FIX THE [VANISHED] PREFIX DISPLAYING ON NAMETAGS FOR PLAYERS WITH Vanishpp.See !!!
 - Make a velocity plugin to sync configs across the whole server using velocity!
