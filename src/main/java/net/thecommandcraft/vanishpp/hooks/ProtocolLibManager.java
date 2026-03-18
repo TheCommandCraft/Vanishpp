@@ -311,9 +311,13 @@ public class ProtocolLibManager {
         });
 
         // Suppress sound effects originating at silently-opened block positions.
-        // In 1.21+ the sound effect packet stores coordinates as fixed-point ints (actual coord * 8).
-        protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
-                PacketType.Play.Server.NAMED_SOUND_EFFECT) {
+        // Vanilla block sounds (barrel, chest, shulker) use SOUND_EFFECT (registered sound ID).
+        // Custom sounds use NAMED_SOUND_EFFECT. We listen to both.
+        // All sound packets in 1.21+ store coordinates as fixed-point ints (actual_coord * 8).
+        // Integer field layout varies by packet type — we try multiple index offsets to be robust.
+        PacketAdapter soundListener = new PacketAdapter(plugin, ListenerPriority.HIGHEST,
+                PacketType.Play.Server.NAMED_SOUND_EFFECT,
+                PacketType.Play.Server.CUSTOM_SOUND_EFFECT) {
             @Override
             public void onPacketSending(PacketEvent event) {
                 if (event.isCancelled()) return;
@@ -322,39 +326,51 @@ public class ProtocolLibManager {
                 // Suppress sound for everyone except the vanished opener
                 if (ProtocolLibManager.this.plugin.isVanished(observer))
                     return;
-                try {
-                    PacketContainer packet = event.getPacket();
-                    int bx, by, bz;
-                    // Try fixed-point ints first (coord * 8), fall back to direct ints
-                    try {
-                        int rawX = packet.getIntegers().read(0);
-                        int rawY = packet.getIntegers().read(1);
-                        int rawZ = packet.getIntegers().read(2);
-                        // If values are large (>= 256), they're fixed-point (*8)
-                        if (Math.abs(rawX) > 255 || Math.abs(rawY) > 255 || Math.abs(rawZ) > 255) {
-                            bx = rawX >> 3;
-                            by = rawY >> 3;
-                            bz = rawZ >> 3;
-                        } else {
-                            bx = rawX;
-                            by = rawY;
-                            bz = rawZ;
-                        }
-                    } catch (Exception e) {
-                        // Try float-based coordinates
-                        float fx = packet.getFloat().read(0);
-                        float fy = packet.getFloat().read(1);
-                        float fz = packet.getFloat().read(2);
-                        bx = (int) Math.floor(fx);
-                        by = (int) Math.floor(fy);
-                        bz = (int) Math.floor(fz);
-                    }
-                    String blockKey = bx + "," + by + "," + bz;
-                    if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.contains(blockKey))
-                        event.setCancelled(true);
-                } catch (Exception ignored) {}
+                if (matchesSilentBlock(event.getPacket()))
+                    event.setCancelled(true);
             }
-        });
+
+            /** Try index offsets 0..3 for X/Y/Z, always treating as fixed-point (* 8). */
+            private boolean matchesSilentBlock(PacketContainer packet) {
+                Set<String> silentBlocks = ProtocolLibManager.this.plugin.silentlyOpenedBlocks;
+                // Try integer-based coordinates (fixed-point) at multiple offsets
+                for (int offset = 0; offset <= 3; offset++) {
+                    try {
+                        int bx = packet.getIntegers().read(offset) >> 3;
+                        int by = packet.getIntegers().read(offset + 1) >> 3;
+                        int bz = packet.getIntegers().read(offset + 2) >> 3;
+                        if (silentBlocks.contains(bx + "," + by + "," + bz))
+                            return true;
+                    } catch (Exception ignored) {}
+                }
+                return false;
+            }
+        };
+        protocolManager.addPacketListener(soundListener);
+    }
+
+    /**
+     * Send an ENTITY_METADATA packet with the glow flag to all staff observers.
+     * This forces the client to render the glow outline without waiting for a natural
+     * metadata change (like sneaking).
+     */
+    public void sendGlowMetadata(Player vanished) {
+        if (!plugin.getConfigManager().staffGlowEnabled) return;
+        try {
+            for (Player observer : Bukkit.getOnlinePlayers()) {
+                if (observer.equals(vanished)) continue;
+                if (!plugin.getPermissionManager().canSee(observer, vanished)) continue;
+                if (!observer.canSee(vanished)) continue; // not yet shown
+                PacketContainer packet = new PacketContainer(PacketType.Play.Server.ENTITY_METADATA);
+                packet.getIntegers().write(0, vanished.getEntityId());
+                List<WrappedDataValue> values = new ArrayList<>();
+                // Entity flags byte: 0x40 = glowing (invisibility 0x20 stripped by our interceptor)
+                values.add(new WrappedDataValue(0,
+                        WrappedDataWatcher.Registry.get(Byte.class), (byte) 0x40));
+                packet.getDataValueCollectionModifier().write(0, values);
+                protocolManager.sendServerPacket(observer, packet);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private Set<String> getVanishedNames() {

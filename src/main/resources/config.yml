@@ -150,6 +150,7 @@ default-rules:
   can_drop_items: false
   can_trigger_physical: false
   can_interact: true
+  can_throw: false
   can_chat: false
   mob_targeting: false
   show_notifications: true

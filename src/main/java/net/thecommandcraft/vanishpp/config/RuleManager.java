@@ -17,6 +17,7 @@ public class RuleManager {
     public static final String CAN_DROP_ITEMS = "can_drop_items";
     public static final String CAN_TRIGGER_PHYSICAL = "can_trigger_physical";
     public static final String CAN_INTERACT = "can_interact";
+    public static final String CAN_THROW = "can_throw";
     public static final String CAN_CHAT = "can_chat";
     public static final String MOB_TARGETING = "mob_targeting";
     public static final String SHOW_NOTIFICATIONS = "show_notifications";
@@ -32,6 +33,7 @@ public class RuleManager {
         hardDefaults.put(CAN_DROP_ITEMS, false);
         hardDefaults.put(CAN_TRIGGER_PHYSICAL, false);
         hardDefaults.put(CAN_INTERACT, true);
+        hardDefaults.put(CAN_THROW, false);
         hardDefaults.put(CAN_CHAT, false);
         hardDefaults.put(MOB_TARGETING, false);
         hardDefaults.put(SHOW_NOTIFICATIONS, true);

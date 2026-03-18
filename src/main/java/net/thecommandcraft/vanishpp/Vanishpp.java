@@ -50,6 +50,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public final Map<UUID, String> pendingChatMessages = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, Long> actionBarPausedUntil = new java.util.concurrent.ConcurrentHashMap<>();
     private boolean hasProtocolLib = false;
+    private ProtocolLibManager protocolLibManager;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
     /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
      *  Key format: "x,y,z" */
@@ -187,6 +188,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
             startActionBarTask();
             startSyncTask();
         }
+
+        // Refresh team prefix and resync all online vanished players
+        refreshTeamPrefix();
+        for (UUID uuid : vanishedPlayers) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && p.isOnline()) {
+                resyncVanishEffects(p);
+            }
+        }
     }
 
     @Override
@@ -256,6 +266,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private void hookProtocolLib() {
         ProtocolLibManager manager = new ProtocolLibManager(this);
         manager.load();
+        this.protocolLibManager = manager;
+    }
+
+    public ProtocolLibManager getProtocolLibManager() {
+        return protocolLibManager;
     }
 
     // --- PUBLIC API GETTERS ---
@@ -396,23 +411,49 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     private void startSyncTask() {
-        // Visibility (show/hide) is now fully event-driven — triggered at vanish, unvanish,
-        // join, quit, and permission changes. This task is mob-targeting only.
+        // Fast visibility/glow/prefix sync — runs every 10 ticks (0.5s).
+        // Lightweight: just checks and fixes show/hide state without forced entity respawn.
+        // Catches permission changes, op/deop, and any external plugins overriding visibility.
         vanishScheduler.runTimerGlobal(() -> {
             for (UUID uuid : Set.copyOf(vanishedPlayers)) {
-                Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
-                    if (!ruleManager.getRule(p, RuleManager.MOB_TARGETING)) {
-                        for (Entity entity : p.getNearbyEntities(48, 48, 48)) {
-                            if (entity instanceof Mob mob && p.equals(mob.getTarget())) {
-                                mob.setTarget(null);
-                                mob.getPathfinder().stopPathfinding();
-                            }
+                Player vanished = Bukkit.getPlayer(uuid);
+                if (vanished == null || !vanished.isOnline()) continue;
+
+                // Reapply team entry + tab prefix (catches TAB plugin or scoreboard overrides)
+                if (vanishTeam != null && !vanishTeam.hasEntry(vanished.getName()))
+                    vanishTeam.addEntry(vanished.getName());
+                if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
+                    vanished.playerListName(messageManager.parse(
+                            configManager.vanishTabPrefix + vanished.getName(), vanished));
+                }
+
+                // Fix visibility: ensure non-seers can't see, seers can see
+                for (Player observer : Bukkit.getOnlinePlayers()) {
+                    if (observer.equals(vanished)) continue;
+                    boolean canSee = permissionManager.canSee(observer, vanished);
+                    if (!canSee && observer.canSee(vanished)) {
+                        observer.hidePlayer(this, vanished);
+                    } else if (canSee && !observer.canSee(vanished)) {
+                        observer.showPlayer(this, vanished);
+                    }
+                }
+
+                // Send glow metadata to staff (ensures glow is always visible)
+                if (hasProtocolLib && protocolLibManager != null) {
+                    protocolLibManager.sendGlowMetadata(vanished);
+                }
+
+                // Mob targeting
+                if (!ruleManager.getRule(vanished, RuleManager.MOB_TARGETING)) {
+                    for (Entity entity : vanished.getNearbyEntities(48, 48, 48)) {
+                        if (entity instanceof Mob mob && vanished.equals(mob.getTarget())) {
+                            mob.setTarget(null);
+                            mob.getPathfinder().stopPathfinding();
                         }
                     }
                 }
             }
-        }, 20L, 20L);
+        }, 10L, 10L);
     }
 
     public void applyVanishEffects(Player player) {
@@ -465,7 +506,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         integrationManager.updateHooks(player, true);
         if (tabPluginHook != null)
             tabPluginHook.update(player, true);
-        updateVanishVisibility(player);
+        refreshVisibilityWithGlow(player);
 
         // Instant action bar feedback — don't wait for the scheduler's next cycle
         if (configManager.actionBarEnabled) {
@@ -512,7 +553,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         integrationManager.updateHooks(player, false);
         if (tabPluginHook != null)
             tabPluginHook.update(player, false);
-        updateVanishVisibility(player);
+        // Use hide-then-show to force fresh metadata packets — removes stale glow from staff clients
+        refreshVisibilityWithGlow(player);
 
         // Instantly clear the action bar — don't leave it showing until the next scheduler tick
         player.sendActionBar(Component.empty());
@@ -606,6 +648,88 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Hide-then-show for observers to force entity respawn + metadata packets.
+     * After showing, sends an explicit glow metadata packet to staff so the glow
+     * appears immediately (not on next sneak/pose change).
+     */
+    public void refreshVisibilityWithGlow(Player subject) {
+        boolean subjectVanished = isVanished(subject);
+        for (Player observer : Bukkit.getOnlinePlayers()) {
+            if (observer.equals(subject))
+                continue;
+            boolean canSee = permissionManager.canSee(observer, subject);
+            if (subjectVanished && !canSee) {
+                observer.hidePlayer(this, subject);
+            } else {
+                observer.hidePlayer(this, subject);
+                observer.showPlayer(this, subject);
+            }
+        }
+        // Send explicit glow metadata after entity respawn
+        if (subjectVanished && hasProtocolLib && protocolLibManager != null) {
+            vanishScheduler.runLaterGlobal(() -> {
+                if (subject.isOnline())
+                    protocolLibManager.sendGlowMetadata(subject);
+            }, 2L);
+        }
+    }
+
+    /**
+     * Lightweight resync that reapplies ALL vanish state without touching storage/Redis.
+     * Use after respawn, world change, gamemode change, or reload.
+     */
+    public void resyncVanishEffects(Player player) {
+        if (!isVanished(player)) return;
+
+        // Team + prefix
+        if (vanishTeam != null) vanishTeam.addEntry(player.getName());
+        refreshTeamPrefix();
+        if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
+            player.playerListName(messageManager.parse(configManager.vanishTabPrefix + player.getName(), player));
+        }
+
+        // Metadata
+        player.setMetadata("vanished", new FixedMetadataValue(this, true));
+        player.setCollidable(false);
+
+        // Fly
+        if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
+            player.setAllowFlight(true);
+            player.setFlying(true);
+        }
+
+        // Night vision
+        if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
+            player.addPotionEffect(
+                    new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
+        }
+
+        // Spawning / sleeping
+        if (configManager.disableBlockTriggering)
+            try { player.setAffectsSpawning(false); } catch (Throwable ignored) {}
+        if (configManager.preventSleeping)
+            try { player.setSleepingIgnored(true); } catch (Throwable ignored) {}
+
+        // Clear mob targets
+        if (!ruleManager.getRule(player, RuleManager.MOB_TARGETING)) {
+            for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
+                if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
+                    mob.setTarget(null);
+                    mob.getPathfinder().stopPathfinding();
+                }
+            }
+        }
+
+        // Hooks
+        integrationManager.updateHooks(player, true);
+        if (tabPluginHook != null)
+            tabPluginHook.update(player, true);
+
+        // Visibility + glow
+        refreshVisibilityWithGlow(player);
+    }
+
     public void scheduleRuleRevert(Player player, String rule, boolean originalValue, int seconds) {
         vanishScheduler.runLaterGlobal(() -> {
             ruleManager.setRule(player, rule, originalValue);
@@ -626,7 +750,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 for (UUID uuid : vanishedPlayers) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null)
-                        updateVanishVisibility(p);
+                        refreshVisibilityWithGlow(p);
                 }
             }, 10L);
         }

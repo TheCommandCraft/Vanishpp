@@ -34,6 +34,7 @@ import org.bukkit.event.player.*;
 import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.util.Vector;
+import org.bukkit.event.Event;
 
 import java.util.*;
 
@@ -44,6 +45,7 @@ public class PlayerListener implements Listener {
     private final RuleManager rules;
     private final Map<UUID, GameMode> silentChestViewers = new HashMap<>();
     private final Map<UUID, String> silentChestBlockKeys = new HashMap<>(); // block key per viewer for cleanup
+    private final Map<UUID, Inventory> silentChestRealInventories = new HashMap<>(); // snapshot → real for sync-back
     private final Map<UUID, Map<String, Long>> ruleNotificationCooldowns = new HashMap<>();
     private final Set<UUID> hasSeenDisableTip = new HashSet<>();
 
@@ -73,20 +75,23 @@ public class PlayerListener implements Listener {
             }
             Bukkit.getConsoleSender().sendMessage(joinComp);
 
-            // Re-apply prefix after TAB plugin and other hooks finish their own join processing.
-            // 60 ticks (3s) is enough to outlast TAB's async join pipeline on loaded servers.
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (player.isOnline() && plugin.isVanished(player)) {
-                    plugin.reapplyTeamEntry(player);
-                    if (config.vanishTabPrefix != null && !config.vanishTabPrefix.isEmpty()) {
-                        player.playerListName(plugin.getMessageManager().parse(
-                                config.vanishTabPrefix + player.getName(), player));
+            // Multi-stage reapply to catch TAB plugin overrides at different stages of its async pipeline.
+            // Stage 1 (2 ticks / ~100ms): catches most cases instantly
+            // Stage 2 (20 ticks / 1s): catches delayed TAB processing
+            // Stage 3 (60 ticks / 3s): final safety net for heavily loaded servers
+            for (long delay : new long[]{2L, 20L, 60L}) {
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (player.isOnline() && plugin.isVanished(player)) {
+                        plugin.reapplyTeamEntry(player);
+                        if (config.vanishTabPrefix != null && !config.vanishTabPrefix.isEmpty()) {
+                            player.playerListName(plugin.getMessageManager().parse(
+                                    config.vanishTabPrefix + player.getName(), player));
+                        }
+                        plugin.getIntegrationManager().updateHooks(player, true);
+                        plugin.getTabPluginHook().update(player, true);
                     }
-                    // Re-notify TAB and other hooks after they've finished their own join logic
-                    plugin.getIntegrationManager().updateHooks(player, true);
-                    plugin.getTabPluginHook().update(player, true);
-                }
-            }, 60L);
+                }, delay);
+            }
         }
 
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
@@ -273,14 +278,14 @@ public class PlayerListener implements Listener {
         }
     }
 
-    // Issue #1 — block throwable items (eggs, snowballs, ender pearls, bows, etc.)
+    // Block throwable items (projectiles create visible entities that reveal position)
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onProjectileLaunch(ProjectileLaunchEvent event) {
         if (!(event.getEntity().getShooter() instanceof Player p)) return;
         if (!plugin.isVanished(p)) return;
-        if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
+        if (!rules.getRule(p, RuleManager.CAN_THROW)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_INTERACT, "throwing items");
+            sendRuleDeny(p, RuleManager.CAN_THROW, "throwing items");
         }
     }
 
@@ -288,9 +293,9 @@ public class PlayerListener implements Listener {
     public void onShootBow(org.bukkit.event.entity.EntityShootBowEvent event) {
         if (!(event.getEntity() instanceof Player p)) return;
         if (!plugin.isVanished(p)) return;
-        if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
+        if (!rules.getRule(p, RuleManager.CAN_THROW)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_INTERACT, "shooting bow");
+            sendRuleDeny(p, RuleManager.CAN_THROW, "shooting");
         }
     }
 
@@ -374,19 +379,18 @@ public class PlayerListener implements Listener {
             if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
                 // Interaction locked — block everything including spawn eggs; [Allow] buttons now work
                 event.setCancelled(true);
+                event.setUseItemInHand(Event.Result.DENY);
                 if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem())
                     sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "using spawn eggs" : "interaction");
                 return;
             }
 
             // CAN_INTERACT is enabled — spawn eggs are still always blocked (would spawn a visible
-            // entity and blow cover). Show an informational message without [Allow] buttons.
+            // entity and blow cover).
             if (isSpawnEgg) {
                 event.setCancelled(true);
-                String msg = config.getLanguageManager().getMessage("warnings.spawn-egg-blocked");
-                if (msg == null || msg.isEmpty())
-                    msg = "<red>Spawn eggs are always blocked while vanished to protect your cover.";
-                plugin.getMessageManager().sendMessage(p, msg);
+                event.setUseItemInHand(Event.Result.DENY);
+                sendRuleDeny(p, RuleManager.CAN_THROW, "using spawn eggs");
                 return;
             }
 
@@ -517,6 +521,40 @@ public class PlayerListener implements Listener {
             event.deathMessage(null);
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onRespawn(PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        if (!plugin.isVanished(player)) return;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && plugin.isVanished(player))
+                plugin.resyncVanishEffects(player);
+        }, 1L);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldChange(PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        if (!plugin.isVanished(player)) return;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && plugin.isVanished(player))
+                plugin.resyncVanishEffects(player);
+        }, 1L);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGameModeChange(PlayerGameModeChangeEvent event) {
+        Player player = event.getPlayer();
+        if (!plugin.isVanished(player)) return;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && plugin.isVanished(player)) {
+                if (config.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
+                    player.setAllowFlight(true);
+                    player.setFlying(true);
+                }
+            }
+        }, 1L);
+    }
+
     private void handleSilentChest(PlayerInteractEvent event) {
         if (!config.silentChests)
             return;
@@ -535,17 +573,23 @@ public class PlayerListener implements Listener {
         event.setCancelled(true);
 
         if (plugin.hasProtocolLib()) {
-            // ProtocolLib available: suppress block action/sound packets, open normally
+            // Open a snapshot inventory — avoids triggering Container.startOpen()
+            // which is the source of the barrel/chest lid animation and sound.
             String blockKey = block.getX() + "," + block.getY() + "," + block.getZ();
-            plugin.silentlyOpenedBlocks.add(blockKey);
-            Inventory inv = (type == Material.ENDER_CHEST) ? player.getEnderChest()
-                    : (block.getState() instanceof Container c ? c.getInventory() : null);
-            if (inv != null) {
+            if (type == Material.ENDER_CHEST) {
+                // Ender chest has no shared animation state, open directly
                 silentChestViewers.put(player.getUniqueId(), player.getGameMode());
-                silentChestBlockKeys.put(player.getUniqueId(), blockKey); // track which block for cleanup
-                player.openInventory(inv);
-            } else {
-                plugin.silentlyOpenedBlocks.remove(blockKey);
+                player.openInventory(player.getEnderChest());
+            } else if (block.getState() instanceof Container c) {
+                Inventory realInv = c.getInventory();
+                Component title = c.customName() != null ? c.customName()
+                        : Component.translatable(block.getType().translationKey());
+                Inventory snapshot = Bukkit.createInventory(null, realInv.getSize(), title);
+                snapshot.setContents(realInv.getContents());
+                silentChestViewers.put(player.getUniqueId(), player.getGameMode());
+                silentChestBlockKeys.put(player.getUniqueId(), blockKey);
+                silentChestRealInventories.put(player.getUniqueId(), realInv);
+                player.openInventory(snapshot);
             }
         } else {
             // No ProtocolLib: use spectator mode fallback, warn player
@@ -584,6 +628,12 @@ public class PlayerListener implements Listener {
         GameMode gm = silentChestViewers.remove(uuid);
         String blockKey = silentChestBlockKeys.remove(uuid);
 
+        // Sync snapshot contents back to the real container
+        Inventory realInv = silentChestRealInventories.remove(uuid);
+        if (realInv != null) {
+            realInv.setContents(event.getInventory().getContents());
+        }
+
         if (p.isOnline()) {
             // Restore game mode only if we switched to spectator (non-ProtocolLib fallback path)
             if (gm != GameMode.SPECTATOR && p.getGameMode() == GameMode.SPECTATOR) {
@@ -595,9 +645,11 @@ public class PlayerListener implements Listener {
             }
         }
 
-        // Remove only this specific block from the silently-opened set
+        // Delay removal so ProtocolLib still suppresses close animation + sound packets
+        // that fire AFTER InventoryCloseEvent
         if (blockKey != null) {
-            plugin.silentlyOpenedBlocks.remove(blockKey);
+            final String key = blockKey;
+            Bukkit.getScheduler().runTaskLater(plugin, () -> plugin.silentlyOpenedBlocks.remove(key), 3L);
         }
     }
 
@@ -623,17 +675,21 @@ public class PlayerListener implements Listener {
                 .replace("%rule%", ruleName);
         plugin.getMessageManager().sendMessage(p, message);
 
-        // Interactive buttons: [Allow 1m], [Allow permanently], [Hide notifications]
+        // Interactive buttons: [Allow 1m], [Allow permanently], [Unvanish], [Hide notifications]
         Component allow1m = Component.text("[Allow 1m]", NamedTextColor.GREEN, TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
                 .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' for 60 seconds", NamedTextColor.GRAY)));
         Component allowPerm = Component.text("[Allow permanently]", NamedTextColor.AQUA, TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
                 .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' permanently", NamedTextColor.GRAY)));
+        Component unvanish = Component.text("[Unvanish]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand("/vanish"))
+                .hoverEvent(HoverEvent.showText(Component.text("Unvanish so you can " + actionName, NamedTextColor.GRAY)));
         Component hideNotifs = Component.text("[Hide notifications]", NamedTextColor.GRAY)
                 .clickEvent(ClickEvent.runCommand("/vrules show_notifications false"))
                 .hoverEvent(HoverEvent.showText(Component.text("Disable all rule notifications", NamedTextColor.GRAY)));
-        p.sendMessage(allow1m.append(Component.text("  ")).append(allowPerm).append(Component.text("  ")).append(hideNotifs));
+        p.sendMessage(allow1m.append(Component.text("  ")).append(allowPerm).append(Component.text("  "))
+                .append(unvanish).append(Component.text("  ")).append(hideNotifs));
     }
 
     /** Notify player that a config-level setting blocked their action, with a button to change it. */
@@ -654,12 +710,18 @@ public class PlayerListener implements Listener {
                 .replace("%path%", configPath);
         plugin.getMessageManager().sendMessage(p, message);
 
+        Component unvanish = Component.text("[Unvanish]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand("/vanish"))
+                .hoverEvent(HoverEvent.showText(Component.text("Unvanish so you can " + actionName, NamedTextColor.GRAY)));
         if (p.hasPermission("vanishpp.config")) {
             Component changeBtn = Component.text("[Disable in config]", NamedTextColor.GREEN, TextDecoration.BOLD)
                     .clickEvent(ClickEvent.runCommand("/vconfig " + configPath + " false"))
                     .hoverEvent(HoverEvent.showText(
                             Component.text("Sets " + configPath + " to false", NamedTextColor.GRAY)));
-            p.sendMessage(changeBtn);
+            p.sendMessage(changeBtn.append(Component.text("  ")).append(unvanish));
+        } else {
+            p.sendMessage(unvanish);
         }
     }
+
 }
