@@ -74,6 +74,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
             getLogger().info("Standard Bukkit/Paper environment detected. Using Legacy Scheduler.");
         }
 
+        // 0b. Platform & Version Compatibility Checks (console only)
+        checkPlatformCompatibility(isFolia);
+
         // 1. Load Data/Config Managers
         this.configManager = new ConfigManager(this);
         configManager.load();
@@ -177,6 +180,56 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         getLogger().info("Vanish++ " + getDescription().getVersion() + " enabled.");
+    }
+
+    private void checkPlatformCompatibility(boolean isFolia) {
+        // --- Platform check ---
+        String serverName = Bukkit.getName(); // "Paper", "Purpur", "Folia", "CraftBukkit", "Spigot", etc.
+        boolean isPaper = false;
+        try {
+            Class.forName("io.papermc.paper.event.player.AsyncChatEvent");
+            isPaper = true;
+        } catch (ClassNotFoundException ignored) {
+        }
+
+        if (isFolia) {
+            getLogger().info("Platform: Folia (natively supported).");
+        } else if (isPaper) {
+            // Paper and its forks (Purpur, etc.)
+            getLogger().info("Platform: " + serverName + " (natively supported).");
+        } else {
+            // Spigot, CraftBukkit, or unknown
+            getLogger().warning("Platform: " + serverName + " — this is NOT a natively supported platform.");
+            getLogger().warning("Vanish++ is built for Paper, Purpur, and Folia. Running on " + serverName + " may cause");
+            getLogger().warning("degraded functionality: projectile pass-through, mob AI goals, and some events may not work.");
+            getLogger().warning("Consider switching to Paper for the full feature set: https://papermc.io/downloads");
+        }
+
+        // --- Minecraft version check ---
+        String bukkitVersion = Bukkit.getBukkitVersion(); // e.g. "1.21.11-R0.1-SNAPSHOT"
+        String mcVersion = bukkitVersion.split("-")[0];    // e.g. "1.21.11"
+        String[] parts = mcVersion.split("\\.");
+
+        boolean supported = false;
+        if (parts.length >= 2) {
+            try {
+                int major = Integer.parseInt(parts[0]);
+                int minor = Integer.parseInt(parts[1]);
+                // Supported: 1.21.x (any subversion)
+                if (major == 1 && minor == 21) {
+                    supported = true;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        if (supported) {
+            getLogger().info("Minecraft version: " + mcVersion + " (supported).");
+        } else {
+            getLogger().warning("Minecraft version: " + mcVersion + " — this version has NOT been tested with Vanish++.");
+            getLogger().warning("Vanish++ is built and tested for Minecraft 1.21 — 1.21.11. Running on " + mcVersion);
+            getLogger().warning("may cause unexpected behavior or errors. Proceed at your own risk.");
+        }
     }
 
     public void reloadPluginConfig() {
