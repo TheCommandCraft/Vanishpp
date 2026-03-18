@@ -142,17 +142,17 @@ Vanish++ is built for modern ecosystems.
 ### Supported Versions
 | Minecraft Version   | Status               | Notes                                                              |
 | :------------------ | :------------------- | :----------------------------------------------------------------- |
-| **1.21.x**          | ✅ Supported         | Native support. Recommended.                                       |
-| **1.20.6**          | ⚠️ Likely Compatible | Built with cross-version compatibility in mind.                    |
-| **1.20.4-**         | ❌ Unsupported       | Incompatible API. Use older versions.                              |
+| **1.21 — 1.21.4**  | ✅ Supported         | Native support. Built & tested against Paper 1.21 API.             |
+| **1.20.4 and older**| ❌ Unsupported       | Incompatible API changes. Use older Vanish++ versions.             |
 
 ### Supported Platforms
 | Platform            | Status               | Notes                                                              |
 | :------------------ | :------------------- | :----------------------------------------------------------------- |
 | **Paper**           | ✅ Recommended       | Best performance. Required for full physics/projectile support.    |
-| **Spigot**          | ⚠️ Compatible        | Works, but some advanced physics features may degrade.             |
-| **Purpur**          | ✅ Supported         | Fully compatible.                                                  |
-| **Folia**           | ✅ Supported         | Custom regional scheduler bridge included.                         |
+| **Purpur**          | ✅ Supported         | Fully compatible (Paper fork).                                     |
+| **Folia**           | ✅ Supported         | Custom regional scheduler bridge with automatic runtime detection. |
+| **Spigot**          | ⚠️ Compatible        | Works, but Paper-specific features (projectile passthrough, mob AI goals) degrade. |
+| **Bukkit**          | ⚠️ Compatible        | Same limitations as Spigot.                                        |
 
 **Requirements:**
 *   **Java 21**
