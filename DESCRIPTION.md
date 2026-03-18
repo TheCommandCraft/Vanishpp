@@ -140,10 +140,10 @@ Customize your ghost experience. Default behavior can be tweaked per player.
 Vanish++ is built for modern ecosystems.
 
 ### Supported Versions
-| Minecraft Version   | Status               | Notes                                                              |
-| :------------------ | :------------------- | :----------------------------------------------------------------- |
-| **1.21 — 1.21.4**  | ✅ Supported         | Native support. Built & tested against Paper 1.21 API.             |
-| **1.20.4 and older**| ❌ Unsupported       | Incompatible API changes. Use older Vanish++ versions.             |
+| Minecraft Version      | Status               | Notes                                                              |
+| :--------------------- | :------------------- | :----------------------------------------------------------------- |
+| **1.21 — 1.21.11**    | ✅ Supported         | Native support. Built against Paper 1.21 API, tested on 1.21.11.  |
+| **1.20.4 and older**  | ❌ Unsupported       | Incompatible API changes. Use older Vanish++ versions.             |
 
 ### Supported Platforms
 | Platform            | Status               | Notes                                                              |
