@@ -2,9 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.4] - 2026-03-14
+## [1.1.4] - 2026-03-18
 
 ### Added
+- **`can_throw` VRule:** New personal rule controlling whether vanished players can throw items (eggs, snowballs, ender pearls, potions, bows, crossbows). Default: `false`. Fully integrated with interactive chat buttons (`[Allow 1m]`, `[Allow permanently]`, `[Hide notifications]`).
+- **Staff Glow Indicator:** Vanished players now render with a glowing outline for staff with `vanishpp.see`. Uses packet-level metadata injection — non-staff never see it. Enabled by default (`vanish-appearance.staff-glow: true`).
+- **Vanish State Resync Engine:** New `resyncVanishEffects()` system that reapplies all vanish state (team, prefix, metadata, fly, night vision, collision, mob targeting, visibility, glow) without touching storage. Triggered automatically on respawn, world change, and gamemode change.
+- **Respawn Handler:** Vanish state (fly, invisibility, glow, collision) is now fully restored after death and respawn.
+- **World Change Handler:** Nether/End portal transitions no longer break vanish state.
+- **Gamemode Change Handler:** Changing gamemode (e.g., `/gamemode survival`) while vanished no longer disables flight.
+- **[Unvanish] Button:** All blocked-action messages now include a convenient `[Unvanish]` button alongside `[Allow 1m]`, `[Allow permanently]`, and `[Hide notifications]`.
+- **Fast Sync Loop:** Heartbeat task now runs every 10 ticks with visibility fix, team/prefix reapply, glow metadata resend, and mob targeting — ensuring all vanish features stay in sync continuously.
+- **Explicit Glow Metadata Packets:** Staff glow is now sent via direct ProtocolLib `ENTITY_METADATA` packets rather than relying on entity respawn metadata, ensuring the glow appears instantly.
+- **Multi-Stage Join Prefix:** Tab prefix is now reapplied at 2, 20, and 60 ticks after join — catches TAB plugin async overrides at different pipeline stages.
+- **Snapshot Silent Chests:** Barrels and containers are now opened as inventory snapshots (copy of the real inventory). Changes sync back on close. This eliminates `Container.startOpen()` entirely, preventing animation and sound at the source.
+- **Reload Resync:** `/vreload` now refreshes team prefix and resyncs all online vanished players' effects.
 - **Setup Advisor (Config Sanity Checker):** On startup, Vanish++ now scans the active configuration and warns if:
     - `hooks.simple-voice-chat.enabled` is `true` but SimpleVoiceChat is not installed.
     - `hooks.essentials.simulate-join-leave` is `true` but EssentialsX is not installed.
@@ -33,16 +45,26 @@ All notable changes to this project will be documented in this file.
 - **Persistence:** Acknowledging the plugin hiding warning now saves the preference to `data.yml` specifically for the current version.
 
 ### Changed
+- **Silent Chest Architecture:** Replaced the spectator-mode workaround with a snapshot inventory system. Vanished players now open a copy of the container, and edits sync back on close — no animation, no sound, full item interaction.
+- **Throwable Blocking:** Throwables (eggs, bows, ender pearls, etc.) are now governed by the `can_throw` VRule instead of being unconditionally blocked. Players can toggle this rule like any other.
+- **Spawn Egg Messages:** Spawn eggs now use the standard `sendRuleDeny` system with `can_throw`, providing interactive buttons instead of a static message.
+- **Sound Suppression:** Silent chest sound listener now covers both `NAMED_SOUND_EFFECT` and `CUSTOM_SOUND_EFFECT` packets with robust multi-offset coordinate detection.
 - **Config Structure:** Significant cleanup of `config.yml`. Legacy message blocks removed in favor of `lang/*.yml`.
 - **Performance:** Optimized visibility checks and metadata handling for better server performance.
 
 ### Fixed
+- **DiscordSRV Join/Quit Suppression:** DiscordSRV now fully suppresses join and quit announcements on Discord for players who rejoin with persisted vanish state. Previously, only chat suppression worked — Discord join messages leaked through.
+- **Barrel/Shulker Silent Opening:** Opening barrels and shulker boxes while vanished no longer leaks the open/close animation or sound to nearby players. Previously, the `Container.startOpen()` call triggered both.
+- **Join Prefix Delay:** The vanish tab prefix (`[V]`) now appears within ~100ms of joining instead of taking 3+ seconds. Multi-stage reapplication handles TAB plugin async overrides.
+- **Throwable Items Leaked Position:** Throwing eggs, snowballs, ender pearls, and shooting bows while vanished created visible projectile entities that revealed the player's position. Now blocked by default via the `can_throw` rule.
+- **Spawn Egg Rule Bypass:** The `CAN_INTERACT` rule had no effect on spawn eggs due to incorrect check ordering. Spawn eggs are now properly governed by `can_throw`.
+- **Vanish State Lost on Respawn:** Dying and respawning while vanished caused loss of fly, invisibility, glow, collision settings, and night vision.
+- **Vanish State Lost on World Change:** Entering nether/end portals broke vanish state (visibility, fly, glow, prefix).
+- **Flight Lost on Gamemode Change:** Running `/gamemode survival` while vanished disabled fly mode permanently until re-vanishing.
+- **Reload Didn't Resync:** `/vreload` previously only reloaded config files without resyncing active vanish effects for online players.
 - **Mob Targeting on Vanish:** Mobs that had already acquired a player as their target before `/vanish` was used would continue attacking. Fixed by explicitly clearing all matching mob targets within 64 blocks the moment a player vanishes.
-- **DiscordSRV Full Integration:** Vanish++ now registers itself as a native `VanishHook` in DiscordSRV's plugin hook system. DiscordSRV's `PlayerUtil.isVanished()` now recognises our players, suppressing join/quit Discord announcements even when a player rejoins the server with a persisted vanish state. Previously only chat suppression and fake join/quit messages were handled.
 - **Console Staff Notification:** Console was silently excluded from vanish/unvanish staff notifications. It now receives the same message as staff players with `vanishpp.see`.
 - **Fly Mode Logic:** Improved flight persistence on unvanish when configured.
-- **Automated Test Suite:** Fixed outdated assertions in `FeatureTest` and `MigrationTest` to properly account for the new v6 configuration and localized command outputs.
-- **Build Environment:** Resolved Dockerized Maven `PluginResolutionException` errors by purging corrupted cache volumes, ensuring a stable, reproducible build pipeline for the `vanishpp-1.1.4.jar`.
 - **Dependency Resolution:** Fixed an issue where the ProtocolLib dependency was not correctly detected on first install.
 
 ## [1.1.3] - 2026-02-02

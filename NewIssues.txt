@@ -1,15 +1,15 @@
-1. Can spawn horses / itneract with items in inv in general
-2. '/vanish' is still tab-completable exposing the plugins existence.
+    1. Can spawn horses / itneract with items in inv in general
+    2. '/vanish' is still tab-completable exposing the plugins existence.
 3. Vanished Tag doesn't appear next to nametag over player
 4. Ensure tab prefixes and hiding also works without the TAB plugin
-5. After the vanished player rejoins their prefix is not visible for other admins anymore.
-6. Baby mobs still target you and the vrule for allowing targeting is still not working. but babies are running at me but not hitting, in thsi case zombies but fix all.
-7. Make the vrule spam cooldown way longer like 15s.
+    5. After the vanished player rejoins their prefix is not visible for other admins anymore.
+    6. Baby mobs still target you and the vrule for allowing targeting is still not working. but babies are running at me but not hitting, in thsi case zombies but fix all.
+    7. Make the vrule spam cooldown way longer like 15s.
 8. Add to the vrule help that the seconds is optional and that if its not igven it is activeaded forever but pharse better.
 9. When opening a chest in vansi hteh skuls sensor deosn't detect itanymore btu the sound isstill heard adn the lid is seen open. (this is completely fixed for echests tho)
 10. Add a warning when changing sensitive data like storage stuff and add that the oppalyer should only continue if sure and they need to enter the command again with --confirm at the end. that lflag should nto autocomplete!
 11. bed access is finally blcoked but make it send a notification that it was blcoekd with a button to chagne the proetry like with the vrules. Always do that nice user feedback incae vanished players are wondering why x doesnT' work. scan the whoel plgin for such behaivoral change adn notify the user.
-12. Thevanish plugin is hidden notification is still showing for players without perm. ot shoud only show the lsit without hte info. also add an ack button enx to disable hiding to hide the message unless chagned latger with the ack command, yes make the ack command a settings type if x message was acknowlege. also make its smart to get the latest message so if just '/ack' is ran it setsteh ack status of the latest message to true.
+    12. Thevanish plugin is hidden notification is still showing for players without perm. ot shoud only show the lsit without hte info. also add an ack button enx to disable hiding to hide the message unless chagned latger with the ack command, yes make the ack command a settings type if x message was acknowlege. also make its smart to get the latest message so if just '/ack' is ran it setsteh ack status of the latest message to true.
 13. When clickign to use comamnd i nthe vanish help it does so with spaces: '/ vanishlist ' this destroys the commadn and makes it unusable.
 14. Also update the helpt for each command to show the up to date stuff like optional values and with sege on another player. udpate the menu type and if one does '/vhelp x' where x is any command.
 15. Also ensure everythiong liek the plugin lsit the vanish help and anything esle any possible displayed stirng in the entire plugin can be configured also with colorcodes like rn in the config and that config is nicely sorted. 

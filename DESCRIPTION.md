@@ -43,6 +43,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Nuclear Tab-Completion Scrubbing:** If a normal player tries to Tab-Complete your name in Chat, Vanilla Commands, or Plugin Commands, **you are not there**. Your name is stripped from the packet sent to the client.
 *   **Server List Hiding:** The player count in the multiplayer server list is mathematically adjusted. If you are the only one online, the server says "0/20".
 *   **Ghost View for Staff:** While normal players see nothing, Staff (with permission) see vanished players in the Tab List as **Gray, Italicized Spectators**, making it easy to coordinate.
+*   **Staff Glow Indicator:** Vanished players render with a glowing outline for staff — a clear visual indicator injected at the packet level. Non-staff never see it. Configurable via `vanish-appearance.staff-glow`.
 *   **Dynmap & EssentialsX Hooks:** Automatically hides you from dynamic web maps and `/who`, `/list`, or `/online` commands.
 
 </details>
@@ -54,7 +55,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Native Language Fake Messages:** When you vanish, the fake "Player left the game" message isn't just text—it uses the **server's native translation packet**. This means a German player sees the message in German, and a US player sees it in English. It is indistinguishable from a real disconnect.
 *   **Native TAB Plugin Support:** If you use **TAB (by NEZNAMY)**, Vanish++ hooks directly into it to display your vanish prefix automatically. No manual Placeholder configuration required.
 *   **Legacy Plugin Support:** Even without specific hooks, Vanish++ sets standard Bukkit Metadata (`"vanished"`). This means plugins like **CMI**, **TAB**, or custom skripts automatically respect your vanished status.
-*   **Silent Chests:** Open Chests, Shulker Boxes, Barrels, and Ender Chests silently. The lid animation **never plays** for others (utilizes temporary spectator switching).
+*   **Silent Chests:** Open Chests, Shulker Boxes, Barrels, and Ender Chests silently. The container is opened as a snapshot inventory — no animation, no sound, full item interaction. Changes sync back on close.
 *   **DiscordSRV Integration:** Registers as a native vanish hook in DiscordSRV. Join and quit announcements are suppressed on Discord — even if you reconnect while already vanished. Staff notifications still appear in console and for players with the see permission.
 *   **Simple Voice Chat Integration:** Automatically isolates/mutes you in voice chat so you can't be heard or hear proximity chat while stalking.
 *   **Smart Item Pickup:** Toggle item pickup with `/vanishpickup`. Don't accidentally steal the diamonds you are watching a player mine.
@@ -129,6 +130,7 @@ Customize your ghost experience. Default behavior can be tweaked per player.
 *   `can_drop_items` (Default: `false` - Cannot drop items from inventory)
 *   `can_chat` (Default: `false` - Requires confirmation to speak)
 *   `can_trigger_physical` (Default: `false` - Pressure plates, crops, etc.)
+*   `can_throw` (Default: `false` - Cannot throw items like eggs, snowballs, ender pearls, or shoot bows)
 *   `mob_targeting` (Default: `false` - Mobs ignore you)
 
 ---

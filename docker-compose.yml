@@ -4,11 +4,11 @@ services:
     image: itzg/minecraft-server
     ports:
       - "25565:25565"
+      - "19132:19132/udp"
     environment:
       EULA: "TRUE"
       TYPE: "PAPER"
       VERSION: "1.21.11"
       ONLINE_MODE: "FALSE"
     volumes:
-      - ./server-data:/data
-      - ./target/vanishpp-1.1.4.jar:/data/plugins/Vanishpp.jar
+      - ./testserver_clean:/data
