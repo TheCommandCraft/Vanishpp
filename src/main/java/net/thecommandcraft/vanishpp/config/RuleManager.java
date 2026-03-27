@@ -21,6 +21,7 @@ public class RuleManager {
     public static final String CAN_CHAT = "can_chat";
     public static final String MOB_TARGETING = "mob_targeting";
     public static final String SHOW_NOTIFICATIONS = "show_notifications";
+    public static final String SPECTATOR_GAMEMODE = "spectator_gamemode";
 
     private final Map<String, Boolean> hardDefaults = new HashMap<>();
 
@@ -37,6 +38,7 @@ public class RuleManager {
         hardDefaults.put(CAN_CHAT, false);
         hardDefaults.put(MOB_TARGETING, false);
         hardDefaults.put(SHOW_NOTIFICATIONS, true);
+        hardDefaults.put(SPECTATOR_GAMEMODE, true);
     }
 
     public void load() {
