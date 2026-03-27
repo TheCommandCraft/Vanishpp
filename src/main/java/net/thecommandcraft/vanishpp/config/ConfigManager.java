@@ -49,6 +49,9 @@ public class ConfigManager {
     // Appearance extras
     public boolean staffGlowEnabled;
 
+    // Network
+    public boolean pluginMessagingEnabled;
+
     // Hooks & System
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
     public boolean simulateEssentialsMessages;
@@ -200,6 +203,7 @@ public class ConfigManager {
         updateCheckerId = config.getString("update-checker.modrinth-id", "vanishpp");
         updateCheckerMode = config.getString("update-checker.notify-mode");
         updateCheckerList = config.getStringList("update-checker.notify-list");
+        pluginMessagingEnabled = config.getBoolean("network.plugin-messaging.enabled", false);
 
         ConfigurationSection rulesSection = config.getConfigurationSection("default-rules");
         if (rulesSection != null) {
