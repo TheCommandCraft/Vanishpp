@@ -61,9 +61,7 @@ public class PlayerListener implements Listener {
 
         // Immediate Vanish Logic
         if (plugin.isVanished(player)) {
-            // Use local apply — proxy already knows the state (pre-seeded via Velocity/Redis),
-            // so no broadcast is needed and would only cause redundant relay traffic.
-            plugin.applyVanishEffectsLocal(player);
+            plugin.applyVanishEffects(player);
             plugin.updateVanishVisibility(player);
             if (config.hideRealJoin)
                 event.joinMessage(null);

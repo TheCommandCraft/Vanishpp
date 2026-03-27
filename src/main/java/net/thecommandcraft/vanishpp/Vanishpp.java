@@ -6,7 +6,6 @@ import net.thecommandcraft.vanishpp.commands.*;
 import net.thecommandcraft.vanishpp.config.*;
 import net.thecommandcraft.vanishpp.listeners.*;
 import net.thecommandcraft.vanishpp.hooks.*;
-import net.thecommandcraft.vanishpp.network.*;
 import net.thecommandcraft.vanishpp.utils.*;
 import net.thecommandcraft.vanishpp.storage.*;
 import org.bukkit.Bukkit;
@@ -36,9 +35,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private ConfigManager configManager;
     private StorageProvider storageProvider;
     private RedisStorage redisStorage;
-    private VelocityMessenger velocityMessenger;
-    /** UUIDs currently being synced from the network — suppresses re-broadcasting in apply/remove effects. */
-    private final Set<UUID> networkSyncing = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     private PermissionManager permissionManager;
     private RuleManager ruleManager;
     private IntegrationManager integrationManager;
@@ -88,7 +84,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         this.messageManager = new MessageManager(this);
 
         initStorage();
-        initPluginMessaging();
 
         this.permissionManager = new PermissionManager(this);
         permissionManager.load();
@@ -240,13 +235,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void reloadPluginConfig() {
         configManager.load();
 
-        // Re-init plugin messaging if the enabled flag changed
-        if (velocityMessenger != null) {
-            velocityMessenger.shutdown();
-            velocityMessenger = null;
-        }
-        initPluginMessaging();
-
         // Refresh action bar state
         if (vanishScheduler != null) {
             vanishScheduler.cancelAllTasks();
@@ -271,9 +259,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         if (redisStorage != null) {
             redisStorage.shutdown();
-        }
-        if (velocityMessenger != null) {
-            velocityMessenger.shutdown();
         }
         if (vanishScheduler != null) {
             vanishScheduler.cancelAllTasks();
@@ -312,39 +297,22 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
-    private void initPluginMessaging() {
-        if (configManager.pluginMessagingEnabled) {
-            this.velocityMessenger = new VelocityMessenger(this);
-        }
-    }
-
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {
         Player p = Bukkit.getPlayer(uuid);
-        networkSyncing.add(uuid);
-        try {
-            if (vanish) {
-                vanishedPlayers.add(uuid);
-                if (p != null && p.isOnline()) {
-                    applyVanishEffects(p);
-                    integrationManager.updateHooks(p, true);
-                    if (tabPluginHook != null)
-                        tabPluginHook.update(p, true);
-                    updateVanishVisibility(p);
-                } else {
-                    // Player is offline on this server — sync storage so the vanished state
-                    // survives a server restart and is available on next join.
-                    storageProvider.setVanished(uuid, true);
-                }
-            } else {
-                vanishedPlayers.remove(uuid);
-                if (p != null && p.isOnline()) {
-                    removeVanishEffects(p);
-                } else {
-                    storageProvider.setVanished(uuid, false);
-                }
+        if (vanish) {
+            vanishedPlayers.add(uuid);
+            if (p != null && p.isOnline()) {
+                applyVanishEffects(p);
+                integrationManager.updateHooks(p, true);
+                if (tabPluginHook != null)
+                    tabPluginHook.update(p, true);
+                updateVanishVisibility(p);
             }
-        } finally {
-            networkSyncing.remove(uuid);
+        } else {
+            vanishedPlayers.remove(uuid);
+            if (p != null && p.isOnline()) {
+                removeVanishEffects(p);
+            }
         }
     }
 
@@ -361,23 +329,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
     // --- PUBLIC API GETTERS ---
     public boolean isVanished(Player player) {
         return vanishedPlayers.contains(player.getUniqueId());
-    }
-
-    public VelocityMessenger getVelocityMessenger() {
-        return velocityMessenger;
-    }
-
-    /**
-     * Applies all vanish effects without broadcasting to the proxy/Redis.
-     * Use when restoring state on join — the proxy already knows the player's vanish state.
-     */
-    public void applyVanishEffectsLocal(Player player) {
-        networkSyncing.add(player.getUniqueId());
-        try {
-            applyVanishEffects(player);
-        } finally {
-            networkSyncing.remove(player.getUniqueId());
-        }
     }
 
     public boolean isVanished(UUID uuid) {
@@ -616,12 +567,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         storageProvider.setVanished(player.getUniqueId(), true);
-        if (!networkSyncing.contains(player.getUniqueId())) {
-            if (redisStorage != null)
-                redisStorage.broadcastVanish(player.getUniqueId(), true);
-            if (velocityMessenger != null)
-                velocityMessenger.broadcast(player, true);
-        }
+        if (redisStorage != null)
+            redisStorage.broadcastVanish(player.getUniqueId(), true);
     }
 
     public void removeVanishEffects(Player player) {
@@ -666,12 +613,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.sendActionBar(Component.empty());
 
         storageProvider.setVanished(player.getUniqueId(), false);
-        if (!networkSyncing.contains(player.getUniqueId())) {
-            if (redisStorage != null)
-                redisStorage.broadcastVanish(player.getUniqueId(), false);
-            if (velocityMessenger != null)
-                velocityMessenger.broadcast(player, false);
-        }
+        if (redisStorage != null)
+            redisStorage.broadcastVanish(player.getUniqueId(), false);
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {
