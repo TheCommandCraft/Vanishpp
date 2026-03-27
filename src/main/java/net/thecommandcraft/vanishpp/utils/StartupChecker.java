@@ -3,9 +3,7 @@ package net.thecommandcraft.vanishpp.utils;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
 import org.bukkit.Bukkit;
-import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -73,7 +71,6 @@ public class StartupChecker {
         checkVoiceChat(warnings);
         checkEssentials(warnings);
         checkPapi(warnings);
-        checkPluginMessaging(warnings);
         return warnings;
     }
 
@@ -100,36 +97,6 @@ public class StartupChecker {
                     "hooks.essentials.simulate-join-leave is 'true' but EssentialsX is NOT installed. "
                     + "This setting has no effect. Set to 'false' or install EssentialsX.",
                     "hooks.essentials.simulate-join-leave", "false"));
-        }
-    }
-
-    private void checkPluginMessaging(List<Warning> warnings) {
-        if (!plugin.getConfigManager().pluginMessagingEnabled) return;
-
-        // Check Spigot BungeeCord mode (spigot.yml → settings.bungeecord)
-        boolean proxyMode = false;
-        try {
-            proxyMode = Bukkit.spigot().getConfig().getBoolean("settings.bungeecord", false);
-        } catch (Throwable ignored) {}
-
-        // Check Paper Velocity mode (config/paper-global.yml → proxies.velocity.enabled)
-        if (!proxyMode) {
-            try {
-                File paperGlobal = new File("config/paper-global.yml");
-                if (paperGlobal.exists()) {
-                    YamlConfiguration cfg = YamlConfiguration.loadConfiguration(paperGlobal);
-                    proxyMode = cfg.getBoolean("proxies.velocity.enabled", false);
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        if (!proxyMode) {
-            warnings.add(Warning.configFix(
-                    "network.plugin-messaging.enabled is 'true' but neither BungeeCord mode "
-                    + "(spigot.yml: settings.bungeecord) nor Velocity mode "
-                    + "(paper-global.yml: proxies.velocity.enabled) is active. "
-                    + "Plugin messaging will not function. Enable proxy forwarding or disable this option.",
-                    "network.plugin-messaging.enabled", "false"));
         }
     }
 
