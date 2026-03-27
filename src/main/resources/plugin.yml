@@ -7,6 +7,9 @@ description: The ultimate vanish plugin with anti-detection, hooks, and Protocol
 folia-supported: true
 softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB, DiscordSRV]
 
+channels:
+  - vanishpp:sync
+
 commands:
   vanish:
     description: Toggles your or another player's vanish state.

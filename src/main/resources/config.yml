@@ -187,6 +187,16 @@ storage:
     port: 6379
     password: ""
 
+# --- [ NETWORK / VELOCITY ] ---
+# Cross-server synchronization via Velocity (or BungeeCord) plugin messaging.
+# Requires the companion vanishpp-velocity.jar installed on your proxy.
+# This is an alternative to Redis — use one or the other (or both, they are compatible).
+network:
+  plugin-messaging:
+    # Set to true to enable the vanishpp:sync plugin messaging channel.
+    # The vanishpp-velocity companion plugin must be installed on the Velocity proxy.
+    enabled: false
+
 # --- [ UPDATE CHECKER ] ---
 update-checker:
   # Whether to check for plugin updates on startup.
