@@ -196,9 +196,9 @@ class RuleManagerTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void testGetAvailableRules_containsAllTenRules() {
+    void testGetAvailableRules_containsAllTwelveRules() {
         Set<String> available = rules.getAvailableRules();
-        assertEquals(10, available.size(), "There should be exactly 10 available rules");
+        assertEquals(12, available.size(), "There should be exactly 12 available rules");
         assertTrue(available.contains(RuleManager.CAN_BREAK_BLOCKS));
         assertTrue(available.contains(RuleManager.CAN_PLACE_BLOCKS));
         assertTrue(available.contains(RuleManager.CAN_HIT_ENTITIES));
@@ -206,9 +206,11 @@ class RuleManagerTest {
         assertTrue(available.contains(RuleManager.CAN_DROP_ITEMS));
         assertTrue(available.contains(RuleManager.CAN_TRIGGER_PHYSICAL));
         assertTrue(available.contains(RuleManager.CAN_INTERACT));
+        assertTrue(available.contains(RuleManager.CAN_THROW));
         assertTrue(available.contains(RuleManager.CAN_CHAT));
         assertTrue(available.contains(RuleManager.MOB_TARGETING));
         assertTrue(available.contains(RuleManager.SHOW_NOTIFICATIONS));
+        assertTrue(available.contains(RuleManager.SPECTATOR_GAMEMODE));
     }
 
     // -------------------------------------------------------------------------

@@ -49,6 +49,9 @@ public class ConfigManager {
     // Appearance extras
     public boolean staffGlowEnabled;
 
+    // Spectator mode
+    public boolean vanishGamemodesEnabled;
+
     // Hooks & System
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
     public boolean simulateEssentialsMessages;
@@ -174,6 +177,7 @@ public class ConfigManager {
         hideAdvancements = config.getBoolean("hide-announcements.advancements");
         hideFromPluginList = config.getBoolean("hide-announcements.hide-from-plugin-list", true);
         enableNightVision = config.getBoolean("invisibility-features.night-vision");
+        vanishGamemodesEnabled = config.getBoolean("vanish-gamemodes.enabled", true);
         enableFly = config.getBoolean("flight-control.vanish-enable-fly", true);
         disableFlyOnUnvanish = config.getBoolean("flight-control.unvanish-disable-fly", true);
         disableMobTarget = config.getBoolean("invisibility-features.disable-mob-targeting");

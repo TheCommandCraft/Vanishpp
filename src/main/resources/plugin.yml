@@ -81,6 +81,8 @@ permissions:
       vanishpp.no-sculk: true
       vanishpp.no-trample: true
       vanishpp.join-vanished: true
+      vanishpp.spectator: true
+      vanishpp.spectator.bypass: true
       vanishpp.ignorewarning: true
       vanishpp.ignorewarning.others: true
       vanishpp.config: true
@@ -162,4 +164,10 @@ permissions:
     default: op
   vanishpp.join-vanished:
     description: Allows joining the server already vanished.
+    default: op
+  vanishpp.spectator:
+    description: Allows using double-shift to enter spectator mode while vanished.
+    default: op
+  vanishpp.spectator.bypass:
+    description: Stays in spectator mode after unvanishing instead of being forced back.
     default: op

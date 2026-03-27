@@ -124,6 +124,12 @@ ignore-warning:
   others-enabled: "&a%player% will receive warnings."
   others-disabled: "&c%player% will ignore warnings."
 
+# --- [ SPECTATOR MODE ] ---
+spectator:
+  entered: "&bEntered spectator. &7Double-shift to return."
+  exited: "&aReturned to &6%gamemode% &amode."
+  forced-unvanish: "&eReturned to &6%gamemode% &emode on unvanish."
+
 # --- [ SILENT CHEST ] ---
 silent-chest:
   blocked: "&cYou cannot open this silently (Inventory Type not supported or protected)."

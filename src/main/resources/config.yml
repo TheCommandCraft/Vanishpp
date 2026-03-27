@@ -47,6 +47,14 @@ vanish-appearance:
   # Requires ProtocolLib.
   staff-glow: true
 
+# --- [ SPECTATOR MODE ] ---
+# Double-tap shift while vanished to enter spectator mode, double-tap again to return.
+# Toggle per-player with: /vrules spectator_gamemode true/false
+# Bypass forced-restore on unvanish with: vanishpp.spectator.bypass
+vanish-gamemodes:
+  # Master switch. If false, the spectator quick-switch is disabled for everyone.
+  enabled: true
+
 # --- [ FLIGHT MANAGEMENT ] ---
 # Configuration for flight behavior relating to vanish status.
 flight-control:
@@ -154,6 +162,7 @@ default-rules:
   can_chat: false
   mob_targeting: false
   show_notifications: true
+  spectator_gamemode: true
 
 # --- [ HOOKS ] ---
 hooks:

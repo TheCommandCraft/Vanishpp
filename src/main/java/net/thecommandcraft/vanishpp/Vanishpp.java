@@ -405,6 +405,19 @@ public class Vanishpp extends JavaPlugin implements Listener {
         actionBarPausedUntil.remove(uuid);
     }
 
+    public GameMode getPreVanishGamemodePublic(Player player) {
+        return getPreVanishGamemode(player);
+    }
+
+    private GameMode getPreVanishGamemode(Player player) {
+        List<org.bukkit.metadata.MetadataValue> meta = player.getMetadata("vanishpp_pre_vanish_gamemode");
+        if (!meta.isEmpty()) {
+            Object val = meta.get(0).value();
+            if (val instanceof GameMode gm) return gm;
+        }
+        return GameMode.SURVIVAL;
+    }
+
     // --- CORE LOGIC ---
     private void setupTeams() {
         org.bukkit.scoreboard.ScoreboardManager sm = Bukkit.getScoreboardManager();
@@ -589,6 +602,18 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         player.setCollidable(true);
 
+        // If the player is in spectator (from double-shift toggle), restore their pre-vanish gamemode.
+        // Players with vanishpp.spectator.bypass are allowed to stay in spectator after unvanish.
+        if (player.getGameMode() == GameMode.SPECTATOR
+                && !permissionManager.hasPermission(player, "vanishpp.spectator.bypass")) {
+            GameMode prevGm = getPreVanishGamemode(player);
+            player.setGameMode(prevGm);
+            String msg = configManager.getLanguageManager().getMessage("spectator.forced-unvanish")
+                    .replace("%gamemode%", prevGm.name().toLowerCase());
+            messageManager.sendMessage(player, msg);
+        }
+        player.removeMetadata("vanishpp_pre_vanish_gamemode", this);
+
         if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION))
             player.removePotionEffect(PotionEffectType.NIGHT_VISION);
         if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
@@ -618,6 +643,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {
+        // Store the gamemode from before vanish so we can restore it on unvanish.
+        // Only set on an explicit vanish — not on join restore (applyVanishEffects).
+        // Guard against overwrite if already set (e.g., re-vanish without unvanish).
+        if (!player.hasMetadata("vanishpp_pre_vanish_gamemode")) {
+            GameMode gmToStore = player.getGameMode() == GameMode.SPECTATOR
+                    ? GameMode.SURVIVAL : player.getGameMode();
+            player.setMetadata("vanishpp_pre_vanish_gamemode", new FixedMetadataValue(this, gmToStore));
+        }
         applyVanishEffects(player);
         if (isValidMessage(configManager.vanishMessage)) {
             player.sendMessage(messageManager.parse(configManager.vanishMessage, player));

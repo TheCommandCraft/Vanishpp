@@ -48,6 +48,7 @@ public class PlayerListener implements Listener {
     private final Map<UUID, Inventory> silentChestRealInventories = new HashMap<>(); // snapshot → real for sync-back
     private final Map<UUID, Map<String, Long>> ruleNotificationCooldowns = new HashMap<>();
     private final Set<UUID> hasSeenDisableTip = new HashSet<>();
+    private final Map<UUID, Long> lastSneakTime = new HashMap<>();
 
     public PlayerListener(Vanishpp plugin) {
         this.plugin = plugin;
@@ -230,6 +231,7 @@ public class PlayerListener implements Listener {
         }
         ruleNotificationCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
+        lastSneakTime.remove(uuid);
         plugin.cleanupPlayerCache(uuid);
     }
 
@@ -553,6 +555,36 @@ public class PlayerListener implements Listener {
                 }
             }
         }, 1L);
+    }
+
+    /** Double-tap shift while vanished → toggle spectator mode. */
+    @EventHandler(priority = EventPriority.NORMAL)
+    public void onSneak(PlayerToggleSneakEvent event) {
+        if (!event.isSneaking()) return; // only on press, not release
+        Player p = event.getPlayer();
+        if (!plugin.isVanished(p)) return;
+        if (!config.vanishGamemodesEnabled) return;
+        if (!plugin.getPermissionManager().hasPermission(p, "vanishpp.spectator")) return;
+        if (!rules.getRule(p, RuleManager.SPECTATOR_GAMEMODE)) return;
+
+        UUID uuid = p.getUniqueId();
+        long now = System.currentTimeMillis();
+        long last = lastSneakTime.getOrDefault(uuid, 0L);
+        lastSneakTime.put(uuid, now);
+
+        if (now - last > 400) return; // not a double-tap
+
+        if (p.getGameMode() != GameMode.SPECTATOR) {
+            p.setGameMode(GameMode.SPECTATOR);
+            p.sendActionBar(plugin.getMessageManager().parse(
+                    config.getLanguageManager().getMessage("spectator.entered"), p));
+        } else {
+            GameMode prev = plugin.getPreVanishGamemodePublic(p);
+            p.setGameMode(prev);
+            p.sendActionBar(plugin.getMessageManager().parse(
+                    config.getLanguageManager().getMessage("spectator.exited")
+                            .replace("%gamemode%", prev.name().toLowerCase()), p));
+        }
     }
 
     private void handleSilentChest(PlayerInteractEvent event) {
