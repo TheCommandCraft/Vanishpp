@@ -25,11 +25,17 @@ public class VanishIgnoreCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.ignorewarning")) {
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
+            return true;
+        }
         Player target;
 
         if (args.length > 0) {
             if (!sender.hasPermission("vanishpp.ignorewarning.others")) {
-                plugin.getMessageManager().sendMessage(sender, "<red>Permission denied.");
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
             }
             target = Bukkit.getPlayer(args[0]);

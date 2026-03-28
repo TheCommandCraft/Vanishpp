@@ -22,6 +22,11 @@ public class VanishChatCommand implements CommandExecutor {
             sender.sendMessage("Players only.");
             return true;
         }
+        if (!player.hasPermission("vanishpp.chat")) {
+            plugin.getMessageManager().sendMessage(player,
+                    plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
+            return true;
+        }
 
         if (args.length > 0 && args[0].equalsIgnoreCase("confirm")) {
             if (plugin.pendingChatMessages.containsKey(player.getUniqueId())) {

@@ -26,6 +26,11 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.rules")) {
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
+            return true;
+        }
         if (args.length == 0) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("rules.usage"));
@@ -62,7 +67,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             }
             if (!sender.hasPermission("vanishpp.rules.others")) {
                 plugin.getMessageManager().sendMessage(sender,
-                        plugin.getConfigManager().getLanguageManager().getMessage("no-permission"));
+                        plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
             }
             argOffset = 1;

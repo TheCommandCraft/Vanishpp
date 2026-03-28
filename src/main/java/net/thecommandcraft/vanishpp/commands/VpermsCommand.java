@@ -43,7 +43,8 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
         if (!sender.hasPermission("vanishpp.manageperms")) {
-            plugin.getMessageManager().sendMessage(sender, configManager.noPermissionMessage);
+            plugin.getMessageManager().sendMessage(sender,
+                    configManager.getLanguageManager().getMessage("unknown-command"));
             return true;
         }
 
