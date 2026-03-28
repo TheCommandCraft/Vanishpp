@@ -49,6 +49,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public final Map<UUID, String> pendingChatMessages = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, Long> actionBarPausedUntil = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Component> actionBarWarningComponent = new java.util.concurrent.ConcurrentHashMap<>();
     private boolean hasProtocolLib = false;
     private ProtocolLibManager protocolLibManager;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
@@ -148,6 +149,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // 6. Init Utils
         this.updateChecker = new UpdateChecker(this);
         this.updateChecker.check();
+        this.updateChecker.startPeriodicCheck();
 
         try {
             this.pluginHider = new PluginHider(this);
@@ -398,6 +400,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     /** Cleans up per-player cached state. Call on player quit. */
     public void cleanupPlayerCache(UUID uuid) {
         actionBarPausedUntil.remove(uuid);
+        actionBarWarningComponent.remove(uuid);
     }
 
     public GameMode getPreVanishGamemodePublic(Player player) {
@@ -459,7 +462,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 if (p != null && p.isOnline()) {
                     long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
                     if (now > pausedUntil) {
+                        actionBarWarningComponent.remove(uuid);
                         p.sendActionBar(messageManager.parse(configManager.actionBarText, p));
+                    } else {
+                        Component warning = actionBarWarningComponent.get(uuid);
+                        if (warning != null) p.sendActionBar(warning);
                     }
                 }
             }
@@ -471,7 +478,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void triggerActionBarWarning(Player p, Component warning, long durationMs) {
-        actionBarPausedUntil.put(p.getUniqueId(), System.currentTimeMillis() + durationMs);
+        UUID uuid = p.getUniqueId();
+        actionBarPausedUntil.put(uuid, System.currentTimeMillis() + durationMs);
+        actionBarWarningComponent.put(uuid, warning);
         p.sendActionBar(warning);
     }
 

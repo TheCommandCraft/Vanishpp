@@ -6,7 +6,7 @@
 
 
 # Configuration Version (Internal use for migrations)
-config-version: 6
+config-version: 7
 
 # --- [ MESSAGES ] ---
 # Most messages have been moved to the language files in the 'lang' folder.

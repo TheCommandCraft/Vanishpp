@@ -41,6 +41,44 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Disable default test phase — MockBukkit v3 requires the plugin JAR
+                 to exist, so tests must run AFTER the package phase. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+            <!-- Run tests in integration-test phase (after package). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <!-- Point at the shaded jar so MockBukkit v3 can load the plugin
+                         via getProtectionDomain().getCodeSource().getLocation() -->
+                    <classesDirectory>${project.build.directory}/${project.build.finalName}.jar</classesDirectory>
+                    <includes>
+                        <include>**/*Test.java</include>
+                    </includes>
+                    <systemPropertyVariables>
+                        <!-- Passed to tests so MockBukkit.loadWith() can find the built JAR -->
+                        <plugin.jar>${project.build.directory}/${project.build.finalName}.jar</plugin.jar>
+                    </systemPropertyVariables>
+                    <!-- ByteBuddy needs ClassLoader.defineClass access on Java 9+ -->
+                    <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
         <resources>
             <resource>
@@ -203,6 +241,13 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- H2 in-memory DB for SQL storage/migration tests -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.2.224</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

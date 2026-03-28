@@ -42,16 +42,36 @@ public class SqlStorage implements StorageProvider {
         this.dataSource = new HikariDataSource(config);
 
         try (Connection conn = dataSource.getConnection()) {
-            String createVanishTable = "CREATE TABLE IF NOT EXISTS vpp_vanished (uuid VARCHAR(36) PRIMARY KEY)";
-            String createRulesTable = "CREATE TABLE IF NOT EXISTS vpp_rules (uuid VARCHAR(36), rule_key VARCHAR(64), rule_value TEXT, PRIMARY KEY(uuid, rule_key))";
-            String createLevelsTable = "CREATE TABLE IF NOT EXISTS vpp_levels (uuid VARCHAR(36) PRIMARY KEY, level INT)";
-
             try (Statement st = conn.createStatement()) {
-                st.execute(createVanishTable);
-                st.execute(createRulesTable);
-                st.execute(createLevelsTable);
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_vanished (uuid VARCHAR(36) PRIMARY KEY)");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_rules (uuid VARCHAR(36), rule_key VARCHAR(64), rule_value TEXT, PRIMARY KEY(uuid, rule_key))");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_levels (uuid VARCHAR(36) PRIMARY KEY, level INT)");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_acknowledgements (uuid VARCHAR(36), notification_id VARCHAR(128), PRIMARY KEY(uuid, notification_id))");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_schema_version (version INT PRIMARY KEY)");
+                // Seed schema version if the table is empty
+                st.execute("INSERT " + (type.equals("postgresql") ? "" : "IGNORE ") + "INTO vpp_schema_version (version) VALUES (1)" + (type.equals("postgresql") ? " ON CONFLICT DO NOTHING" : ""));
             }
+            runSchemaMigrations(conn);
         }
+    }
+
+    private static final int CURRENT_SCHEMA_VERSION = 1;
+
+    private void runSchemaMigrations(Connection conn) throws SQLException {
+        int version;
+        try (PreparedStatement ps = conn.prepareStatement("SELECT version FROM vpp_schema_version");
+             ResultSet rs = ps.executeQuery()) {
+            version = rs.next() ? rs.getInt("version") : 0;
+        }
+        if (version >= CURRENT_SCHEMA_VERSION) return;
+        // Future schema migrations go here as additional cases:
+        // case 1: ALTER TABLE ... ; update version to 2; etc.
+        try (PreparedStatement ps = conn.prepareStatement(
+                "UPDATE vpp_schema_version SET version = ?")) {
+            ps.setInt(1, CURRENT_SCHEMA_VERSION);
+            ps.executeUpdate();
+        }
+        plugin.getLogger().info("SQL schema migrated to v" + CURRENT_SCHEMA_VERSION + ".");
     }
 
     @Override
@@ -167,15 +187,33 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public boolean hasAcknowledged(UUID uuid, String notificationId) {
-        // Acknowledgements are intentionally transient or server-local for now in the
-        // SQL implementation
-        // to avoid table bloat, unless specified otherwise.
-        return false;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, notificationId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Database error: " + e.getMessage());
+            return false;
+        }
     }
 
     @Override
     public void addAcknowledgement(UUID uuid, String notificationId) {
-        // Local only for now.
+        String query = type.equals("postgresql")
+                ? "INSERT INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
+                : "INSERT IGNORE INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?)";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(query)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, notificationId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Database error: " + e.getMessage());
+        }
     }
 
     @Override
