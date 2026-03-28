@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.5] - 2026-03-28
+
+### Added
+- **Spectator Quick-Switch:** Vanished players with `vanishpp.spectator` can double-tap Shift to toggle Spectator mode instantly. Double-tap again to return to the previous gamemode. Unvanishing while in Spectator forces the player back automatically (bypassed by `vanishpp.spectator.bypass`).
+- **`spectator_gamemode` VRule:** New per-player rule to enable or disable the Spectator quick-switch. Default: `true`. Configurable globally under `vanish-gamemodes.enabled`.
+
+### Changed
+- **Spectator Mode Feedback:** The action bar notification shown when entering or exiting Spectator mode is now displayed for 3 seconds and is no longer immediately overwritten by the vanish status indicator.
+- **Unknown Command on Permission Denied:** Players without permission to use any Vanish++ command now receive a vanilla-style "Unknown command" response instead of a permission-denied message, preventing server staff plugin discovery.
+
+### Fixed
+- **Mob Despawning Near Vanished Players:** Mobs no longer despawn when chunks are reloaded near a vanished player. The previous `setAffectsSpawning(false)` call incorrectly caused the server to ignore vanished players for mob lifecycle calculations. Pressure plate suppression is now handled exclusively by the `CAN_TRIGGER_PHYSICAL` rule, which was already in place.
+- **Mobs Not Attacking Non-Vanished Players:** Removed `MobAiManager`, which replaced the vanilla `LookAtPlayerGoal` for all mobs globally. The Paper `MobGoals` API used to inject the custom goal was causing mob attack AI to break for all players. Attack prevention for vanished players is now handled entirely through `EntityTargetEvent`.
+- **`can_throw` Rule Had No Effect:** Throwing projectiles (snowballs, eggs, ender pearls, potions, bows, crossbows) while `can_throw` was enabled was still blocked because `PlayerInteractEvent` cancelled the right-click before `ProjectileLaunchEvent` could fire. The interact handler now permits throwable items through when `can_throw` is enabled, even if `can_interact` is disabled.
+- **Spawn Eggs Always Blocked:** Spawn eggs were blocked unconditionally regardless of the `can_throw` rule state. They now respect the rule correctly.
+- **Periodic Mob Pathfinding Interruption:** The background sync task was calling `stopPathfinding()` on all nearby mobs every 0.5 seconds. This caused mobs to appear passive and disrupted vanilla mob behaviour for all players. Mob targeting is now handled reactively via `EntityTargetEvent` only.
+
 ## [1.1.4] - 2026-03-18
 
 ### Added

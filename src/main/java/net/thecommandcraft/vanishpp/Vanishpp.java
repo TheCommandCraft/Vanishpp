@@ -136,11 +136,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(this, this); // Preprocess listener
 
-        try {
-            new MobAiManager(this).register();
-        } catch (Throwable e) {
-            getLogger().log(Level.WARNING, "Could not register Mob AI Manager", e);
-        }
 
         boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
                 || Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null;
@@ -472,7 +467,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void triggerActionBarWarning(Player p, Component warning) {
-        actionBarPausedUntil.put(p.getUniqueId(), System.currentTimeMillis() + 2000);
+        triggerActionBarWarning(p, warning, 2000);
+    }
+
+    public void triggerActionBarWarning(Player p, Component warning, long durationMs) {
+        actionBarPausedUntil.put(p.getUniqueId(), System.currentTimeMillis() + durationMs);
         p.sendActionBar(warning);
     }
 
@@ -509,15 +508,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     protocolLibManager.sendGlowMetadata(vanished);
                 }
 
-                // Mob targeting
-                if (!ruleManager.getRule(vanished, RuleManager.MOB_TARGETING)) {
-                    for (Entity entity : vanished.getNearbyEntities(48, 48, 48)) {
-                        if (entity instanceof Mob mob && vanished.equals(mob.getTarget())) {
-                            mob.setTarget(null);
-                            mob.getPathfinder().stopPathfinding();
-                        }
-                    }
-                }
+                // Mob targeting is handled by EntityTargetEvent (PlayerListener) — no polling needed.
             }
         }, 10L, 10L);
     }
@@ -531,11 +522,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
             player.playerListName(messageManager.parse(configManager.vanishTabPrefix + player.getName(), player));
         }
 
-        if (configManager.disableBlockTriggering)
-            try {
-                player.setAffectsSpawning(false);
-            } catch (Throwable ignored) {
-            }
         if (configManager.preventSleeping)
             try {
                 player.setSleepingIgnored(true);
@@ -586,10 +572,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void removeVanishEffects(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
-        try {
-            player.setAffectsSpawning(true);
-        } catch (Throwable ignored) {
-        }
         try {
             player.setSleepingIgnored(false);
         } catch (Throwable ignored) {
@@ -792,8 +774,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         // Spawning / sleeping
-        if (configManager.disableBlockTriggering)
-            try { player.setAffectsSpawning(false); } catch (Throwable ignored) {}
         if (configManager.preventSleeping)
             try { player.setSleepingIgnored(true); } catch (Throwable ignored) {}
 

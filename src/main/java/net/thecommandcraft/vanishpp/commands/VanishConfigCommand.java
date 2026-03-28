@@ -44,7 +44,7 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
             @NotNull String[] args) {
         if (!sender.hasPermission("vanishpp.config")) {
             plugin.getMessageManager().sendMessage(sender,
-                    plugin.getConfigManager().getLanguageManager().getMessage("no-permission"));
+                    plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
         }
 

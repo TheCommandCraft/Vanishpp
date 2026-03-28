@@ -377,19 +377,24 @@ public class PlayerListener implements Listener {
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) {
             boolean isSpawnEgg = event.hasItem() && event.getItem() != null
                     && event.getItem().getType().name().endsWith("_SPAWN_EGG");
+            boolean isThrowable = event.hasItem() && event.getItem() != null
+                    && isThrowableItem(event.getItem().getType());
 
             if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
-                // Interaction locked — block everything including spawn eggs; [Allow] buttons now work
-                event.setCancelled(true);
-                event.setUseItemInHand(Event.Result.DENY);
-                if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem())
-                    sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "using spawn eggs" : "interaction");
-                return;
+                // If can_throw is enabled, allow throwables/bows/spawn eggs to pass through
+                if (isThrowable && rules.getRule(p, RuleManager.CAN_THROW)) {
+                    // fall through to throw handling below
+                } else {
+                    event.setCancelled(true);
+                    event.setUseItemInHand(Event.Result.DENY);
+                    if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem())
+                        sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "using spawn eggs" : "interaction");
+                    return;
+                }
             }
 
-            // CAN_INTERACT is enabled — spawn eggs are still always blocked (would spawn a visible
-            // entity and blow cover).
-            if (isSpawnEgg) {
+            // Spawn eggs blocked unless can_throw is enabled
+            if (isSpawnEgg && !rules.getRule(p, RuleManager.CAN_THROW)) {
                 event.setCancelled(true);
                 event.setUseItemInHand(Event.Result.DENY);
                 sendRuleDeny(p, RuleManager.CAN_THROW, "using spawn eggs");
@@ -576,14 +581,14 @@ public class PlayerListener implements Listener {
 
         if (p.getGameMode() != GameMode.SPECTATOR) {
             p.setGameMode(GameMode.SPECTATOR);
-            p.sendActionBar(plugin.getMessageManager().parse(
-                    config.getLanguageManager().getMessage("spectator.entered"), p));
+            plugin.triggerActionBarWarning(p, plugin.getMessageManager().parse(
+                    config.getLanguageManager().getMessage("spectator.entered"), p), 3000);
         } else {
             GameMode prev = plugin.getPreVanishGamemodePublic(p);
             p.setGameMode(prev);
-            p.sendActionBar(plugin.getMessageManager().parse(
+            plugin.triggerActionBarWarning(p, plugin.getMessageManager().parse(
                     config.getLanguageManager().getMessage("spectator.exited")
-                            .replace("%gamemode%", prev.name().toLowerCase()), p));
+                            .replace("%gamemode%", prev.name().toLowerCase()), p), 3000);
         }
     }
 
@@ -686,6 +691,14 @@ public class PlayerListener implements Listener {
     }
 
     private static final long RULE_NOTIFY_COOLDOWN_MS = 60000;
+
+    private static boolean isThrowableItem(org.bukkit.Material mat) {
+        return switch (mat) {
+            case SNOWBALL, EGG, ENDER_PEARL, EXPERIENCE_BOTTLE, SPLASH_POTION,
+                 LINGERING_POTION, TRIDENT, BOW, CROSSBOW -> true;
+            default -> mat.name().endsWith("_SPAWN_EGG");
+        };
+    }
 
     private void sendRuleDeny(Player p, String ruleName, String actionName) {
         LanguageManager lm = config.getLanguageManager();

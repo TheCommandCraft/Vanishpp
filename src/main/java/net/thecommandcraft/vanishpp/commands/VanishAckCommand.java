@@ -47,7 +47,7 @@ public class VanishAckCommand implements TabExecutor {
             }
             case "disable_hiding" -> {
                 if (!p.hasPermission("vanishpp.config")) {
-                    plugin.getMessageManager().sendMessage(p, lm.getMessage("no-permission"));
+                    plugin.getMessageManager().sendMessage(p, lm.getMessage("unknown-command"));
                     return true;
                 }
                 plugin.getConfigManager().setAndSave("hide-announcements.hide-from-plugin-list", false);

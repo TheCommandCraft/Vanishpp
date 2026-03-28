@@ -4,7 +4,7 @@
   <groupId>net.thecommandcraft</groupId>
   <artifactId>vanishpp</artifactId>
   <name>vanishpp</name>
-  <version>1.1.4</version>
+  <version>1.1.5</version>
   <build>
     <defaultGoal>clean package</defaultGoal>
     <resources>
@@ -181,7 +181,7 @@
     </dependency>
   </dependencies>
   <properties>
-    <java.version>21</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <java.version>21</java.version>
   </properties>
 </project>

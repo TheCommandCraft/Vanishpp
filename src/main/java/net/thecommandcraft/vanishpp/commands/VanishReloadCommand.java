@@ -23,7 +23,8 @@ public class VanishReloadCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
         if (!sender.hasPermission("vanishpp.reload")) {
-            plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
         }
 

@@ -5,6 +5,7 @@ import com.destroystokyo.paper.entity.ai.GoalKey;
 import com.destroystokyo.paper.entity.ai.GoalType;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
@@ -25,25 +26,27 @@ public class SafeLookAtPlayerGoal implements Goal<Mob> {
 
     @Override
     public boolean shouldActivate() {
-        if (mob.getTarget() instanceof Player) {
-            targetPlayer = (Player) mob.getTarget();
-            if (plugin.isVanished(targetPlayer)) {
-                return false;
-            }
+        if (mob.getTarget() instanceof Player p) {
+            if (plugin.isVanished(p)) return false;
+            targetPlayer = p;
             return true;
         }
 
-        // Find nearest player to look at
-        double targetDistanceSq = 64.0; // 8 blocks radius squared (8 * 8)
-        for (Player p : mob.getWorld().getPlayers()) {
-            if (p.getLocation().distanceSquared(mob.getLocation()) < targetDistanceSq) {
-                if (!plugin.isVanished(p)) {
-                    targetPlayer = p;
-                    return true;
-                }
+        // Replicate vanilla LookAtPlayerGoal: nearest non-vanished player within 8 blocks
+        Player nearest = null;
+        double nearestDistSq = 64.0; // 8 * 8 — vanilla range
+        for (Entity e : mob.getLocation().getNearbyEntitiesByType(Player.class, 8.0)) {
+            if (!(e instanceof Player p)) continue;
+            if (plugin.isVanished(p)) continue;
+            double d = mob.getLocation().distanceSquared(p.getLocation());
+            if (d < nearestDistSq) {
+                nearestDistSq = d;
+                nearest = p;
             }
         }
-        return false;
+        if (nearest == null) return false;
+        targetPlayer = nearest;
+        return true;
     }
 
     @Override

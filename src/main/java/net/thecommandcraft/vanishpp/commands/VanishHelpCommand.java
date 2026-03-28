@@ -75,6 +75,10 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
         LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+        if (!sender.hasPermission("vanishpp.help")) {
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("unknown-command"));
+            return true;
+        }
 
         if (args.length > 0) {
             String sub = args[0].toLowerCase();
