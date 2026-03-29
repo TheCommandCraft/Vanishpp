@@ -175,6 +175,8 @@ public class MigrationManager {
                 // New sections (update-checker, vanish-gamemodes) are injected automatically
                 // from the fresh template via deepMerge — no manual key moves needed here.
                 configManager.logMigrationChange("Added update-checker and spectator mode settings.");
+            case 7:
+                configManager.logMigrationChange("Added scoreboard settings.");
                 break;
         }
     }

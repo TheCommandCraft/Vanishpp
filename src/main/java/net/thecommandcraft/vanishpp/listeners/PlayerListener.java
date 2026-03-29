@@ -581,11 +581,17 @@ public class PlayerListener implements Listener {
         if (now - last > 400) return; // not a double-tap
 
         if (p.getGameMode() != GameMode.SPECTATOR) {
+            p.setMetadata("vanishpp_pre_spectator_gamemode", new org.bukkit.metadata.FixedMetadataValue(plugin, p.getGameMode()));
             p.setGameMode(GameMode.SPECTATOR);
             plugin.triggerActionBarWarning(p, plugin.getMessageManager().parse(
                     config.getLanguageManager().getMessage("spectator.entered"), p), 3000);
         } else {
-            GameMode prev = plugin.getPreVanishGamemodePublic(p);
+            GameMode prev = GameMode.SURVIVAL;
+            if (p.hasMetadata("vanishpp_pre_spectator_gamemode")) {
+                Object val = p.getMetadata("vanishpp_pre_spectator_gamemode").get(0).value();
+                if (val instanceof GameMode gm) prev = gm;
+                p.removeMetadata("vanishpp_pre_spectator_gamemode", plugin);
+            }
             p.setGameMode(prev);
             plugin.triggerActionBarWarning(p, plugin.getMessageManager().parse(
                     config.getLanguageManager().getMessage("spectator.exited")

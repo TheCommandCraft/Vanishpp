@@ -5,10 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [1.1.6] - 2026-04-01
 
 ### Added
+- **Vanish Scoreboard:** A configurable sidebar scoreboard shown automatically to vanished players (`vanishpp.scoreboard`). Supports custom title, lines, update interval, and built-in placeholders (`%world%`, `%tps%`, `%online%`, `%level%`, `%x%/%y%/%z%`, `%time%`) plus full PlaceholderAPI support. Toggle manually with `/vscoreboard`. Auto-shows on vanish, hides on unvanish. Configured in `scoreboards.yml`.
+- **`/vscoreboard` Command:** Toggle the vanish scoreboard on/off. Requires `vanishpp.scoreboard`.
 - **Periodic Update Checker:** The update checker now re-runs every hour in the background — not just once on startup. Staff with `vanishpp.update` are notified without needing a server restart.
 - **SQL Schema Versioning:** MySQL/PostgreSQL storage now tracks a schema version in `vpp_schema_version` and runs structured migrations on startup, making future schema changes safe and automatic.
 
 ### Changed
+- **Spectator Quick-Switch Restores Exact Gamemode:** Double-shifting out of Spectator now returns the player to the gamemode they were in *before* entering Spectator (Creative, Adventure, Survival), not always Survival.
+- **DiscordSRV Fake Join/Leave Use Embed Format:** Fake join and leave messages sent to Discord on vanish/unvanish now use DiscordSRV's own `sendJoinMessage()`/`sendLeaveMessage()` methods, which honour the embed, colour, avatar, and webhook settings configured in DiscordSRV's `messages.yml`. Previously they were always sent as plain bold text regardless of configuration.
 - **Config Defaults Hardened:** All config reads now use explicit fallback defaults. Previously, deleted or missing keys would silently produce `false`/`0` — now the intended default is always applied even on a stripped config file.
 
 ### Fixed
@@ -18,6 +22,8 @@ All notable changes to this project will be documented in this file.
 - **SQL Acknowledgements Not Persisted:** The `vpp_acknowledgements` table was missing from the MySQL/PostgreSQL schema. Persistent acknowledgements (ProtocolLib missing warning, config migration reports) were silently ignored for SQL storage users — they are now stored and respected correctly.
 - **SQL `removePlayerData` Left Stale Acknowledgements:** Removing a player's data via SQL did not delete their acknowledgement rows. Stale entries could suppress future notifications for that UUID. Now cleared along with rules and level data.
 - **SQL `getRules` Returned Strings Instead of Booleans:** `getRules()` returned raw SQL text values (`"true"`, `"false"`) instead of `Boolean` objects, breaking any code comparing rule values by type. Values are now parsed to `Boolean` before being returned.
+- **DiscordSRV Advancement Leak:** Vanished players completing advancements no longer trigger Discord announcements. Handled via `AchievementMessagePreProcessEvent` as a safety net in addition to DiscordSRV's native vanish check.
+- **DiscordSRV Death Leak:** Vanished players dying no longer trigger Discord death announcements. Handled via `DeathMessagePreProcessEvent` as a safety net.
 
 ## [1.1.5] - 2026-03-28
 

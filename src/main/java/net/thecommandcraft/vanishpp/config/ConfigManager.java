@@ -18,7 +18,7 @@ import java.util.*;
 public class ConfigManager {
     private final Vanishpp plugin;
     private FileConfiguration config;
-    private final int LATEST_CONFIG_VERSION = 7;
+    private final int LATEST_CONFIG_VERSION = 8;
     private final LanguageManager languageManager;
 
     private boolean migratedThisBoot = false;
@@ -56,6 +56,7 @@ public class ConfigManager {
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
     public boolean simulateEssentialsMessages;
     public boolean staffNotifyEnabled;
+    public boolean scoreboardEnabled, scoreboardAutoShow;
     public int defaultVanishLevel, defaultSeeLevel, maxLevel;
     public String updateCheckerMode, updateCheckerId, language;
     public List<String> updateCheckerList;
@@ -204,6 +205,9 @@ public class ConfigManager {
         updateCheckerId = config.getString("update-checker.modrinth-id", "vanish++");
         updateCheckerMode = config.getString("update-checker.notify-mode", "PERMISSION");
         updateCheckerList = config.getStringList("update-checker.notify-list");
+
+        scoreboardEnabled = config.getBoolean("scoreboard.enabled", true);
+        scoreboardAutoShow = config.getBoolean("scoreboard.auto-show-on-vanish", true);
 
         ConfigurationSection rulesSection = config.getConfigurationSection("default-rules");
         if (rulesSection != null) {

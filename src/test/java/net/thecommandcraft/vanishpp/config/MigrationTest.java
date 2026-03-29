@@ -39,7 +39,7 @@ class MigrationTest {
     void testFreshInstallCreatesDefaultConfig() {
         ConfigManager cm = plugin.getConfigManager();
         assertNotNull(cm.getConfig());
-        assertEquals(7, cm.getConfig().getInt("config-version"),
+        assertEquals(cm.getLatestVersion(), cm.getConfig().getInt("config-version"),
                 "Fresh config must be at the current version");
         assertEquals("&7[VANISHED] ", cm.getConfig().getString("vanish-appearance.tab-prefix"));
         assertTrue(cm.getConfig().contains("update-checker"),

@@ -6,7 +6,7 @@
 
 
 # Configuration Version (Internal use for migrations)
-config-version: 7
+config-version: 8
 
 # --- [ MESSAGES ] ---
 # Most messages have been moved to the language files in the 'lang' folder.
@@ -195,6 +195,16 @@ storage:
     host: "localhost"
     port: 6379
     password: ""
+
+# --- [ SCOREBOARD ] ---
+# Shows a sidebar scoreboard with useful info while vanished.
+# Customize layout and lines in scoreboards.yml.
+scoreboard:
+  # Master switch.
+  enabled: true
+  # Automatically show when vanishing, hide when unvanishing.
+  # Players can still toggle manually with /vsb regardless of this setting.
+  auto-show-on-vanish: true
 
 # --- [ UPDATE CHECKER ] ---
 update-checker:

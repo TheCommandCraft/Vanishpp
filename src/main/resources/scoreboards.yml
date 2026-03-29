@@ -1,0 +1,36 @@
+# -------------------------------------------------------
+#               Vanish++ Scoreboard Configuration
+# -------------------------------------------------------
+# Supports & color codes and built-in placeholders:
+#   %world%         World name
+#   %tps%           TPS with color (green/yellow/red)
+#   %tps_raw%       TPS as plain number
+#   %online%        Online player count
+#   %max_players%   Max player slots
+#   %player%        Your name
+#   %level%         Your vanish level
+#   %x% %y% %z%    Your block coordinates
+#   %time%          Real-world time (HH:mm)
+#
+# PlaceholderAPI placeholders are also supported if installed.
+# -------------------------------------------------------
+
+title: "&8[ &7Vanish&f++ &8]"
+
+lines:
+  - ""
+  - "&7World"
+  - "&f%world%"
+  - ""
+  - "&7TPS &8| &7Players"
+  - "%tps% &8| &f%online%&7/&f%max_players%"
+  - ""
+  - "&7Position"
+  - "&f%x% &7/ &f%y% &7/ &f%z%"
+  - ""
+  - "&7Level &8| &7Time"
+  - "&f%level% &8| &f%time%"
+  - ""
+
+# How often to refresh (ticks — 20 = 1 second)
+update-interval: 20

@@ -2,10 +2,10 @@ package net.thecommandcraft.vanishpp.hooks;
 
 import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.Subscribe;
+import github.scarsz.discordsrv.api.events.AchievementMessagePreProcessEvent;
+import github.scarsz.discordsrv.api.events.DeathMessagePreProcessEvent;
 import github.scarsz.discordsrv.api.events.GameChatMessagePreProcessEvent;
-import github.scarsz.discordsrv.dependencies.jda.api.entities.TextChannel;
 import github.scarsz.discordsrv.hooks.vanish.VanishHook;
-import github.scarsz.discordsrv.util.DiscordUtil;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -76,30 +76,47 @@ public class DiscordSRVHook implements VanishHook {
     }
 
     public void sendFakeJoin(Player player) {
-        String message = plugin.getIntegrationManager().getEssentialsJoinMessage();
-        if (message == null)
-            message = "joined the game";
-        broadcastToDiscord(player, message);
+        try {
+            String message = plugin.getIntegrationManager().getEssentialsJoinMessage();
+            if (message == null) message = player.getDisplayName() + " joined the game";
+            // Uses DiscordSRV's own sendJoinMessage so embed/webhook settings from messages.yml are respected
+            DiscordSRV.getPlugin().sendJoinMessage(player, message);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to send DiscordSRV join message: " + e.getMessage());
+        }
     }
 
     public void sendFakeQuit(Player player) {
-        String message = plugin.getIntegrationManager().getEssentialsQuitMessage();
-        if (message == null)
-            message = "left the game";
-        broadcastToDiscord(player, message);
+        try {
+            String message = plugin.getIntegrationManager().getEssentialsQuitMessage();
+            if (message == null) message = player.getDisplayName() + " left the game";
+            // Uses DiscordSRV's own sendLeaveMessage so embed/webhook settings from messages.yml are respected
+            DiscordSRV.getPlugin().sendLeaveMessage(player, message);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to send DiscordSRV quit message: " + e.getMessage());
+        }
     }
 
-    private void broadcastToDiscord(Player player, String message) {
-        try {
-            String name = player.getName();
-            String formatted = "**" + name + "** " + message;
+    /**
+     * Suppress achievement/advancement announcements for vanished players.
+     * DiscordSRV checks VanishHook for join/leave but not always for achievements.
+     */
+    @Subscribe
+    public void onAchievementMessagePreProcess(AchievementMessagePreProcessEvent event) {
+        Player player = event.getPlayer();
+        if (player != null && plugin.isVanished(player)) {
+            event.setCancelled(true);
+        }
+    }
 
-            TextChannel channel = DiscordSRV.getPlugin().getMainTextChannel();
-            if (channel != null) {
-                DiscordUtil.sendMessage(channel, formatted);
-            }
-        } catch (Exception e) {
-            plugin.getLogger().warning("Failed to send DiscordSRV message: " + e.getMessage());
+    /**
+     * Suppress death announcements for vanished players.
+     */
+    @Subscribe
+    public void onDeathMessagePreProcess(DeathMessagePreProcessEvent event) {
+        Player player = event.getPlayer();
+        if (player != null && plugin.isVanished(player)) {
+            event.setCancelled(true);
         }
     }
 }

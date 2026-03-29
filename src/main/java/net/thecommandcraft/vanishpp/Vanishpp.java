@@ -8,6 +8,8 @@ import net.thecommandcraft.vanishpp.listeners.*;
 import net.thecommandcraft.vanishpp.hooks.*;
 import net.thecommandcraft.vanishpp.utils.*;
 import net.thecommandcraft.vanishpp.storage.*;
+import net.thecommandcraft.vanishpp.scoreboard.VanishScoreboard;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.command.CommandSender;
@@ -47,6 +49,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private Team vanishTeam;
     private VanishScheduler vanishScheduler;
     private VoiceChatHook voiceChatHook;
+    private VanishScoreboard vanishScoreboard;
+    private YamlConfiguration scoreboardConfig;
 
     public final Map<UUID, String> pendingChatMessages = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, Long> actionBarPausedUntil = new java.util.concurrent.ConcurrentHashMap<>();
@@ -142,6 +146,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
         registerCommand("vanishconfig", new VanishConfigCommand(this));
         registerCommand("vack", new VanishAckCommand(this));
         registerCommand("vanishreload", new VanishReloadCommand(this));
+        registerCommand("vanishscoreboard", new VanishScoreboardCommand(this));
+
+        // Scoreboard
+        saveResource("scoreboards.yml", false);
+        scoreboardConfig = YamlConfiguration.loadConfiguration(
+                new java.io.File(getDataFolder(), "scoreboards.yml"));
+        this.vanishScoreboard = new VanishScoreboard(this);
+        vanishScoreboard.startUpdateTask();
 
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
@@ -243,6 +255,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void reloadPluginConfig() {
         configManager.load();
 
+        // Reload scoreboard config
+        java.io.File sbFile = new java.io.File(getDataFolder(), "scoreboards.yml");
+        if (sbFile.exists())
+            scoreboardConfig = YamlConfiguration.loadConfiguration(sbFile);
+        if (vanishScoreboard != null)
+            vanishScoreboard.startUpdateTask();
+
         // Refresh action bar state
         if (vanishScheduler != null) {
             vanishScheduler.cancelAllTasks();
@@ -276,6 +295,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         if (integrationManager != null) {
             integrationManager.unregister();
+        }
+        if (vanishScoreboard != null) {
+            vanishScoreboard.shutdown();
         }
     }
 
@@ -399,6 +421,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return startupWarnings;
     }
 
+    public VanishScoreboard getVanishScoreboard() {
+        return vanishScoreboard;
+    }
+
+    public YamlConfiguration getScoreboardConfig() {
+        return scoreboardConfig;
+    }
+
     private void registerCommand(String name, org.bukkit.command.CommandExecutor executor) {
         org.bukkit.command.PluginCommand cmd = getCommand(name);
         if (cmd == null) {
@@ -412,6 +442,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void cleanupPlayerCache(UUID uuid) {
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
+        if (vanishScoreboard != null)
+            vanishScoreboard.cleanup(uuid);
     }
 
     public GameMode getPreVanishGamemodePublic(Player player) {
@@ -593,6 +625,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         storageProvider.setVanished(player.getUniqueId(), true);
         if (redisStorage != null)
             redisStorage.broadcastVanish(player.getUniqueId(), true);
+
+        if (vanishScoreboard != null)
+            vanishScoreboard.onVanish(player);
     }
 
     public void removeVanishEffects(Player player) {
@@ -647,6 +682,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         storageProvider.setVanished(player.getUniqueId(), false);
         if (redisStorage != null)
             redisStorage.broadcastVanish(player.getUniqueId(), false);
+
+        if (vanishScoreboard != null)
+            vanishScoreboard.onUnvanish(player);
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {

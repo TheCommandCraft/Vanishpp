@@ -46,6 +46,10 @@ commands:
     description: Reloads the plugin configuration.
     usage: /vanishreload
     aliases: [ vreload ]
+  vanishscoreboard:
+    description: Toggles the vanish info scoreboard.
+    usage: /vanishscoreboard
+    aliases: [ vsb ]
 
 permissions:
   vanishpp.*:
@@ -79,6 +83,7 @@ permissions:
       vanishpp.update: true
       vanishpp.reload: true
       vanishpp.help: true
+      vanishpp.scoreboard: true
 
   vanishpp.vanish:
     description: Allows a player to vanish themselves.
@@ -161,3 +166,9 @@ permissions:
   vanishpp.spectator.bypass:
     description: Stays in spectator mode after unvanishing instead of being forced back.
     default: op
+  vanishpp.scoreboard:
+    description: Allows using the vanish info scoreboard (/vsb).
+    default: op
+  vanishpp.scoreboard.bypass:
+    description: Prevents auto-showing the scoreboard on vanish (for players with their own scoreboard plugin).
+    default: false
