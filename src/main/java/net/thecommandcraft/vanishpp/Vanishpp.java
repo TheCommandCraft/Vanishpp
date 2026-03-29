@@ -153,7 +153,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         scoreboardConfig = YamlConfiguration.loadConfiguration(
                 new java.io.File(getDataFolder(), "scoreboards.yml"));
         this.vanishScoreboard = new VanishScoreboard(this);
-        vanishScoreboard.startUpdateTask();
+        vanishScoreboard.reload();
 
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
@@ -260,7 +260,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (sbFile.exists())
             scoreboardConfig = YamlConfiguration.loadConfiguration(sbFile);
         if (vanishScoreboard != null)
-            vanishScoreboard.startUpdateTask();
+            vanishScoreboard.reload();
 
         // Refresh action bar state
         if (vanishScheduler != null) {

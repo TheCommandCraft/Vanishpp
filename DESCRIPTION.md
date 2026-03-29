@@ -56,7 +56,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Native TAB Plugin Support:** If you use **TAB (by NEZNAMY)**, Vanish++ hooks directly into it to display your vanish prefix automatically. No manual Placeholder configuration required.
 *   **Legacy Plugin Support:** Even without specific hooks, Vanish++ sets standard Bukkit Metadata (`"vanished"`). This means plugins like **CMI**, **TAB**, or custom skripts automatically respect your vanished status.
 *   **Silent Chests:** Open Chests, Shulker Boxes, Barrels, and Ender Chests silently. The container is opened as a snapshot inventory — no animation, no sound, full item interaction. Changes sync back on close.
-*   **DiscordSRV Integration:** Registers as a native vanish hook in DiscordSRV. Join and quit announcements are suppressed on Discord — even if you reconnect while already vanished. Staff notifications still appear in console and for players with the see permission.
+*   **DiscordSRV Integration:** Registers as a native vanish hook in DiscordSRV. Join, quit, advancement, and death announcements are all suppressed on Discord — even if you reconnect while already vanished. Fake join/leave messages honour DiscordSRV's full embed, colour, avatar, and webhook configuration from `messages.yml`. Staff notifications still appear in console and for players with the see permission.
 *   **Simple Voice Chat Integration:** Automatically isolates/mutes you in voice chat so you can't be heard or hear proximity chat while stalking.
 *   **Smart Item Pickup:** Toggle item pickup with `/vanishpickup`. Don't accidentally steal the diamonds you are watching a player mine.
 
@@ -75,6 +75,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
     *   *Want absolute peace?* Disable "Can Hit Entities".
     *   *Afraid of leaking info?* Enable "Chat Confirmation".
     *   *Need to drop items?* Enable "Can Drop Items".
+*   **Vanish Scoreboard (`/vscoreboard`):** A fully configurable sidebar scoreboard shown automatically when you vanish. Displays world, TPS, player counts, real-time coordinates and direction, biome, ping, health, food, armor, time, and more. Coordinates refresh the instant you move via packet-level ProtocolLib listening — no tick lag. Supports all built-in placeholders plus full PlaceholderAPI. Column separators (`|`) are auto-aligned regardless of label length. Configured in `scoreboards.yml`, reloads with `/vreload`.
 *   **Heartbeat Synchronization:** Changed a permission in LuckPerms? Promoted someone via Console? The **Heartbeat Task** refreshes visuals instantly. No relogging required.
 *   **Setup Advisor:** On every startup, the plugin scans the active config and warns you if a hook is enabled but its dependency is missing, or if a PlaceholderAPI placeholder is used without PlaceholderAPI installed. Warnings are printed to the console *and* shown in-chat to all staff with `vanishpp.see` — so you always know when your setup is incomplete.
 *   **Dependency Warnings:** The plugin intelligently warns admins if ProtocolLib is missing, but allows you to silence these warnings permanently with `/vignore`.
@@ -96,10 +97,11 @@ Most commands support an optional `[player]` argument, allowing admins to modify
 | `/vrules [player] <rule> [val]` | `/vanishrules` | Configure physics/interaction rules. | `vanishpp.rules` |
 | `/vconfig <key> [val]` | `/vanishconfig` | Edit config settings live. | `vanishpp.config` |
 | `/vperms` | - | Manage permissions without a perm plugin. | `vanishpp.manageperms` |
-| `/vlist` | `/vanishlist` | GUI-like list of online vanished players. | `vanishpp.list` |
+| `/vlist` | `/vanishlist` | Interactive list of vanished players. Click a name to unvanish instantly. | `vanishpp.list` |
 | `/vignore [player]` | `/vanishignore` | Toggle start-up warnings. | `vanishpp.ignorewarning` |
 | `/vchat confirm` | `/vanishchat` | Confirm a chat message (if safety is on). | `vanishpp.chat` |
 | `/vreload` | `/vanishreload` | Reload config and resync all vanish effects. | `vanishpp.reload` |
+| `/vscoreboard` | - | Toggle the vanish sidebar scoreboard. | `vanishpp.scoreboard` |
 
 ---
 
