@@ -66,6 +66,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
 <summary><b>🔧 Granular Control & Safety</b></summary>
 <br>
 
+*   **Spectator Quick-Switch:** Double-tap Shift while vanished to enter Spectator mode instantly. Double-tap again to return to your previous gamemode. Unvanishing forces you back automatically. Requires `vanishpp.spectator`. (`vanishpp.spectator.bypass` lets you stay in Spectator after unvanishing.)
 *   **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` (Messages, Rules, Boolean toggles) directly in-game. Changes apply instantly without reloading.
 *   **Interactive Help (`/vhelp`):** Forget the wiki. The plugin includes a clickable, interactive guide explaining every command and feature.
 *   **Smart-Merge Migration:** Updates are stress-free. The plugin automatically detects old configs and migrates your custom messages/settings to the new version structure safely.
@@ -91,14 +92,14 @@ Most commands support an optional `[player]` argument, allowing admins to modify
 | Command | Alias | Description | Permission |
 | :--- | :--- | :--- | :--- |
 | `/vhelp [command]` | `/vanishhelp` | Interactive help menu & guide. | `no permission` |
-| `/vconfig <key> [val]` | `/vanishconfig` | Edit config settings live. | `vanishpp.config` |
 | `/vanish [player]` | `/v`, `/sv` | Toggle vanish state. | `vanishpp.vanish` |
 | `/vrules [player] <rule> [val]` | `/vanishrules` | Configure physics/interaction rules. | `vanishpp.rules` |
-| `/vpickup [player]` | `/tipu` | Toggle item pickup. | `vanishpp.pickup` |
+| `/vconfig <key> [val]` | `/vanishconfig` | Edit config settings live. | `vanishpp.config` |
+| `/vperms` | - | Manage permissions without a perm plugin. | `vanishpp.manageperms` |
+| `/vlist` | `/vanishlist` | GUI-like list of online vanished players. | `vanishpp.list` |
 | `/vignore [player]` | `/vanishignore` | Toggle start-up warnings. | `vanishpp.ignorewarning` |
 | `/vchat confirm` | `/vanishchat` | Confirm a chat message (if safety is on). | `vanishpp.chat` |
-| `/vlist` | `/vanishlist` | GUI-like list of online vanished players. | `vanishpp.list` |
-| `/vperms` | - | Manage permissions without a perm plugin. | `vanishpp.manageperms` |
+| `/vreload` | `/vanishreload` | Reload config and resync all vanish effects. | `vanishpp.reload` |
 
 ---
 
@@ -132,6 +133,8 @@ Customize your ghost experience. Default behavior can be tweaked per player.
 *   `can_trigger_physical` (Default: `false` - Pressure plates, crops, etc.)
 *   `can_throw` (Default: `false` - Cannot throw items like eggs, snowballs, ender pearls, or shoot bows)
 *   `mob_targeting` (Default: `false` - Mobs ignore you)
+*   `spectator_gamemode` (Default: `true` - Double-tap Shift to toggle Spectator mode while vanished)
+*   `show_notifications` (Default: `true` - Receive action-blocked warnings in chat)
 
 ---
 

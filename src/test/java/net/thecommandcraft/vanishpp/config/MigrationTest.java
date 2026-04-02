@@ -166,6 +166,117 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // v2 → v7: no structural refactoring — custom values must survive deep-merge
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testDirectMigrationV2toV7_CustomValuePreserved(@TempDir Path tempDir) throws IOException {
+        File configFile = tempDir.resolve("config.yml").toFile();
+
+        YamlConfiguration v2 = new YamlConfiguration();
+        v2.set("config-version", 2);
+        v2.set("invisibility-features.god-mode", false);
+        v2.set("vanish-appearance.tab-prefix", "&b[STAFF] ");
+        v2.save(configFile);
+
+        new MigrationManager(plugin, plugin.getConfigManager()).runMigration(configFile, 2, 7);
+
+        YamlConfiguration result = YamlConfiguration.loadConfiguration(configFile);
+
+        assertEquals(7, result.getInt("config-version"));
+        assertFalse(result.getBoolean("invisibility-features.god-mode", true),
+                "Custom god-mode=false must survive v2→v7 migration");
+        assertEquals("&b[STAFF] ", result.getString("vanish-appearance.tab-prefix"),
+                "Custom tab-prefix must survive v2→v7 migration");
+        assertTrue(result.contains("update-checker"),
+                "update-checker section must be injected during v2→v7 migration");
+        assertTrue(result.contains("flight-control"),
+                "flight-control section must be injected during v2→v7 migration");
+    }
+
+    // -------------------------------------------------------------------------
+    // v3 → v7: no structural refactoring — custom values must survive deep-merge
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testDirectMigrationV3toV7_CustomValuePreserved(@TempDir Path tempDir) throws IOException {
+        File configFile = tempDir.resolve("config.yml").toFile();
+
+        YamlConfiguration v3 = new YamlConfiguration();
+        v3.set("config-version", 3);
+        v3.set("invisibility-features.night-vision", false);
+        v3.set("vanish-appearance.tab-prefix", "&4[HIDDEN] ");
+        v3.set("hooks.simple-voice-chat.enabled", false);
+        v3.save(configFile);
+
+        new MigrationManager(plugin, plugin.getConfigManager()).runMigration(configFile, 3, 7);
+
+        YamlConfiguration result = YamlConfiguration.loadConfiguration(configFile);
+
+        assertEquals(7, result.getInt("config-version"));
+        assertFalse(result.getBoolean("invisibility-features.night-vision", true),
+                "Custom night-vision=false must survive v3→v7 migration");
+        assertEquals("&4[HIDDEN] ", result.getString("vanish-appearance.tab-prefix"),
+                "Custom tab-prefix must survive v3→v7 migration");
+        assertFalse(result.getBoolean("hooks.simple-voice-chat.enabled", true),
+                "Custom voice-chat.enabled=false must survive v3→v7 migration");
+        assertTrue(result.contains("update-checker"),
+                "update-checker section must be injected during v3→v7 migration");
+    }
+
+    // -------------------------------------------------------------------------
+    // v4 → v7: no structural refactoring — custom values must survive deep-merge
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testDirectMigrationV4toV7_CustomValuePreserved(@TempDir Path tempDir) throws IOException {
+        File configFile = tempDir.resolve("config.yml").toFile();
+
+        YamlConfiguration v4 = new YamlConfiguration();
+        v4.set("config-version", 4);
+        v4.set("invisibility-features.disable-hunger", false);
+        v4.set("vanish-appearance.tab-prefix", "&2[VANISH] ");
+        v4.set("permissions.layered-permissions-enabled", false);
+        v4.save(configFile);
+
+        new MigrationManager(plugin, plugin.getConfigManager()).runMigration(configFile, 4, 7);
+
+        YamlConfiguration result = YamlConfiguration.loadConfiguration(configFile);
+
+        assertEquals(7, result.getInt("config-version"));
+        assertFalse(result.getBoolean("invisibility-features.disable-hunger", true),
+                "Custom disable-hunger=false must survive v4→v7 migration");
+        assertEquals("&2[VANISH] ", result.getString("vanish-appearance.tab-prefix"),
+                "Custom tab-prefix must survive v4→v7 migration");
+        assertFalse(result.getBoolean("permissions.layered-permissions-enabled", true),
+                "Custom layered-permissions=false must survive v4→v7 migration");
+        assertTrue(result.contains("flight-control"),
+                "flight-control section must be injected during v4→v7 migration");
+        assertTrue(result.contains("update-checker"),
+                "update-checker section must be injected during v4→v7 migration");
+    }
+
+    // -------------------------------------------------------------------------
+    // All versions: config-version key is never preserved from old config
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testMigrationAlwaysSetsVersionToLatest(@TempDir Path tempDir) throws IOException {
+        for (int oldVersion : new int[]{1, 2, 3, 4, 5, 6}) {
+            File configFile = tempDir.resolve("config_v" + oldVersion + ".yml").toFile();
+            YamlConfiguration old = new YamlConfiguration();
+            old.set("config-version", oldVersion);
+            old.save(configFile);
+
+            new MigrationManager(plugin, plugin.getConfigManager()).runMigration(configFile, oldVersion, 7);
+
+            YamlConfiguration result = YamlConfiguration.loadConfiguration(configFile);
+            assertEquals(7, result.getInt("config-version"),
+                    "After migration from v" + oldVersion + ", config-version must be 7");
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Backup file created during migration
     // -------------------------------------------------------------------------
 

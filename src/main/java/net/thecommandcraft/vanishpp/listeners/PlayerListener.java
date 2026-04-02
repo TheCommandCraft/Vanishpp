@@ -81,7 +81,7 @@ public class PlayerListener implements Listener {
             // Stage 2 (20 ticks / 1s): catches delayed TAB processing
             // Stage 3 (60 ticks / 3s): final safety net for heavily loaded servers
             for (long delay : new long[]{2L, 20L, 60L}) {
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                plugin.getVanishScheduler().runLaterGlobal(() -> {
                     if (player.isOnline() && plugin.isVanished(player)) {
                         plugin.reapplyTeamEntry(player);
                         if (config.vanishTabPrefix != null && !config.vanishTabPrefix.isEmpty()) {
@@ -89,7 +89,8 @@ public class PlayerListener implements Listener {
                                     config.vanishTabPrefix + player.getName(), player));
                         }
                         plugin.getIntegrationManager().updateHooks(player, true);
-                        plugin.getTabPluginHook().update(player, true);
+                        if (plugin.getTabPluginHook() != null)
+                            plugin.getTabPluginHook().update(player, true);
                     }
                 }, delay);
             }
@@ -106,7 +107,7 @@ public class PlayerListener implements Listener {
         }
 
         // DELAYED NOTIFICATIONS (250ms / 5 Ticks)
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (!player.isOnline())
                 return;
 
@@ -532,7 +533,7 @@ public class PlayerListener implements Listener {
     public void onRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
         if (!plugin.isVanished(player)) return;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (player.isOnline() && plugin.isVanished(player))
                 plugin.resyncVanishEffects(player);
         }, 1L);
@@ -542,7 +543,7 @@ public class PlayerListener implements Listener {
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
         if (!plugin.isVanished(player)) return;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (player.isOnline() && plugin.isVanished(player))
                 plugin.resyncVanishEffects(player);
         }, 1L);
@@ -552,7 +553,7 @@ public class PlayerListener implements Listener {
     public void onGameModeChange(PlayerGameModeChangeEvent event) {
         Player player = event.getPlayer();
         if (!plugin.isVanished(player)) return;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (player.isOnline() && plugin.isVanished(player)) {
                 if (config.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
                     player.setAllowFlight(true);
@@ -686,7 +687,7 @@ public class PlayerListener implements Listener {
         // that fire AFTER InventoryCloseEvent
         if (blockKey != null) {
             final String key = blockKey;
-            Bukkit.getScheduler().runTaskLater(plugin, () -> plugin.silentlyOpenedBlocks.remove(key), 3L);
+            plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentlyOpenedBlocks.remove(key), 3L);
         }
     }
 

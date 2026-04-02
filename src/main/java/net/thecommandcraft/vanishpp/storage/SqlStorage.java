@@ -4,13 +4,14 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import net.thecommandcraft.vanishpp.Vanishpp;
 
+import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
 
 public class SqlStorage implements StorageProvider {
 
     private final Vanishpp plugin;
-    private HikariDataSource dataSource;
+    private DataSource dataSource;
     private final String type;
 
     public SqlStorage(Vanishpp plugin, String type) {
@@ -18,28 +19,37 @@ public class SqlStorage implements StorageProvider {
         this.type = type.toLowerCase();
     }
 
+    /** Package-private constructor for testing with a pre-configured DataSource (e.g. H2 in-memory). */
+    SqlStorage(Vanishpp plugin, DataSource dataSource) {
+        this.plugin = plugin;
+        this.type = "mysql";
+        this.dataSource = dataSource;
+    }
+
     @Override
     public void init() throws Exception {
-        HikariConfig config = new HikariConfig();
-        String host = plugin.getConfig().getString("storage.mysql.host", "localhost");
-        int port = plugin.getConfig().getInt("storage.mysql.port", 3306);
-        String database = plugin.getConfig().getString("storage.mysql.database", "vanishpp");
-        String username = plugin.getConfig().getString("storage.mysql.username", "root");
-        String password = plugin.getConfig().getString("storage.mysql.password", "");
-        boolean useSSL = plugin.getConfig().getBoolean("storage.mysql.use-ssl", false);
+        if (this.dataSource == null) {
+            HikariConfig config = new HikariConfig();
+            String host = plugin.getConfig().getString("storage.mysql.host", "localhost");
+            int port = plugin.getConfig().getInt("storage.mysql.port", 3306);
+            String database = plugin.getConfig().getString("storage.mysql.database", "vanishpp");
+            String username = plugin.getConfig().getString("storage.mysql.username", "root");
+            String password = plugin.getConfig().getString("storage.mysql.password", "");
+            boolean useSSL = plugin.getConfig().getBoolean("storage.mysql.use-ssl", false);
 
-        if (type.equals("mysql")) {
-            config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=" + useSSL);
-        } else if (type.equals("postgresql")) {
-            config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database + "?ssl=" + useSSL);
+            if (type.equals("mysql")) {
+                config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=" + useSSL);
+            } else if (type.equals("postgresql")) {
+                config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database + "?ssl=" + useSSL);
+            }
+
+            config.setUsername(username);
+            config.setPassword(password);
+            config.setMaximumPoolSize(plugin.getConfig().getInt("storage.mysql.pool-size", 10));
+            config.setConnectionTimeout(5000);
+
+            this.dataSource = new HikariDataSource(config);
         }
-
-        config.setUsername(username);
-        config.setPassword(password);
-        config.setMaximumPoolSize(plugin.getConfig().getInt("storage.mysql.pool-size", 10));
-        config.setConnectionTimeout(5000);
-
-        this.dataSource = new HikariDataSource(config);
 
         try (Connection conn = dataSource.getConnection()) {
             try (Statement st = conn.createStatement()) {
@@ -76,8 +86,10 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void shutdown() {
-        if (dataSource != null) {
-            dataSource.close();
+        if (dataSource instanceof HikariDataSource hds) {
+            hds.close();
+        } else if (dataSource instanceof AutoCloseable ac) {
+            try { ac.close(); } catch (Exception ignored) {}
         }
     }
 
@@ -176,7 +188,12 @@ public class SqlStorage implements StorageProvider {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    rules.put(rs.getString("rule_key"), rs.getString("rule_value"));
+                    String val = rs.getString("rule_value");
+                    // Parse boolean strings to Boolean so the return type is consistent with YamlStorage
+                    Object parsed = "true".equalsIgnoreCase(val) ? Boolean.TRUE
+                            : "false".equalsIgnoreCase(val) ? Boolean.FALSE
+                            : val;
+                    rules.put(rs.getString("rule_key"), parsed);
                 }
             }
         } catch (SQLException e) {
@@ -252,6 +269,10 @@ public class SqlStorage implements StorageProvider {
     public void removePlayerData(UUID uuid) {
         try (Connection conn = dataSource.getConnection()) {
             try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_rules WHERE uuid = ?")) {
+                ps.setString(1, uuid.toString());
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_acknowledgements WHERE uuid = ?")) {
                 ps.setString(1, uuid.toString());
                 ps.executeUpdate();
             }

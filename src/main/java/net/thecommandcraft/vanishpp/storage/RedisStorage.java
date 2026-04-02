@@ -67,7 +67,7 @@ public class RedisStorage {
         }
     }
 
-    private void handleSyncMessage(String message) {
+    void handleSyncMessage(String message) {
         try {
             String[] parts = message.split(":");
             if (parts.length != 2)
