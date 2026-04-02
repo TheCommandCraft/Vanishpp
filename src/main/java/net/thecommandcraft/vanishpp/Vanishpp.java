@@ -25,6 +25,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 public class Vanishpp extends JavaPlugin implements Listener {
@@ -65,6 +66,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
             Class.forName("io.papermc.paper.threadedregions.RegionScheduler");
             isFolia = true;
         } catch (ClassNotFoundException ignored) {
+        }
+        // Some Folia builds rename or move the detection class — fall back to server name
+        if (!isFolia) {
+            isFolia = "Folia".equalsIgnoreCase(Bukkit.getName());
         }
 
         if (isFolia) {
@@ -119,7 +124,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
             getLogger().warning("[Setup Check] " + w.message);
         }
 
-        setupTeams();
+        // Folia forbids scoreboard operations on the startup thread — defer to global region
+        if (isFolia) {
+            vanishScheduler.runGlobal(this::setupTeams);
+        } else {
+            setupTeams();
+        }
 
         // 4. Register Commands
         registerCommand("vanish", new VanishCommand(this));
@@ -162,7 +172,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         startSyncTask();
 
         // 7. Restore Player State
-        this.vanishedPlayers = storageProvider.getVanishedPlayers();
+        this.vanishedPlayers = ConcurrentHashMap.newKeySet();
+        this.vanishedPlayers.addAll(storageProvider.getVanishedPlayers());
         this.ignoredWarningPlayers = new HashSet<>(); // Loaded per-player from storage on demand or pre-load
 
         for (UUID uuid : vanishedPlayers) {
@@ -418,19 +429,24 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     // --- CORE LOGIC ---
     private void setupTeams() {
-        org.bukkit.scoreboard.ScoreboardManager sm = Bukkit.getScoreboardManager();
-        if (sm == null) {
-            getLogger().severe("ScoreboardManager is null — cannot set up vanish team. Nametag features disabled.");
-            return;
-        }
-        Scoreboard mainScoreboard = sm.getMainScoreboard();
-        this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
-        if (this.vanishTeam == null)
-            this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
+        try {
+            org.bukkit.scoreboard.ScoreboardManager sm = Bukkit.getScoreboardManager();
+            if (sm == null) {
+                getLogger().severe("ScoreboardManager is null — cannot set up vanish team. Nametag features disabled.");
+                return;
+            }
+            Scoreboard mainScoreboard = sm.getMainScoreboard();
+            this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
+            if (this.vanishTeam == null)
+                this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
 
-        refreshTeamPrefix();
-        vanishTeam.setCanSeeFriendlyInvisibles(true);
-        vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+            refreshTeamPrefix();
+            vanishTeam.setCanSeeFriendlyInvisibles(true);
+            vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        } catch (UnsupportedOperationException e) {
+            getLogger().warning("Scoreboard team setup not supported on this platform. Nametag features disabled.");
+            this.vanishTeam = null;
+        }
     }
 
     public void refreshTeamPrefix() {
@@ -470,7 +486,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     }
                 }
             }
-        }, 0L, 20L);
+        }, 1L, 20L);
     }
 
     public void triggerActionBarWarning(Player p, Component warning) {
@@ -524,7 +540,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void applyVanishEffects(Player player) {
         vanishedPlayers.add(player.getUniqueId());
-        vanishTeam.addEntry(player.getName());
+        if (vanishTeam != null) vanishTeam.addEntry(player.getName());
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
 
         if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
@@ -588,7 +604,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.removeMetadata("vanished", this);
         player.playerListName(null);
 
-        if (vanishTeam.hasEntry(player.getName()))
+        if (vanishTeam != null && vanishTeam.hasEntry(player.getName()))
             vanishTeam.removeEntry(player.getName());
 
         player.setCollidable(true);

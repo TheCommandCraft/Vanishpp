@@ -107,7 +107,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             rules.setAllRules(target, value);
             if (plugin.isVanished(target)) {
                 try {
-                    plugin.applyVanishEffects(target);
+                    plugin.resyncVanishEffects(target);
                 } catch (Exception e) {
                     plugin.getLogger().warning("Error re-applying vanish effects: " + e.getMessage());
                 }
@@ -173,7 +173,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
 
             if (rule.equals(RuleManager.MOB_TARGETING) && plugin.isVanished(target)) {
                 try {
-                    plugin.applyVanishEffects(target);
+                    plugin.resyncVanishEffects(target);
                 } catch (Exception e) {
                     plugin.getLogger().warning("Error re-applying vanish effects: " + e.getMessage());
                 }

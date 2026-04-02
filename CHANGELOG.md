@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.6] - 2026-04-01
+
+### Added
+- **Periodic Update Checker:** The update checker now re-runs every hour in the background — not just once on startup. Staff with `vanishpp.update` are notified without needing a server restart.
+- **SQL Schema Versioning:** MySQL/PostgreSQL storage now tracks a schema version in `vpp_schema_version` and runs structured migrations on startup, making future schema changes safe and automatic.
+
+### Changed
+- **Config Defaults Hardened:** All config reads now use explicit fallback defaults. Previously, deleted or missing keys would silently produce `false`/`0` — now the intended default is always applied even on a stripped config file.
+
+### Fixed
+- **Folia Crash on Startup:** Folia 1.21.11 renamed the internal detection class used by the scheduler bridge, causing the plugin to load `BukkitSchedulerBridge` instead of `FoliaSchedulerBridge`. Added `Bukkit.getName()` as a fallback detection method. Additionally, Folia forbids `ScoreboardManager.registerNewTeam()` on the startup thread — team setup is now deferred to the global region scheduler, and `vanishTeam` usages are null-guarded for the brief window before it completes.
+- **Action Bar Warning Overwritten:** Warning messages (e.g., "Action Blocked") shown in the action bar were immediately erased by the vanish status bar on the next scheduler tick. Warnings now display for their full intended duration before the status bar resumes.
+- **`prevent-potion-effects` Wrong Default:** This setting defaulted to `true` in code, silently blocking all potion effects (including healing potions thrown by staff) on servers where the key was missing from `config.yml`. Corrected to `false`.
+- **SQL Acknowledgements Not Persisted:** The `vpp_acknowledgements` table was missing from the MySQL/PostgreSQL schema. Persistent acknowledgements (ProtocolLib missing warning, config migration reports) were silently ignored for SQL storage users — they are now stored and respected correctly.
+- **SQL `removePlayerData` Left Stale Acknowledgements:** Removing a player's data via SQL did not delete their acknowledgement rows. Stale entries could suppress future notifications for that UUID. Now cleared along with rules and level data.
+- **SQL `getRules` Returned Strings Instead of Booleans:** `getRules()` returned raw SQL text values (`"true"`, `"false"`) instead of `Boolean` objects, breaking any code comparing rule values by type. Values are now parsed to `Boolean` before being returned.
+
 ## [1.1.5] - 2026-03-28
 
 ### Added

@@ -1,0 +1,121 @@
+# Vanish++ multi-platform test environment
+# Platforms: Paper · Purpur · Folia · Spigot · Bukkit (CraftBukkit)
+# All servers run MC 1.21.11 with ProtocolLib and the locally built Vanishpp JAR.
+#
+# Ports:
+#   Paper   25565 (MC)  25575 (RCON)
+#   Purpur  25566 (MC)  25576 (RCON)
+#   Folia   25567 (MC)  25577 (RCON)
+#   Spigot  25568 (MC)  25578 (RCON)
+#   Bukkit  25569 (MC)  25579 (RCON)
+#
+# ⚠ Spigot & Bukkit use BuildTools on first launch — allow 10-15 min.
+# Run ./start.sh to build the JAR and spin everything up.
+
+x-common: &common
+  image: itzg/minecraft-server:latest
+  tty: true
+  stdin_open: true
+  restart: unless-stopped
+
+x-common-env: &common-env
+  EULA: "TRUE"
+  VERSION: "1.21.11"
+  MEMORY: "1536M"
+  ONLINE_MODE: "FALSE"
+  OPS: "TheCommandCraft,TCC_STUDIOS"
+  SPAWN_PROTECTION: "0"
+  DIFFICULTY: "easy"
+  VIEW_DISTANCE: "8"
+  SIMULATION_DISTANCE: "6"
+  RCON_PASSWORD: "vanishtest"
+  ENABLE_RCON: "TRUE"
+  # Downloads ProtocolLib into /data/plugins on first start
+  PLUGINS: "https://github.com/dmulloy2/ProtocolLib/releases/download/5.3.0/ProtocolLib.jar"
+
+services:
+
+  paper:
+    <<: *common
+    container_name: vpp_paper
+    ports:
+      - "25565:25565"
+      - "25575:25575"
+    environment:
+      <<: *common-env
+      TYPE: PAPER
+      RCON_PORT: "25575"
+      MOTD: "§aVanish++ Test §7— §fPaper §71.21.11"
+    volumes:
+      - paper_data:/data
+      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
+
+  purpur:
+    <<: *common
+    container_name: vpp_purpur
+    ports:
+      - "25566:25565"
+      - "25576:25575"
+    environment:
+      <<: *common-env
+      TYPE: PURPUR
+      RCON_PORT: "25576"
+      MOTD: "§dVanish++ Test §7— §fPurpur §71.21.11"
+    volumes:
+      - purpur_data:/data
+      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
+
+  folia:
+    <<: *common
+    container_name: vpp_folia
+    ports:
+      - "25567:25565"
+      - "25577:25575"
+    environment:
+      <<: *common-env
+      TYPE: FOLIA
+      RCON_PORT: "25577"
+      MOTD: "§bVanish++ Test §7— §fFolia §71.21.11"
+      PLUGINS: " "
+    volumes:
+      - folia_data:/data
+      - ./plugins:/plugins:ro
+
+  spigot:
+    <<: *common
+    container_name: vpp_spigot
+    ports:
+      - "25568:25565"
+      - "25578:25575"
+    environment:
+      <<: *common-env
+      TYPE: SPIGOT
+      MEMORY: "2G"           # Extra heap for BuildTools compilation on first run
+      RCON_PORT: "25578"
+      MOTD: "§eVanish++ Test §7— §fSpigot §71.21.11"
+    volumes:
+      - spigot_data:/data
+      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
+
+  bukkit:
+    <<: *common
+    container_name: vpp_bukkit
+    ports:
+      - "25569:25565"
+      - "25579:25575"
+    environment:
+      <<: *common-env
+      TYPE: BUKKIT
+      MEMORY: "2G"           # Extra heap for BuildTools compilation on first run
+      RCON_PORT: "25579"
+      MOTD: "§6Vanish++ Test §7— §fBukkit §71.21.11"
+    volumes:
+      - bukkit_data:/data
+      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
+
+volumes:
+  paper_data:
+  purpur_data:
+  folia_data:
+  spigot_data:
+  bukkit_data:

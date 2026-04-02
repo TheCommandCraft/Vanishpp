@@ -41,7 +41,7 @@ public class UpdateChecker {
     public void startPeriodicCheck() {
         if (!plugin.getConfigManager().updateCheckerEnabled) return;
         // Re-check every 6 hours (6 * 60 * 60 * 20 = 432000 ticks)
-        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::fetchAndCompare, 432000L, 432000L);
+        plugin.getVanishScheduler().runTimerGlobal(this::fetchAndCompare, 432000L, 432000L);
     }
 
     private void fetchAndCompare() {
