@@ -201,7 +201,8 @@ upload_to_modrinth() {
   \"release_type\": \"$release_type_escaped\",
   \"loaders\": [\"bukkit\", \"folia\", \"paper\", \"purpur\", \"spigot\"],
   \"featured\": true,
-  \"primary_file\": \"0\"
+  \"primary_file\": \"0\",
+  \"file_parts\": [\"0\"]
 }"
 
     log_info "Uploading JAR ($file_size bytes)..."
