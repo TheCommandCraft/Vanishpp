@@ -104,6 +104,11 @@ log_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
+# Escape a string for use in JSON
+escape_json() {
+    printf '%s\n' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | tr '\n' ' '
+}
+
 # Extract version from pom.xml
 extract_version() {
     grep -oPm1 '(?<=<version>)[^<]+' "$POM_FILE" | head -1
@@ -174,24 +179,29 @@ upload_to_modrinth() {
 
     log_info "Preparing upload..."
 
-    # Build JSON payload using jq to ensure proper escaping
+    # Build JSON payload with proper escaping
     local payload
-    payload=$(jq -n \
-        --arg name "Vanish++ v$version" \
-        --arg version_number "$version" \
-        --arg changelog "$changelog_body" \
-        --arg release_type "$MODRINTH_RELEASE_TYPE" \
-        '{
-            name: $name,
-            version_number: $version_number,
-            changelog: $changelog,
-            dependencies: [],
-            game_versions: ["1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11"],
-            release_type: $release_type,
-            loaders: ["bukkit", "folia", "paper", "purpur", "spigot"],
-            featured: true,
-            primary_file: 0
-        }')
+    local name_escaped
+    local changelog_escaped
+    local version_escaped
+    local release_type_escaped
+
+    name_escaped=$(escape_json "Vanish++ v$version")
+    changelog_escaped=$(escape_json "$changelog_body")
+    version_escaped=$(escape_json "$version")
+    release_type_escaped=$(escape_json "$MODRINTH_RELEASE_TYPE")
+
+    payload="{
+  \"name\": \"$name_escaped\",
+  \"version_number\": \"$version_escaped\",
+  \"changelog\": \"$changelog_escaped\",
+  \"dependencies\": [],
+  \"game_versions\": [\"1.20.6\", \"1.21\", \"1.21.1\", \"1.21.2\", \"1.21.3\", \"1.21.4\", \"1.21.5\", \"1.21.6\", \"1.21.7\", \"1.21.8\", \"1.21.9\", \"1.21.10\", \"1.21.11\"],
+  \"release_type\": \"$release_type_escaped\",
+  \"loaders\": [\"bukkit\", \"folia\", \"paper\", \"purpur\", \"spigot\"],
+  \"featured\": true,
+  \"primary_file\": 0
+}"
 
     log_info "Uploading JAR ($file_size bytes)..."
 

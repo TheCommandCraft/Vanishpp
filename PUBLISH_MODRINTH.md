@@ -17,7 +17,9 @@ Automated script to publish new versions to Modrinth with zero manual configurat
 
 ## Prerequisites
 
-### 1. Install curl (usually pre-installed)
+### 1. Install Required Tools
+
+**curl** - usually pre-installed
 ```bash
 # macOS
 brew install curl
@@ -27,6 +29,17 @@ sudo apt-get install curl
 
 # Windows (via Git Bash)
 # curl is included
+```
+
+**Maven** - for auto-build feature
+```bash
+# macOS
+brew install maven
+
+# Linux
+sudo apt-get install maven
+
+# Or download from https://maven.apache.org/download.cgi
 ```
 
 ### 2. Get Modrinth API Token
@@ -55,32 +68,38 @@ source ~/.bashrc
 
 ## Usage
 
-### 1. Build the plugin
+The script is fully automated and will:
+1. Auto-build the plugin if JAR doesn't exist (`mvn clean package -DskipTests`)
+2. Extract version from `pom.xml`
+3. Extract changelog from `CHANGELOG.md`
+4. Read description from `DESCRIPTION.md`
+5. Display configuration for review
+6. Upload to Modrinth
 
-```bash
-mvn clean package -DskipTests -q
-```
-
-This creates `target/vanishpp-X.X.X.jar`
-
-### 2. Publish as Release (Default)
+### Quick Start: Publish as Release (Recommended)
 
 ```bash
 MODRINTH_TOKEN=your-token bash publish-modrinth.sh
 ```
 
-Or explicitly:
-```bash
-bash publish-modrinth.sh --release
-```
+The script will automatically build and publish with no additional steps.
 
-### 3. Publish as Beta
+### Publish as Beta
 
 ```bash
-bash publish-modrinth.sh --beta
+MODRINTH_TOKEN=your-token bash publish-modrinth.sh --beta
 ```
 
-### 4. Review and Confirm
+### Manual Build First (Optional)
+
+If you prefer to build separately first:
+
+```bash
+mvn clean package -DskipTests -q
+MODRINTH_TOKEN=your-token bash publish-modrinth.sh --release
+```
+
+### Review and Confirm
 
 The script will:
 - Display all extracted metadata
@@ -88,14 +107,16 @@ The script will:
 - Ask for confirmation (y/N)
 - Upload to Modrinth
 
-Example output:
+Example output (first run - auto-builds):
 ```
 ℹ Reading version from pom.xml...
 ✓ Version: 1.1.6
+ℹ JAR not found. Building plugin...
+✓ Build completed successfully
 ℹ Checking JAR file...
 ✓ JAR found: /path/to/target/vanishpp-1.1.6.jar (3071234 bytes)
 ℹ Extracting changelog for v1.1.6...
-✓ Changelog extracted (1234 chars)
+✓ Changelog extracted (7397 chars)
 ℹ Reading description from DESCRIPTION.md...
 ✓ Description loaded
 
@@ -113,6 +134,8 @@ Configuration:
 Continue? (y/N) y
 
 ℹ Uploading to Modrinth...
+ℹ Preparing upload...
+ℹ Uploading JAR (3071234 bytes)...
 ✓ Description updated
 ✓ Version uploaded successfully!
 
