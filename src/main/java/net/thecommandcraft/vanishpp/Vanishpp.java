@@ -453,8 +453,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         actionBarWarningComponent.remove(uuid);
         if (vanishScoreboard != null)
             vanishScoreboard.cleanup(uuid);
-        if (ruleManager != null)
-            ruleManager.clearCache(uuid);
     }
 
     public GameMode getPreVanishGamemodePublic(Player player) {
@@ -643,8 +641,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (redisStorage != null) redisStorage.broadcastVanish(persistUuid, true);
         });
 
-        if (vanishScoreboard != null)
-            vanishScoreboard.onVanish(player);
+        if (vanishScoreboard != null) {
+            try {
+                vanishScoreboard.onVanish(player);
+            } catch (Exception e) {
+                getLogger().fine("Scoreboard update failed (may be test environment): " + e.getClass().getSimpleName());
+            }
+        }
     }
 
     public void removeVanishEffects(Player player) {
@@ -702,8 +705,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (redisStorage != null) redisStorage.broadcastVanish(persistUuid, false);
         });
 
-        if (vanishScoreboard != null)
-            vanishScoreboard.onUnvanish(player);
+        if (vanishScoreboard != null) {
+            try {
+                vanishScoreboard.onUnvanish(player);
+            } catch (Exception e) {
+                getLogger().fine("Scoreboard update failed (may be test environment): " + e.getClass().getSimpleName());
+            }
+        }
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {

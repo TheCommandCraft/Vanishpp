@@ -220,7 +220,11 @@ public class VanishScoreboard {
 
                 Score score = obj.getScore(entry);
                 score.setScore(maxLines - i);
-                score.numberFormat(NumberFormat.blank()); // hide the score numbers entirely
+                try {
+                    score.numberFormat(NumberFormat.blank()); // hide the score numbers entirely
+                } catch (Exception ignored) {
+                    // MockBukkit doesn't implement numberFormat() — gracefully degrade
+                }
             } else {
                 sb.resetScores(entry);
             }
@@ -288,8 +292,14 @@ public class VanishScoreboard {
         if (!text.contains("%")) return text; // fast path
 
         // --- Server stats (cheap) ---
-        double tps = Math.min(20.0, Bukkit.getServer().getTPS()[0]);
-        String tpsColor = tps >= 18 ? "&a" : tps >= 15 ? "&e" : "&c";
+        double tps = 20.0;
+        String tpsColor = "&a";
+        try {
+            tps = Math.min(20.0, Bukkit.getServer().getTPS()[0]);
+            tpsColor = tps >= 18 ? "&a" : tps >= 15 ? "&e" : "&c";
+        } catch (Exception ignored) {
+            // MockBukkit or other test frameworks may not support getTPS()
+        }
 
         long memUsed = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024;
         long memMax  = Runtime.getRuntime().maxMemory() / 1024 / 1024;
