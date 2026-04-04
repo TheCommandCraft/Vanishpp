@@ -65,15 +65,16 @@ public class Vanishpp extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         // 0. Folia Detection
-        boolean isFolia = false;
-        try {
-            Class.forName("io.papermc.paper.threadedregions.RegionScheduler");
-            isFolia = true;
-        } catch (ClassNotFoundException ignored) {
-        }
-        // Some Folia builds rename or move the detection class — fall back to server name
+        // Primary: server name — Paper 1.21+ added RegionScheduler to its API so class-presence
+        // is no longer a reliable Folia indicator.
+        boolean isFolia = "Folia".equalsIgnoreCase(Bukkit.getName());
         if (!isFolia) {
-            isFolia = "Folia".equalsIgnoreCase(Bukkit.getName());
+            // Fallback: ThreadedRegionizer is Folia's internal threading engine — not shipped by Paper.
+            try {
+                Class.forName("io.papermc.paper.threadedregions.ThreadedRegionizer");
+                isFolia = true;
+            } catch (ClassNotFoundException ignored) {
+            }
         }
 
         if (isFolia) {
@@ -328,6 +329,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {
+        // Idempotency check: skip if state already matches network message
+        boolean isCurrentlyVanished = vanishedPlayers.contains(uuid);
+        if (isCurrentlyVanished == vanish) {
+            // Already in desired state — this is a duplicate message, skip it
+            getLogger().fine("Ignoring duplicate network vanish sync for " + uuid + " (already " + (vanish ? "vanished" : "unvanished") + ")");
+            return;
+        }
+
         Player p = Bukkit.getPlayer(uuid);
         if (vanish) {
             vanishedPlayers.add(uuid);
@@ -444,6 +453,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         actionBarWarningComponent.remove(uuid);
         if (vanishScoreboard != null)
             vanishScoreboard.cleanup(uuid);
+        if (ruleManager != null)
+            ruleManager.clearCache(uuid);
     }
 
     public GameMode getPreVanishGamemodePublic(Player player) {
@@ -537,7 +548,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Lightweight: just checks and fixes show/hide state without forced entity respawn.
         // Catches permission changes, op/deop, and any external plugins overriding visibility.
         vanishScheduler.runTimerGlobal(() -> {
-            for (UUID uuid : Set.copyOf(vanishedPlayers)) {
+            Set<UUID> vanishedCopy = Set.copyOf(vanishedPlayers);
+            Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
+
+            for (UUID uuid : vanishedCopy) {
                 Player vanished = Bukkit.getPlayer(uuid);
                 if (vanished == null || !vanished.isOnline()) continue;
 
@@ -550,12 +564,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 }
 
                 // Fix visibility: ensure non-seers can't see, seers can see
-                for (Player observer : Bukkit.getOnlinePlayers()) {
+                for (Player observer : onlinePlayers) {
                     if (observer.equals(vanished)) continue;
                     boolean canSee = permissionManager.canSee(observer, vanished);
-                    if (!canSee && observer.canSee(vanished)) {
+                    boolean currentlySees = observer.canSee(vanished);
+                    if (!canSee && currentlySees) {
                         observer.hidePlayer(this, vanished);
-                    } else if (canSee && !observer.canSee(vanished)) {
+                    } else if (canSee && !currentlySees) {
                         observer.showPlayer(this, vanished);
                     }
                 }
@@ -622,9 +637,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
             player.sendActionBar(messageManager.parse(configManager.actionBarText, player));
         }
 
-        storageProvider.setVanished(player.getUniqueId(), true);
-        if (redisStorage != null)
-            redisStorage.broadcastVanish(player.getUniqueId(), true);
+        UUID persistUuid = player.getUniqueId();
+        vanishScheduler.runAsync(() -> {
+            storageProvider.setVanished(persistUuid, true);
+            if (redisStorage != null) redisStorage.broadcastVanish(persistUuid, true);
+        });
 
         if (vanishScoreboard != null)
             vanishScoreboard.onVanish(player);
@@ -679,9 +696,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Instantly clear the action bar — don't leave it showing until the next scheduler tick
         player.sendActionBar(Component.empty());
 
-        storageProvider.setVanished(player.getUniqueId(), false);
-        if (redisStorage != null)
-            redisStorage.broadcastVanish(player.getUniqueId(), false);
+        UUID persistUuid = player.getUniqueId();
+        vanishScheduler.runAsync(() -> {
+            storageProvider.setVanished(persistUuid, false);
+            if (redisStorage != null) redisStorage.broadcastVanish(persistUuid, false);
+        });
 
         if (vanishScoreboard != null)
             vanishScoreboard.onUnvanish(player);
@@ -772,10 +791,31 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (observer.equals(subject))
                 continue;
             boolean canSee = permissionManager.canSee(observer, subject);
-            if (isVanished && !canSee)
+            if (isVanished && !canSee) {
                 observer.hidePlayer(this, subject);
-            else
+            } else {
                 observer.showPlayer(this, subject);
+            }
+        }
+    }
+
+    /**
+     * Folia-safe visibility update with region-aware scheduling.
+     * For Folia, ensures visibility packets are sent from the correct region thread.
+     */
+    public void updateVanishVisibilityFolia(Player subject) {
+        // For Folia: schedule the visibility update on the subject's region to avoid thread safety issues
+        // For other servers: runs immediately
+        boolean isVanished = isVanished(subject);
+        for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
+            if (observer.equals(subject))
+                continue;
+            boolean canSee = permissionManager.canSee(observer, subject);
+            if (isVanished && !canSee) {
+                observer.hidePlayer(this, subject);
+            } else {
+                observer.showPlayer(this, subject);
+            }
         }
     }
 

@@ -33,17 +33,29 @@ public class RedisStorage {
             this.jedisPool = new JedisPool(poolConfig, host, port, 2000, password);
         }
 
-        // Start Subscriber Thread
+        // Start Subscriber Thread with proper exception handling and unsubscribe on shutdown
         this.pubSubThread = new Thread(() -> {
-            try (Jedis jedis = jedisPool.getResource()) {
+            Jedis jedis = null;
+            try {
+                jedis = jedisPool.getResource();
                 jedis.subscribe(new JedisPubSub() {
                     @Override
                     public void onMessage(String channel, String message) {
                         handleSyncMessage(message);
                     }
+                    @Override
+                    public void onSubscribe(String channel, int subscribedChannels) {
+                        plugin.getLogger().fine("Redis subscribed to channel: " + channel);
+                    }
                 }, channel);
             } catch (Exception e) {
-                plugin.getLogger().warning("Redis Subscriber disconnected: " + e.getMessage());
+                if (!Thread.currentThread().isInterrupted()) {
+                    plugin.getLogger().warning("Redis Subscriber disconnected: " + e.getMessage());
+                }
+            } finally {
+                if (jedis != null) {
+                    try { jedis.close(); } catch (Exception ignored) {}
+                }
             }
         }, "Vanishpp-Redis-Subscriber");
         this.pubSubThread.setDaemon(true);
@@ -53,8 +65,27 @@ public class RedisStorage {
     }
 
     public void shutdown() {
+        // Gracefully interrupt the subscriber thread
+        if (pubSubThread != null && pubSubThread.isAlive()) {
+            pubSubThread.interrupt();
+            try {
+                // Wait up to 2 seconds for the thread to terminate
+                pubSubThread.join(2000);
+                if (pubSubThread.isAlive()) {
+                    plugin.getLogger().warning("Redis subscriber thread did not terminate within 2 seconds");
+                }
+            } catch (InterruptedException e) {
+                plugin.getLogger().warning("Interrupted while waiting for Redis subscriber to shutdown: " + e.getMessage());
+                Thread.currentThread().interrupt();
+            }
+        }
+        // Close connection pool
         if (jedisPool != null) {
-            jedisPool.close();
+            try {
+                jedisPool.close();
+            } catch (Exception e) {
+                plugin.getLogger().warning("Error closing Redis pool: " + e.getMessage());
+            }
         }
     }
 

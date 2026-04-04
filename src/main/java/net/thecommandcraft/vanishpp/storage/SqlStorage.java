@@ -13,6 +13,8 @@ public class SqlStorage implements StorageProvider {
     private final Vanishpp plugin;
     private DataSource dataSource;
     private final String type;
+    private volatile long lastNotificationTime = 0;
+    private static final long NOTIFICATION_COOLDOWN = 300000; // 5 minutes between notifications
 
     public SqlStorage(Vanishpp plugin, String type) {
         this.plugin = plugin;
@@ -38,8 +40,11 @@ public class SqlStorage implements StorageProvider {
             boolean useSSL = plugin.getConfig().getBoolean("storage.mysql.use-ssl", false);
 
             if (type.equals("mysql")) {
+                // Explicitly load the driver class — plugin classloaders may skip ServiceLoader
+                config.setDriverClassName("com.mysql.cj.jdbc.Driver");
                 config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=" + useSSL);
             } else if (type.equals("postgresql")) {
+                config.setDriverClassName("org.postgresql.Driver");
                 config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database + "?ssl=" + useSSL);
             }
 
@@ -58,14 +63,22 @@ public class SqlStorage implements StorageProvider {
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_levels (uuid VARCHAR(36) PRIMARY KEY, level INT)");
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_acknowledgements (uuid VARCHAR(36), notification_id VARCHAR(128), PRIMARY KEY(uuid, notification_id))");
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_schema_version (version INT PRIMARY KEY)");
-                // Seed schema version if the table is empty
-                st.execute("INSERT " + (type.equals("postgresql") ? "" : "IGNORE ") + "INTO vpp_schema_version (version) VALUES (1)" + (type.equals("postgresql") ? " ON CONFLICT DO NOTHING" : ""));
+            }
+            // Seed schema version only if table is empty
+            try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM vpp_schema_version");
+                 ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    try (PreparedStatement insert = conn.prepareStatement("INSERT INTO vpp_schema_version (version) VALUES (?)")) {
+                        insert.setInt(1, 1);
+                        insert.executeUpdate();
+                    }
+                }
             }
             runSchemaMigrations(conn);
         }
     }
 
-    private static final int CURRENT_SCHEMA_VERSION = 1;
+    private static final int CURRENT_SCHEMA_VERSION = 2;
 
     private void runSchemaMigrations(Connection conn) throws SQLException {
         int version;
@@ -74,8 +87,19 @@ public class SqlStorage implements StorageProvider {
             version = rs.next() ? rs.getInt("version") : 0;
         }
         if (version >= CURRENT_SCHEMA_VERSION) return;
-        // Future schema migrations go here as additional cases:
-        // case 1: ALTER TABLE ... ; update version to 2; etc.
+
+        // Schema migration chain: run all migrations from current version upwards
+        if (version < 2) {
+            try (Statement st = conn.createStatement()) {
+                // Schema v2: Add created_at and updated_at columns for audit trails
+                // Use a helper method to safely add columns that might already exist
+                addColumnIfNotExists(st, "vpp_vanished", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                addColumnIfNotExists(st, "vpp_rules", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                addColumnIfNotExists(st, "vpp_levels", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+            }
+        }
+
+        // Update schema version
         try (PreparedStatement ps = conn.prepareStatement(
                 "UPDATE vpp_schema_version SET version = ?")) {
             ps.setInt(1, CURRENT_SCHEMA_VERSION);
@@ -84,12 +108,48 @@ public class SqlStorage implements StorageProvider {
         plugin.getLogger().info("SQL schema migrated to v" + CURRENT_SCHEMA_VERSION + ".");
     }
 
+    private void addColumnIfNotExists(Statement st, String table, String column, String type) {
+        try {
+            if (this.type.equals("postgresql")) {
+                st.execute("ALTER TABLE " + table + " ADD COLUMN IF NOT EXISTS " + column + " " + type);
+            } else {
+                // H2/MySQL: try to add, catch if it already exists
+                try {
+                    st.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+                } catch (SQLException e) {
+                    if (e.getMessage().contains("Duplicate column") || e.getMessage().contains("already exists")) {
+                        plugin.getLogger().fine("Column " + table + "." + column + " already exists, skipping.");
+                    } else {
+                        throw e;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Error adding column " + table + "." + column + ": " + e.getMessage());
+        }
+    }
+
     @Override
     public void shutdown() {
         if (dataSource instanceof HikariDataSource hds) {
             hds.close();
         } else if (dataSource instanceof AutoCloseable ac) {
             try { ac.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    /** Helper: logs severe errors and notifies staff if connection issues persist */
+    private void handleDatabaseError(SQLException e) {
+        plugin.getLogger().severe("Database connection error: " + e.getMessage());
+        long now = System.currentTimeMillis();
+        if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
+            lastNotificationTime = now;
+            plugin.getServer().getOnlinePlayers().stream()
+                    .filter(p -> p.hasPermission("vanishpp.admin") || p.isOp())
+                    .forEach(p -> p.sendMessage(net.kyori.adventure.text.Component.text()
+                            .content("§c[Vanish++] Database connection failed! Check logs for details.")
+                            .build()));
+            plugin.getLogger().warning("[ADMIN ALERT] Database connection issue — staff have been notified.");
         }
     }
 
@@ -102,7 +162,7 @@ public class SqlStorage implements StorageProvider {
                 return rs.next();
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            handleDatabaseError(e);
             return false;
         }
     }
@@ -120,7 +180,7 @@ public class SqlStorage implements StorageProvider {
             ps.setString(1, uuid.toString());
             ps.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            handleDatabaseError(e);
         }
     }
 
@@ -138,7 +198,7 @@ public class SqlStorage implements StorageProvider {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            handleDatabaseError(e);
         }
         return players;
     }
@@ -156,7 +216,7 @@ public class SqlStorage implements StorageProvider {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            handleDatabaseError(e);
         }
         return defaultValue;
     }
@@ -221,7 +281,7 @@ public class SqlStorage implements StorageProvider {
     @Override
     public void addAcknowledgement(UUID uuid, String notificationId) {
         String query = type.equals("postgresql")
-                ? "INSERT INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
+                ? "INSERT INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?) ON CONFLICT (uuid, notification_id) DO NOTHING"
                 : "INSERT IGNORE INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?)";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
@@ -267,18 +327,33 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void removePlayerData(UUID uuid) {
+        // Clears rule customizations, acknowledgements, and permission levels.
+        // Vanish state is NOT cleared here — it's managed separately via vanish/unvanish commands.
+        // This separation allows admins to remove a player's rule cache without affecting vanish status.
         try (Connection conn = dataSource.getConnection()) {
-            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_rules WHERE uuid = ?")) {
-                ps.setString(1, uuid.toString());
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_acknowledgements WHERE uuid = ?")) {
-                ps.setString(1, uuid.toString());
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_levels WHERE uuid = ?")) {
-                ps.setString(1, uuid.toString());
-                ps.executeUpdate();
+            conn.setAutoCommit(false);
+            try {
+                // Delete rules
+                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_rules WHERE uuid = ?")) {
+                    ps.setString(1, uuid.toString());
+                    ps.executeUpdate();
+                }
+                // Delete acknowledgements
+                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_acknowledgements WHERE uuid = ?")) {
+                    ps.setString(1, uuid.toString());
+                    ps.executeUpdate();
+                }
+                // Delete permission levels
+                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_levels WHERE uuid = ?")) {
+                    ps.setString(1, uuid.toString());
+                    ps.executeUpdate();
+                }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                plugin.getLogger().severe("Database error during removePlayerData: " + e.getMessage());
+            } finally {
+                conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Database error: " + e.getMessage());
