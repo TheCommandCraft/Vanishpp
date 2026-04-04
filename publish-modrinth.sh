@@ -344,8 +344,8 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Step 7: Update description
-update_project_description "$DESCRIPTION"
+# Step 7: Update description (non-fatal — requires WRITE_PROJECTS token scope)
+update_project_description "$DESCRIPTION" || true
 
 # Step 8: Upload version
 echo ""
