@@ -45,6 +45,7 @@ TARGET_DIR="$SCRIPT_DIR/target"
 
 MODRINTH_PROJECT_ID="${MODRINTH_PROJECT_ID:-vanishpp}"
 MODRINTH_API_URL="https://api.modrinth.com/v2"
+MODRINTH_TOKEN="mrp_tqXxk8M7AvhGtYXrIWXRIvXmEbOCUXYhYpGQchJRkfW5iigkIHqQeSmbbKnu"
 RELEASE_TYPE="${1:---release}"  # --release (default) or --beta
 
 # Validate release type
@@ -200,7 +201,7 @@ upload_to_modrinth() {
   \"release_type\": \"$release_type_escaped\",
   \"loaders\": [\"bukkit\", \"folia\", \"paper\", \"purpur\", \"spigot\"],
   \"featured\": true,
-  \"primary_file\": 0
+  \"primary_file\": \"0\"
 }"
 
     log_info "Uploading JAR ($file_size bytes)..."
