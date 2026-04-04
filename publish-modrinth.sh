@@ -45,7 +45,7 @@ TARGET_DIR="$SCRIPT_DIR/target"
 
 MODRINTH_PROJECT_ID="${MODRINTH_PROJECT_ID:-vanishpp}"
 MODRINTH_API_URL="https://api.modrinth.com/v2"
-RELEASE_TYPE="${1:---beta}"  # --release or --beta (default)
+RELEASE_TYPE="${1:---release}"  # --release (default) or --beta
 
 # Validate release type
 if [[ "$RELEASE_TYPE" != "--release" && "$RELEASE_TYPE" != "--beta" ]]; then
@@ -181,9 +181,9 @@ upload_to_modrinth() {
   "version_number": "$VERSION",
   "changelog": $CHANGELOG_JSON,
   "dependencies": [],
-  "game_versions": ["1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11"],
+  "game_versions": ["1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11"],
   "release_type": "$RELEASE_TYPE",
-  "loaders": ["bukkit"],
+  "loaders": ["bukkit", "folia", "paper", "purpur", "spigot"],
   "featured": true,
   "primary_file": 0
 }
@@ -309,9 +309,9 @@ echo -e "  Version:         $VERSION"
 echo -e "  Release Type:    $MODRINTH_RELEASE_TYPE"
 echo -e "  JAR File:        $(basename $JAR_PATH)"
 echo -e "  File Size:       $JAR_SIZE bytes"
-echo -e "  Game Versions:   1.21.x"
-echo -e "  Platforms:       Paper, Folia, Purpur"
-echo -e "  Loaders:         Bukkit"
+echo -e "  Game Versions:   1.20.6, 1.21.x"
+echo -e "  Platforms:       Paper, Folia, Purpur, Spigot, Bukkit"
+echo -e "  Loaders:         Bukkit, Folia, Paper, Purpur, Spigot"
 
 # Step 6: Confirm before upload
 echo ""
@@ -332,7 +332,7 @@ if upload_to_modrinth "$JAR_PATH" "$VERSION" "$CHANGELOG" "$DESCRIPTION" "$JAR_S
     echo -e "${GREEN}║              ✓ Successfully published to Modrinth!             ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  Project:  ${BLUE}https://modrinth.com/plugin/$MODRINTH_PROJECT_ID${NC}"
+    echo -e "  Project:  ${BLUE}https://modrinth.com/plugin/vanish++/versions${NC}"
     echo -e "  Version:  ${BLUE}$VERSION${NC}"
     echo -e "  Release:  ${BLUE}$MODRINTH_RELEASE_TYPE${NC}"
     echo ""

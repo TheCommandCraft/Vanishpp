@@ -8,10 +8,10 @@ Automated script to publish new versions to Modrinth with zero manual configurat
 ✅ **Builds JAR** from `target/vanishpp-*.jar`  
 ✅ **Extracts changelog** for that specific version from `CHANGELOG.md`  
 ✅ **Reads description** from `DESCRIPTION.md`  
-✅ **Sets game versions** to 1.21.x automatically  
-✅ **Configures platforms** (Paper, Folia, Purpur)  
-✅ **Configures loader** (Bukkit)  
-✅ **Sets release type** (--beta or --release)  
+✅ **Sets game versions** to 1.20.6 and 1.21.x automatically  
+✅ **Configures platforms** (Paper, Folia, Purpur, Spigot, Bukkit)  
+✅ **Configures loaders** (Bukkit, Folia, Paper, Purpur, Spigot)  
+✅ **Sets release type** (--release by default, or --beta)  
 ✅ **Updates project description** on Modrinth  
 ✅ **Uploads JAR file**  
 
@@ -63,21 +63,21 @@ mvn clean package -DskipTests -q
 
 This creates `target/vanishpp-X.X.X.jar`
 
-### 2. Publish as Beta
+### 2. Publish as Release (Default)
 
 ```bash
-MODRINTH_TOKEN=your-token bash publish-modrinth.sh --beta
+MODRINTH_TOKEN=your-token bash publish-modrinth.sh
 ```
 
-Or (if you already exported the token):
-```bash
-bash publish-modrinth.sh --beta
-```
-
-### 3. Publish as Release
-
+Or explicitly:
 ```bash
 bash publish-modrinth.sh --release
+```
+
+### 3. Publish as Beta
+
+```bash
+bash publish-modrinth.sh --beta
 ```
 
 ### 4. Review and Confirm
@@ -102,12 +102,12 @@ Example output:
 Configuration:
   Project ID:      vanishpp
   Version:         1.1.6
-  Release Type:    beta
+  Release Type:    release
   JAR File:        vanishpp-1.1.6.jar
   File Size:       3071234 bytes
-  Game Versions:   1.21.x
-  Platforms:       Paper, Folia, Purpur
-  Loaders:         Bukkit
+  Game Versions:   1.20.6, 1.21.x
+  Platforms:       Paper, Folia, Purpur, Spigot, Bukkit
+  Loaders:         Bukkit, Folia, Paper, Purpur, Spigot
 
 ⚠ Ready to publish to Modrinth
 Continue? (y/N) y
@@ -118,9 +118,9 @@ Continue? (y/N) y
 
 ✓ Successfully published to Modrinth!
 
-  Project:  https://modrinth.com/plugin/vanishpp
+  Project:  https://modrinth.com/plugin/vanish++/versions
   Version:  1.1.6
-  Release:  beta
+  Release:  release
 ```
 
 ## How It Extracts Data
@@ -149,13 +149,13 @@ Everything between the version header and the next version header is included.
 Reads entire contents of `DESCRIPTION.md` and uses as project description on Modrinth.
 
 ### Game Versions
-Automatically set to: `1.21, 1.21.1, 1.21.2, ..., 1.21.11`
+Automatically set to: `1.20.6, 1.21, 1.21.1, 1.21.2, ..., 1.21.11`
 
 ### Platforms
-Automatically set to: `Paper, Folia, Purpur`
+Automatically set to: `Paper, Folia, Purpur, Spigot, Bukkit`
 
 ### Loaders
-Automatically set to: `Bukkit`
+Automatically set to: `Bukkit, Folia, Paper, Purpur, Spigot`
 
 ## Troubleshooting
 
