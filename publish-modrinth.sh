@@ -105,9 +105,15 @@ log_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
-# Escape a string for use in JSON
+# Escape a string for use in JSON (no trailing space)
 escape_json() {
-    printf '%s\n' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | tr '\n' ' '
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\t'/\\t}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\n'/\\n}"
+    printf '%s' "$s"
 }
 
 # Extract version from pom.xml
