@@ -176,7 +176,7 @@ upload_to_modrinth() {
     local jar_path="$1"
     local version="$2"
     local changelog_body="$3"
-    local file_size="$5"
+    local file_size="$4"
 
     log_info "Preparing upload..."
 
@@ -198,10 +198,10 @@ upload_to_modrinth() {
   \"changelog\": \"$changelog_escaped\",
   \"dependencies\": [],
   \"game_versions\": [\"1.20.6\", \"1.21\", \"1.21.1\", \"1.21.2\", \"1.21.3\", \"1.21.4\", \"1.21.5\", \"1.21.6\", \"1.21.7\", \"1.21.8\", \"1.21.9\", \"1.21.10\", \"1.21.11\"],
-  \"release_type\": \"$release_type_escaped\",
   \"release_channel\": \"$release_type_escaped\",
   \"loaders\": [\"bukkit\", \"folia\", \"paper\", \"purpur\", \"spigot\"],
   \"featured\": true,
+  \"project_id\": \"$MODRINTH_PROJECT_ID\",
   \"primary_file\": \"0\",
   \"file_parts\": [\"0\"]
 }"
@@ -249,21 +249,20 @@ update_project_description() {
 
     log_info "Updating project description..."
 
-    local payload=$(cat <<EOF
-{
-  "description": $(echo "$description" | jq -Rs .)
-}
-EOF
-)
+    local desc_escaped
+    desc_escaped=$(escape_json "$description")
+    local payload="{\"description\": \"$desc_escaped\"}"
 
-    local curl_response=$(curl -s -w "\n%{http_code}" \
+    local curl_response
+    curl_response=$(curl -s -w "\n%{http_code}" \
         -X PATCH \
         -H "Authorization: $MODRINTH_TOKEN" \
         -H "Content-Type: application/json" \
         -d "$payload" \
         "$MODRINTH_API_URL/project/$MODRINTH_PROJECT_ID")
 
-    local http_code=$(echo "$curl_response" | tail -n 1)
+    local http_code
+    http_code=$(echo "$curl_response" | tail -n 1)
 
     if [[ "$http_code" == "204" || "$http_code" == "200" ]]; then
         log_success "Description updated"
@@ -345,10 +344,13 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Step 7: Upload
+# Step 7: Update description
+update_project_description "$DESCRIPTION"
+
+# Step 8: Upload version
 echo ""
 log_info "Uploading to Modrinth..."
-if upload_to_modrinth "$JAR_PATH" "$VERSION" "$CHANGELOG" "$DESCRIPTION" "$JAR_SIZE"; then
+if upload_to_modrinth "$JAR_PATH" "$VERSION" "$CHANGELOG" "$JAR_SIZE"; then
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║              ✓ Successfully published to Modrinth!             ║${NC}"
