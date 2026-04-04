@@ -81,6 +81,10 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Dependency Warnings:** The plugin intelligently warns admins if ProtocolLib is missing, but allows you to silence these warnings permanently with `/vignore`.
 *   **Accidental Chat Prevention:** If enabled, typing in chat blocks the message and asks you to confirm with `/vchat confirm`. Never leak your presence by accident again.
 *   **Async Data Persistence:** All data is saved asynchronously. Server crash? Restart? Your vanish state is saved instantly. No accidental logins.
+*   **Proxy Plugin Compatibility:** Vanish state is stored in a persistent database (MySQL, PostgreSQL, or YAML) that proxy plugins can read directly. Enables cross-network vanish synchronization without plugin-to-plugin integration. See documentation for example adapters.
+*   **Database Connection Monitoring:** When database connectivity fails, staff are notified in-game so infrastructure issues don't go unnoticed. Includes graceful error handling and connection pooling.
+
+
 
 </details>
 
@@ -155,13 +159,19 @@ Vanish++ is built for modern ecosystems.
 | :------------------ | :------------------- | :----------------------------------------------------------------- |
 | **Paper**           | ✅ Recommended       | Best performance. Required for full physics/projectile support.    |
 | **Purpur**          | ✅ Supported         | Fully compatible (Paper fork).                                     |
-| **Folia**           | ✅ Supported         | Custom regional scheduler bridge with automatic runtime detection. |
+| **Folia**           | ✅ Supported         | Multi-region scheduler bridge with automatic runtime detection. Full support for regional execution. Tested on 1.21.x. |
 | **Spigot**          | ⚠️ Compatible        | Works, but Paper-specific features (projectile passthrough, mob AI goals) degrade. |
 | **Bukkit**          | ⚠️ Compatible        | Same limitations as Spigot.                                        |
 
 **Requirements:**
 *   **Java 21**
 *   **ProtocolLib 5.3.0+** (Highly Recommended for Stealth)
+
+**Storage (Optional):**
+*   **YAML** (Default) - File-based storage, built-in
+*   **MySQL 5.7+** - Network database support
+*   **PostgreSQL 12+** - Network database support
+*   **Redis** (Optional) - For cross-server vanish state synchronization
 
 **Optional Hooks:**
 *   **TAB (NEZNAMY)** (Native Support)

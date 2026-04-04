@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.6] - 2026-04-01
+## [1.1.6] - 2026-04-04
 
 ### Added
 - **Vanish Scoreboard:** A configurable sidebar scoreboard shown automatically to vanished players (`vanishpp.scoreboard`). Displays world, TPS, online count, coordinates, direction, biome, ping, health, food, armor, time, date, vanish level, and more. Updates coordinates in real-time on movement via ProtocolLib packet listener (with configurable cooldown). Toggle manually with `/vscoreboard`. Auto-shows on vanish, hides on unvanish. Configured in `scoreboards.yml`. Reloads with `/vreload`.
@@ -10,7 +10,10 @@ All notable changes to this project will be documented in this file.
 - **Scoreboard Placeholders:** Full set of built-in placeholders: `%world%`, `%tps%`, `%tps_raw%`, `%online%`, `%max_players%`, `%vanished_count%`, `%x%`, `%y%`, `%z%`, `%direction%`, `%biome%`, `%ping%`, `%gamemode%`, `%health%`, `%max_health%`, `%food%`, `%armor%`, `%level%`/`%vanish_level%`, `%player%`, `%displayname%`, `%memory_used%`, `%memory_max%`, `%entities%`, `%chunks%`, `%time%`, `%date%`. PlaceholderAPI supported.
 - **`/vlist` Interactive Player Names:** Each player name in `/vlist` output is now clickable. Hovering shows the player's vanish level and world; clicking runs `/vanish <player>` to unvanish them instantly.
 - **Periodic Update Checker:** The update checker now re-runs every hour in the background — not just once on startup. Staff with `vanishpp.update` are notified without needing a server restart.
-- **SQL Schema Versioning:** MySQL/PostgreSQL storage now tracks a schema version in `vpp_schema_version` and runs structured migrations on startup, making future schema changes safe and automatic.
+- **SQL Schema Versioning:** MySQL/PostgreSQL storage now tracks a schema version in `vpp_schema_version` and runs structured migrations on startup, allowing for future schema changes. Schema v2 adds `created_at`/`updated_at` columns for future audit trail features.
+- **Real-Time Database Sync:** Vanish state changes (vanish/unvanish) are now persisted to the database asynchronously, so storage I/O never blocks the main thread on join or leave. Rules and vanish state are kept in a per-player in-memory cache — pre-populated async on join and cleared on quit — eliminating database round-trips on hot event paths (block breaks, entity damage, etc.).
+- **Database Connection Error Notifications:** When database connectivity fails, staff with `vanishpp.admin` or OP status are notified in-game (throttled every 5 minutes to prevent spam). Helps identify infrastructure issues without requiring log file access.
+- **Proxy Plugin Integration Documentation:** Complete guide for proxy plugins (BungeeCord/Velocity) to read vanish state directly from the database. Includes example adapters and security best practices.
 
 ### Changed
 - **Spectator Quick-Switch Restores Exact Gamemode:** Double-shifting out of Spectator now returns the player to the gamemode they were in *before* entering Spectator (Creative, Adventure, Survival), not always Survival.
@@ -18,14 +21,21 @@ All notable changes to this project will be documented in this file.
 - **Scoreboard Column Auto-Alignment:** Lines containing a `|` separator are automatically padded so the separator lands at the same column on every line. Label widths are measured after stripping color codes. Works for any custom label length — no manual padding needed.
 - **Scoreboard Hides Score Numbers:** Score numbers on the right side of the sidebar are hidden using Paper's `NumberFormat.blank()` API for a cleaner look.
 - **Config Defaults Hardened:** All config reads now use explicit fallback defaults. Previously, deleted or missing keys would silently produce `false`/`0` — now the intended default is always applied even on a stripped config file.
+- **Database Transaction Safety:** `removePlayerData()` now uses transactions to ensure all-or-nothing deletion. Connection errors during cleanup are logged but don't partially corrupt data.
+- **Network Sync Idempotency:** Cross-server vanish sync (Redis) now ignores duplicate messages to prevent visibility state divergence if network flakiness causes message replays.
 
 ### Fixed
 - **Folia Crash on Startup:** Folia 1.21.11 renamed the internal detection class used by the scheduler bridge, causing the plugin to load `BukkitSchedulerBridge` instead of `FoliaSchedulerBridge`. Added `Bukkit.getName()` as a fallback detection method. Additionally, Folia forbids `ScoreboardManager.registerNewTeam()` on the startup thread — team setup is now deferred to the global region scheduler, and `vanishTeam` usages are null-guarded for the brief window before it completes.
 - **Action Bar Warning Overwritten:** Warning messages (e.g., "Action Blocked") shown in the action bar were immediately erased by the vanish status bar on the next scheduler tick. Warnings now display for their full intended duration before the status bar resumes.
 - **`prevent-potion-effects` Wrong Default:** This setting defaulted to `true` in code, silently blocking all potion effects (including healing potions thrown by staff) on servers where the key was missing from `config.yml`. Corrected to `false`.
 - **SQL Acknowledgements Not Persisted:** The `vpp_acknowledgements` table was missing from the MySQL/PostgreSQL schema. Persistent acknowledgements (ProtocolLib missing warning, config migration reports) were silently ignored for SQL storage users — they are now stored and respected correctly.
-- **SQL `removePlayerData` Left Stale Acknowledgements:** Removing a player's data via SQL did not delete their acknowledgement rows. Stale entries could suppress future notifications for that UUID. Now cleared along with rules and level data.
+- **SQL `removePlayerData` Left Stale Acknowledgements:** Removing a player's data via SQL did not delete their acknowledgement rows. Stale entries could suppress future notifications for that UUID. Now cleared along with rules and level data in a single transaction.
 - **SQL `getRules` Returned Strings Instead of Booleans:** `getRules()` returned raw SQL text values (`"true"`, `"false"`) instead of `Boolean` objects, breaking any code comparing rule values by type. Values are now parsed to `Boolean` before being returned.
+- **PostgreSQL `addAcknowledgement()` Syntax Error:** PostgreSQL `ON CONFLICT` clause was incomplete, missing the constraint columns. Now correctly uses `ON CONFLICT (uuid, notification_id) DO NOTHING`.
+- **Redis Subscriber Thread Leak:** The Redis subscriber thread was never gracefully shut down on plugin reload, causing lingering connections and resource exhaustion. Now properly interrupts the thread with timeout and closes Jedis resources.
+- **Folia Visibility Sync Thread Safety:** Visibility sync task could cause `ConcurrentModificationException` in Folia's multi-region environment. Now uses immutable snapshots for safe iteration.
+- **SQL Schema Migration Idempotency:** Calling `init()` multiple times (e.g., on reload) would fail with primary key violations. Now idempotent and safe to call repeatedly.
+- **Database Error Visibility:** Silent database failures provided no feedback to admins. Connection errors are now logged to console and notified to staff in-game.
 - **DiscordSRV Advancement Leak:** Vanished players completing advancements no longer trigger Discord announcements. Suppressed via `AchievementMessagePreProcessEvent` as a safety net in addition to DiscordSRV's native vanish check.
 - **DiscordSRV Death Leak:** Vanished players dying no longer trigger Discord death announcements. Suppressed via `DeathMessagePreProcessEvent` as a safety net.
 
