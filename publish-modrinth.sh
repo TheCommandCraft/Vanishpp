@@ -174,38 +174,35 @@ upload_to_modrinth() {
 
     log_info "Preparing upload..."
 
-    # Create JSON payload for version
-    local payload=$(cat <<'PAYLOAD_EOF'
-{
-  "name": "Vanish++ v$VERSION",
-  "version_number": "$VERSION",
-  "changelog": $CHANGELOG_JSON,
-  "dependencies": [],
-  "game_versions": ["1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11"],
-  "release_type": "$RELEASE_TYPE",
-  "loaders": ["bukkit", "folia", "paper", "purpur", "spigot"],
-  "featured": true,
-  "primary_file": 0
-}
-PAYLOAD_EOF
-)
-
-    # Substitute variables
-    payload=$(echo "$payload" | sed "s|\$VERSION|$version|g")
-    payload=$(echo "$payload" | sed "s|\$RELEASE_TYPE|$MODRINTH_RELEASE_TYPE|g")
-
-    # Escape and embed changelog
-    local changelog_escaped=$(echo "$changelog_body" | jq -Rs .)
-    payload=$(echo "$payload" | sed "s|\$CHANGELOG_JSON|$changelog_escaped|g")
+    # Build JSON payload using jq to ensure proper escaping
+    local payload
+    payload=$(jq -n \
+        --arg name "Vanish++ v$version" \
+        --arg version_number "$version" \
+        --arg changelog "$changelog_body" \
+        --arg release_type "$MODRINTH_RELEASE_TYPE" \
+        '{
+            name: $name,
+            version_number: $version_number,
+            changelog: $changelog,
+            dependencies: [],
+            game_versions: ["1.20.6", "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11"],
+            release_type: $release_type,
+            loaders: ["bukkit", "folia", "paper", "purpur", "spigot"],
+            featured: true,
+            primary_file: 0
+        }')
 
     log_info "Uploading JAR ($file_size bytes)..."
 
     # Upload file to Modrinth using multipart form
     # The API requires the JSON data and the file to be uploaded together
-    local temp_json=$(mktemp)
+    local temp_json
+    temp_json=$(mktemp)
     echo "$payload" > "$temp_json"
 
-    local curl_response=$(curl -s -w "\n%{http_code}" \
+    local curl_response
+    curl_response=$(curl -s -w "\n%{http_code}" \
         -H "Authorization: $MODRINTH_TOKEN" \
         -F "data=@$temp_json;type=application/json" \
         -F "file=@$jar_path" \
@@ -214,8 +211,10 @@ PAYLOAD_EOF
     rm -f "$temp_json"
 
     # Extract HTTP status code from last line
-    local http_code=$(echo "$curl_response" | tail -n 1)
-    local response_body=$(echo "$curl_response" | head -n -1)
+    local http_code
+    http_code=$(echo "$curl_response" | tail -n 1)
+    local response_body
+    response_body=$(echo "$curl_response" | head -n -1)
 
     if [[ "$http_code" == "200" ]]; then
         log_success "Version uploaded successfully!"
@@ -272,7 +271,7 @@ echo -e "${BLUE}║          Vanish++ — Modrinth Auto-Publisher               
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Step 1: Extract version
+# Step 0: Extract version first to check if build is needed
 log_info "Reading version from pom.xml..."
 VERSION=$(extract_version)
 if [[ -z "$VERSION" ]]; then
@@ -280,6 +279,16 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 log_success "Version: $VERSION"
+
+# Step 1: Build if JAR doesn't exist
+if [[ ! -f "$TARGET_DIR/vanishpp-$VERSION.jar" ]]; then
+    log_info "JAR not found. Building plugin..."
+    if ! mvn clean package -DskipTests -q; then
+        log_error "Maven build failed!"
+        exit 1
+    fi
+    log_success "Build completed successfully"
+fi
 
 # Step 2: Verify JAR exists
 log_info "Checking JAR file..."
@@ -307,7 +316,7 @@ echo -e "${BLUE}Configuration:${NC}"
 echo -e "  Project ID:      $MODRINTH_PROJECT_ID"
 echo -e "  Version:         $VERSION"
 echo -e "  Release Type:    $MODRINTH_RELEASE_TYPE"
-echo -e "  JAR File:        $(basename $JAR_PATH)"
+echo -e "  JAR File:        $(basename "$JAR_PATH")"
 echo -e "  File Size:       $JAR_SIZE bytes"
 echo -e "  Game Versions:   1.20.6, 1.21.x"
 echo -e "  Platforms:       Paper, Folia, Purpur, Spigot, Bukkit"
