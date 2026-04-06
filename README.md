@@ -183,22 +183,6 @@ ls target/vanishpp-*.jar
 
 ---
 
-## Publishing to Modrinth
-
-```bash
-# Set your Modrinth API token
-export MODRINTH_TOKEN=<your-token>
-
-# Build and publish as release
-mvn clean package -DskipTests -q
-bash publish-modrinth.sh --release
-
-# Or publish as beta
-bash publish-modrinth.sh --beta
-```
-
----
-
 ## Contributing
 
 Pull requests are welcome. For significant changes, please open an issue first to discuss what you'd like to change.
