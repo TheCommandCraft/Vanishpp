@@ -124,6 +124,12 @@ public class PlayerListener implements Listener {
                 plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.line"));
                 plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.sub"));
                 plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.box-bottom"));
+                player.sendMessage(
+                        Component.text("  ").append(
+                        Component.text("[ Download ProtocolLib ]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                                .clickEvent(ClickEvent.openUrl("https://github.com/dmulloy2/ProtocolLib/releases/"))
+                                .hoverEvent(HoverEvent.showText(Component.text(
+                                        "Opens the latest ProtocolLib release on GitHub", NamedTextColor.GRAY)))));
 
                 Title title = Title.title(
                         plugin.getMessageManager().parse(lm.getMessage("warnings.protocollib-missing-title"), player),
@@ -651,7 +657,7 @@ public class PlayerListener implements Listener {
                         .text("⚠ Install ", NamedTextColor.YELLOW)
                         .append(net.kyori.adventure.text.Component.text("[ProtocolLib]", NamedTextColor.AQUA,
                                 TextDecoration.UNDERLINED)
-                                .clickEvent(ClickEvent.openUrl("https://www.spigotmc.org/resources/protocollib.1997/"))
+                                .clickEvent(ClickEvent.openUrl("https://github.com/dmulloy2/ProtocolLib/releases/"))
                                 .hoverEvent(HoverEvent.showText(net.kyori.adventure.text.Component.text(
                                         "Click to open SpigotMC download page", NamedTextColor.GRAY))))
                         .append(net.kyori.adventure.text.Component.text(" to move items in silent chests.", NamedTextColor.YELLOW));

@@ -36,4 +36,11 @@ public interface StorageProvider {
 
     // Cleanup
     void removePlayerData(UUID uuid);
+
+    // Migration support
+    /** Returns all UUIDs with any stored data (vanish state, rules, levels, or acknowledgements). */
+    Set<UUID> getAllKnownPlayers();
+
+    /** Returns all notification IDs acknowledged by this player. */
+    Set<String> getAcknowledgements(UUID uuid);
 }

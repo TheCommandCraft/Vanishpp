@@ -8,6 +8,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class YamlStorage implements StorageProvider {
@@ -133,6 +134,28 @@ public class YamlStorage implements StorageProvider {
     public void setVanishLevel(UUID uuid, int level) {
         config.set("levels." + uuid.toString(), level);
         save();
+    }
+
+    @Override
+    public Set<UUID> getAllKnownPlayers() {
+        Set<UUID> uuids = new HashSet<>();
+        for (String s : config.getStringList("vanished-players")) {
+            try { uuids.add(UUID.fromString(s)); } catch (IllegalArgumentException ignored) {}
+        }
+        for (String section : List.of("rules", "levels", "acknowledged-notifications")) {
+            ConfigurationSection cs = config.getConfigurationSection(section);
+            if (cs != null) {
+                for (String key : cs.getKeys(false)) {
+                    try { uuids.add(UUID.fromString(key)); } catch (IllegalArgumentException ignored) {}
+                }
+            }
+        }
+        return uuids;
+    }
+
+    @Override
+    public Set<String> getAcknowledgements(UUID uuid) {
+        return new HashSet<>(config.getStringList("acknowledged-notifications." + uuid.toString()));
     }
 
     @Override

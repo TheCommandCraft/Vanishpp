@@ -40,10 +40,12 @@ public class SqlStorage implements StorageProvider {
             boolean useSSL = plugin.getConfig().getBoolean("storage.mysql.use-ssl", false);
 
             if (type.equals("mysql")) {
-                // Explicitly load the driver class — plugin classloaders may skip ServiceLoader
+                // Force driver class load in plugin classloader before HikariCP tries to find it
+                Class.forName("com.mysql.cj.jdbc.Driver");
                 config.setDriverClassName("com.mysql.cj.jdbc.Driver");
                 config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=" + useSSL);
             } else if (type.equals("postgresql")) {
+                Class.forName("org.postgresql.Driver");
                 config.setDriverClassName("org.postgresql.Driver");
                 config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database + "?ssl=" + useSSL);
             }
@@ -323,6 +325,41 @@ public class SqlStorage implements StorageProvider {
         } catch (SQLException e) {
             plugin.getLogger().severe("Database error: " + e.getMessage());
         }
+    }
+
+    @Override
+    public Set<UUID> getAllKnownPlayers() {
+        Set<UUID> uuids = new HashSet<>();
+        String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements"};
+        for (String table : tables) {
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement ps = conn.prepareStatement("SELECT DISTINCT uuid FROM " + table);
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    try { uuids.add(UUID.fromString(rs.getString("uuid"))); }
+                    catch (IllegalArgumentException ignored) {}
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Migration check failed on " + table + ": " + e.getMessage());
+            }
+        }
+        return uuids;
+    }
+
+    @Override
+    public Set<String> getAcknowledgements(UUID uuid) {
+        Set<String> ids = new HashSet<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT notification_id FROM vpp_acknowledgements WHERE uuid = ?")) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) ids.add(rs.getString("notification_id"));
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Database error: " + e.getMessage());
+        }
+        return ids;
     }
 
     @Override

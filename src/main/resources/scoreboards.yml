@@ -66,7 +66,7 @@ lines:
 
 # Timer refresh rate (ticks — 20 = 1 second).
 # Refreshes TPS, time, online count and other non-position values.
-update-interval: 40
+update-interval: 1
 
 # Update coordinates/direction instantly when the player moves.
 # Requires ProtocolLib. Falls back to timer-only if not available.

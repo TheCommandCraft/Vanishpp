@@ -304,28 +304,84 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     private void initStorage() {
         String type = configManager.getConfig().getString("storage.type", "YAML").toUpperCase();
+        StorageProvider newProvider;
         if (type.equals("MYSQL") || type.equals("POSTGRESQL")) {
-            this.storageProvider = new SqlStorage(this, type);
+            newProvider = new SqlStorage(this, type);
         } else {
-            this.storageProvider = new YamlStorage(this);
+            newProvider = new YamlStorage(this);
         }
 
         try {
-            this.storageProvider.init();
+            newProvider.init();
         } catch (Exception e) {
             getLogger().severe("FAILED TO INITIALIZE STORAGE: " + e.getMessage());
             getLogger().severe("Falling back to YAML storage.");
-            this.storageProvider = new YamlStorage(this);
+            newProvider = new YamlStorage(this);
             try {
-                this.storageProvider.init();
-            } catch (Exception ignored) {
-            }
+                newProvider.init();
+            } catch (Exception ignored) {}
         }
+
+        // Migrate data from old storage if the new storage is empty and another source has data
+        migrateIfNeeded(newProvider, type);
+
+        this.storageProvider = newProvider;
 
         if (configManager.getConfig().getBoolean("storage.redis.enabled", false)) {
             this.redisStorage = new RedisStorage(this);
             this.redisStorage.init();
         }
+    }
+
+    private void migrateIfNeeded(StorageProvider target, String targetType) {
+        if (!target.getAllKnownPlayers().isEmpty()) return; // target already has data, nothing to migrate
+
+        // Determine the other storage to migrate FROM
+        StorageProvider source = null;
+        boolean sourceOwned = false;
+        if (!targetType.equals("YAML")) {
+            // Migrating TO SQL — check if YAML has data
+            YamlStorage yaml = new YamlStorage(this);
+            try { yaml.init(); } catch (Exception ignored) { return; }
+            if (!yaml.getAllKnownPlayers().isEmpty()) {
+                source = yaml;
+                sourceOwned = true;
+            }
+        } else {
+            // Migrating TO YAML — check if SQL has data (use current config connection details)
+            String prev = configManager.getConfig().getString("storage.type", "YAML").toUpperCase();
+            if (prev.equals("MYSQL") || prev.equals("POSTGRESQL")) {
+                SqlStorage sql = new SqlStorage(this, prev);
+                try {
+                    sql.init();
+                    if (!sql.getAllKnownPlayers().isEmpty()) {
+                        source = sql;
+                        sourceOwned = true;
+                    } else {
+                        sql.shutdown();
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        if (source == null) return;
+
+        getLogger().info("Migrating storage data from " + source.getClass().getSimpleName() + " → " + target.getClass().getSimpleName() + "...");
+        int count = 0;
+        for (UUID uuid : source.getAllKnownPlayers()) {
+            // Vanish state
+            if (source.isVanished(uuid)) target.setVanished(uuid, true);
+            // Rules
+            source.getRules(uuid).forEach((rule, val) -> target.setRule(uuid, rule, val));
+            // Vanish level
+            int level = source.getVanishLevel(uuid);
+            if (level != 1) target.setVanishLevel(uuid, level);
+            // Acknowledgements
+            source.getAcknowledgements(uuid).forEach(id -> target.addAcknowledgement(uuid, id));
+            count++;
+        }
+        getLogger().info("Storage migration complete: " + count + " player(s) migrated.");
+        if (sourceOwned) source.shutdown();
     }
 
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {

@@ -1,49 +1,46 @@
 # Build output
 target/
 dependency-reduced-pom.xml
+build_output.txt
 
 # IDE
 .idea/
+.vscode/
 *.iml
 
 # Claude Code local settings
 .claude/
+CLAUDE.md
 
-# Server runtime data (dev server)
-server-data/world/
-server-data/world_nether/
-server-data/world_the_end/
-server-data/logs/
-server-data/cache/
-server-data/plugins/.paper-remapped/
-server-data/plugins/spark/tmp/
-server-data/plugins/Vanishpp/data.yml
-server-data/usercache.json
-server-data/versions/
-server-data/libraries/
+# Dev-only scripts and docs
+docker-compose.builder.yml
+docker-compose.yml
+todo.txt
+test.log
+Icon.pxo
 
-# Test server runtime data
-testserver_clean/world/
-testserver_clean/world_nether/
-testserver_clean/world_the_end/
-testserver_clean/logs/
-testserver_clean/cache/
-testserver_clean/versions/
-testserver_clean/libraries/
-testserver_clean/usercache.json
-testserver_clean/plugins/.paper-remapped/
-testserver_clean/plugins/spark/tmp/
-testserver_clean/plugins/bStats/
-testserver_clean/plugins/ProtocolLib/
-testserver_clean/plugins/Essentials/userdata/
-testserver_clean/plugins/Essentials/usermap.bin
-testserver_clean/plugins/Essentials/uuids.bin
-testserver_clean/plugins/Vanishpp/data.yml
-testserver_clean/plugins/TAB/anti-override.log
-testserver_clean/plugins/TAB/playerdata.yml
-testserver_clean/plugins/TAB/skincache.yml
-testserver_clean/plugins/DiscordSRV/
-testserver_clean/plugins/voicechat/
-testserver_clean/plugins/.var-list-manifest.json
-testserver_clean/plugins/Geyser-Spigot/
-testserver_clean/plugins/floodgate/
+# Internal dev notes (not public)
+FIXES_ITERATION_2.md
+FoundIssues.md
+FoundIssues.txt
+github_issues.md
+issues
+ISSUES_FIXED.md
+ISSUES_FOUND.md
+issues_review.md
+NewIssues.txt
+OldDescription.md
+OPEN_COMPLAINTS.md
+PLATFORM_COMPATIBILITY_REPORT.md
+PRODUCTION_TEST_PLAN.md
+PROJECT.md
+PUBLISH_MODRINTH.md
+RELEASE_NOTES_*.md
+DATABASE_PRODUCTION_VERIFICATION.md
+
+# Dev server data
+server-data/
+
+# Test server data
+testserver_clean/
+testserver_folia/

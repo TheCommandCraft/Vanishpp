@@ -1,9 +1,5 @@
 package net.thecommandcraft.vanishpp.scoreboard;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketEvent;
 import io.papermc.paper.scoreboard.numbers.NumberFormat;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -12,7 +8,6 @@ import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.*;
 
 import java.text.SimpleDateFormat;
@@ -35,8 +30,10 @@ public class VanishScoreboard {
 
     // Movement-triggered update state
     private final Map<UUID, Long> movementCooldowns = new ConcurrentHashMap<>();
-    private PacketAdapter movementListener;
-    private BukkitTask updateTask;
+    private ScoreboardMovementListener movementListener;
+    // Epoch-based cancellation: incrementing taskEpoch makes the previous timer runnable a no-op.
+    private volatile int taskEpoch = 0;
+    private boolean timerRunning = false;
 
     public VanishScoreboard(Vanishpp plugin) {
         this.plugin = plugin;
@@ -78,6 +75,7 @@ public class VanishScoreboard {
 
     public void show(Player player) {
         if (boards.containsKey(player.getUniqueId())) return;
+        boolean wasEmpty = boards.isEmpty();
 
         ScoreboardManager sm = Bukkit.getScoreboardManager();
         Scoreboard sb = sm.getNewScoreboard();
@@ -94,6 +92,7 @@ public class VanishScoreboard {
         boards.put(player.getUniqueId(), sb);
         update(player, sb, obj);
         player.setScoreboard(sb);
+        if (wasEmpty) startTimerTask(); // first board opened — start the timer
     }
 
     public void hide(Player player) {
@@ -101,6 +100,7 @@ public class VanishScoreboard {
         boards.remove(player.getUniqueId());
         movementCooldowns.remove(player.getUniqueId());
         player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+        if (boards.isEmpty()) { taskEpoch++; timerRunning = false; } // last board closed — stop the timer
     }
 
     public void cleanup(UUID uuid) {
@@ -113,19 +113,19 @@ public class VanishScoreboard {
     // Task management (called from Vanishpp.reloadPluginConfig / onEnable)
     // -------------------------------------------------------------------------
 
-    /** Start/restart both the timer task and the movement listener. */
+    /** Re-register the movement listener (called on reload). Timer starts on demand via show(). */
     public void reload() {
-        startTimerTask();
         registerMovementListener();
+        // Restart timer only if the scoreboard is already active for someone
+        if (!boards.isEmpty()) startTimerTask();
     }
 
     private void startTimerTask() {
-        if (updateTask != null) {
-            updateTask.cancel();
-            updateTask = null;
-        }
-        int interval = plugin.getScoreboardConfig().getInt("update-interval", 40);
-        updateTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        timerRunning = true;
+        final int myEpoch = ++taskEpoch; // invalidate any previously scheduled task
+        int interval = Math.max(1, plugin.getScoreboardConfig().getInt("update-interval", 1));
+        plugin.getVanishScheduler().runTimerGlobal(() -> {
+            if (taskEpoch != myEpoch) return;
             for (UUID uuid : new ArrayList<>(boards.keySet())) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline()) tick(p);
@@ -136,47 +136,21 @@ public class VanishScoreboard {
     private void registerMovementListener() {
         // Remove stale listener before re-adding
         if (movementListener != null) {
-            try {
-                ProtocolLibrary.getProtocolManager().removePacketListener(movementListener);
-            } catch (Exception ignored) {}
+            movementListener.unregister();
             movementListener = null;
         }
         if (!plugin.hasProtocolLib()) return;
         if (!plugin.getScoreboardConfig().getBoolean("movement-update", true)) return;
 
         long cooldownMs = plugin.getScoreboardConfig().getLong("movement-cooldown", 100);
-
-        movementListener = new PacketAdapter(plugin,
-                PacketType.Play.Client.POSITION,
-                PacketType.Play.Client.POSITION_LOOK) {
-            @Override
-            public void onPacketReceiving(PacketEvent event) {
-                UUID uuid = event.getPlayer().getUniqueId();
-                if (!boards.containsKey(uuid)) return;
-
-                long now = System.currentTimeMillis();
-                Long last = movementCooldowns.get(uuid);
-                if (last != null && now - last < cooldownMs) return;
-                movementCooldowns.put(uuid, now);
-
-                Player player = event.getPlayer();
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (player.isOnline()) tick(player);
-                });
-            }
-        };
-        ProtocolLibrary.getProtocolManager().addPacketListener(movementListener);
+        movementListener = new ScoreboardMovementListener(plugin, boards, movementCooldowns, cooldownMs, this::tick);
     }
 
     public void shutdown() {
-        if (updateTask != null) {
-            updateTask.cancel();
-            updateTask = null;
-        }
+        taskEpoch++; // invalidate running timer task
+        timerRunning = false;
         if (movementListener != null) {
-            try {
-                ProtocolLibrary.getProtocolManager().removePacketListener(movementListener);
-            } catch (Exception ignored) {}
+            movementListener.unregister();
             movementListener = null;
         }
         for (UUID uuid : new ArrayList<>(boards.keySet())) {

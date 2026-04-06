@@ -45,7 +45,7 @@ TARGET_DIR="$SCRIPT_DIR/target"
 
 MODRINTH_PROJECT_ID="${MODRINTH_PROJECT_ID:-kbKpK1bc}"
 MODRINTH_API_URL="https://api.modrinth.com/v2"
-MODRINTH_TOKEN="mrp_tqXxk8M7AvhGtYXrIWXRIvXmEbOCUXYhYpGQchJRkfW5iigkIHqQeSmbbKnu"
+MODRINTH_TOKEN="${MODRINTH_TOKEN:-}"
 RELEASE_TYPE="${1:---release}"  # --release (default) or --beta
 
 # Validate release type

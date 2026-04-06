@@ -35,9 +35,27 @@ x-common-env: &common-env
 
 services:
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: vpp_postgres
+    environment:
+      POSTGRES_DB: vanishpp
+      POSTGRES_USER: vanishpp
+      POSTGRES_PASSWORD: vanishtest
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vanishpp -d vanishpp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   paper:
     <<: *common
     container_name: vpp_paper
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "25565:25565"
       - "25575:25575"
@@ -48,7 +66,7 @@ services:
       MOTD: "§aVanish++ Test §7— §fPaper §71.21.11"
     volumes:
       - paper_data:/data
-      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
+      - ./plugins:/plugins:ro
 
   purpur:
     <<: *common
@@ -114,8 +132,15 @@ services:
       - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
 
 volumes:
+  postgres_data:
   paper_data:
   purpur_data:
   folia_data:
   spigot_data:
   bukkit_data:
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1450"
