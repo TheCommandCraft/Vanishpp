@@ -50,6 +50,7 @@ commands:
     description: Toggles the vanish info scoreboard.
     usage: /vanishscoreboard
     aliases: [ vsb ]
+    permission: vanishpp.scoreboard
 
 permissions:
   vanishpp.*:

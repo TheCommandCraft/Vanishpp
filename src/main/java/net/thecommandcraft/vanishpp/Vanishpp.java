@@ -256,6 +256,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void reloadPluginConfig() {
         configManager.load();
 
+        // Reinitialize storage if the backend type changed
+        if (storageProvider != null) storageProvider.shutdown();
+        if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
+        initStorage();
+
         // Reload scoreboard config
         java.io.File sbFile = new java.io.File(getDataFolder(), "scoreboards.yml");
         if (sbFile.exists())

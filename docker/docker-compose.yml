@@ -79,9 +79,10 @@ services:
       TYPE: PURPUR
       RCON_PORT: "25576"
       MOTD: "§dVanish++ Test §7— §fPurpur §71.21.11"
+      PLUGINS: " "
     volumes:
       - purpur_data:/data
-      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
+      - ./plugins:/plugins:ro
 
   folia:
     <<: *common

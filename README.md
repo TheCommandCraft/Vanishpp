@@ -75,7 +75,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 - **Personal Rules System (`/vrules`):** Per-player toggles for block breaking, entity interaction, chat confirmation, item pickup, mob targeting, and more.
 - **Async Data Persistence:** All data saved asynchronously. State is preserved across restarts.
 - **Database Connection Monitoring:** Staff notified in-game when database connectivity fails.
-- **Proxy Plugin Compatibility:** Vanish state stored in a persistent database readable by proxy plugins for cross-network sync. See [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).
+- **Proxy-Ready Cross-Server Sync:** Vanish state is pre-fetched from the shared database during login — players switching servers on a BungeeCord/Velocity network appear vanished or visible to staff instantly, with zero flicker or catch-up delay. See [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).
 
 </details>
 

@@ -50,15 +50,38 @@ public class PlayerListener implements Listener {
     private final Set<UUID> hasSeenDisableTip = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastSneakTime = new ConcurrentHashMap<>();
 
+    // Pre-fetched DB vanish state: populated on AsyncPlayerPreLoginEvent so
+    // PlayerJoinEvent can apply vanish instantly without an async round-trip.
+    private final Map<UUID, Boolean> preFetchedVanishState = new ConcurrentHashMap<>();
+
     public PlayerListener(Vanishpp plugin) {
         this.plugin = plugin;
         this.config = plugin.getConfigManager();
         this.rules = plugin.getRuleManager();
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
+        UUID uuid = event.getUniqueId();
+        try {
+            boolean dbVanished = plugin.getStorageProvider().isVanished(uuid);
+            preFetchedVanishState.put(uuid, dbVanished);
+        } catch (Exception ignored) {
+            // If DB read fails, fall back to existing in-memory state at join
+        }
+    }
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        final UUID joinUuid = player.getUniqueId();
+
+        // Apply pre-fetched DB vanish state immediately (no async round-trip needed).
+        // preFetchedVanishState is populated by AsyncPlayerPreLoginEvent before this fires.
+        Boolean prefetched = preFetchedVanishState.remove(joinUuid);
+        if (prefetched != null) {
+            plugin.reconcileVanishState(player, prefetched);
+        }
 
         // Immediate Vanish Logic
         if (plugin.isVanished(player)) {
@@ -106,17 +129,17 @@ public class PlayerListener implements Listener {
             }
         }
 
-        // Async DB reconciliation — corrects cross-server state drift for shared-database setups.
-        // The synchronous in-memory check above handles the same-server case without any delay.
-        // This query runs after the join is fully processed so it doesn't block the event thread.
-        final UUID joinUuid = player.getUniqueId();
-        plugin.getVanishScheduler().runAsync(() -> {
-            boolean dbVanished = plugin.getStorageProvider().isVanished(joinUuid);
-            plugin.getVanishScheduler().runGlobal(() -> {
-                if (!player.isOnline()) return;
-                plugin.reconcileVanishState(player, dbVanished);
+        // If AsyncPlayerPreLoginEvent didn't pre-fetch (e.g. storage not ready yet),
+        // fall back to an async reconciliation to avoid missing cross-server state.
+        if (prefetched == null) {
+            plugin.getVanishScheduler().runAsync(() -> {
+                boolean dbVanished = plugin.getStorageProvider().isVanished(joinUuid);
+                plugin.getVanishScheduler().runGlobal(() -> {
+                    if (!player.isOnline()) return;
+                    plugin.reconcileVanishState(player, dbVanished);
+                });
             });
-        });
+        }
 
         // DELAYED NOTIFICATIONS (250ms / 5 Ticks)
         plugin.getVanishScheduler().runLaterGlobal(() -> {
@@ -251,6 +274,7 @@ public class PlayerListener implements Listener {
         ruleNotificationCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
         lastSneakTime.remove(uuid);
+        preFetchedVanishState.remove(uuid);
         plugin.cleanupPlayerCache(uuid);
     }
 
