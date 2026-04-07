@@ -655,8 +655,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
             }
 
         if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
-            player.addPotionEffect(
-                    new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
+            vanishScheduler.runEntity(player ,
+                    () -> player.addPotionEffect(
+                            new PotionEffect(PotionEffectType.NIGHT_VISION,
+                                    PotionEffect.INFINITE_DURATION,
+                                    0, false, false)), null);
         }
 
         player.setCollidable(false);
@@ -733,7 +736,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.removeMetadata("vanishpp_pre_vanish_gamemode", this);
 
         if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION))
-            player.removePotionEffect(PotionEffectType.NIGHT_VISION);
+            vanishScheduler.runEntity(player, () ->
+                    player.removePotionEffect(PotionEffectType.NIGHT_VISION), null);
         if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
                 && player.getGameMode() != GameMode.SPECTATOR) {
             // Restore exactly the fly state that existed before vanish
@@ -936,8 +940,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // Night vision
         if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
-            player.addPotionEffect(
-                    new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
+            vanishScheduler.runEntity(player , () ->
+                    player.addPotionEffect(
+                            new PotionEffect(PotionEffectType.NIGHT_VISION,
+                                    PotionEffect.INFINITE_DURATION,
+                                    0, false, false))
+                    , null);
         }
 
         // Spawning / sleeping
