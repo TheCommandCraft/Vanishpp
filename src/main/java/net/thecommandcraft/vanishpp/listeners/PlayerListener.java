@@ -106,6 +106,18 @@ public class PlayerListener implements Listener {
             }
         }
 
+        // Async DB reconciliation — corrects cross-server state drift for shared-database setups.
+        // The synchronous in-memory check above handles the same-server case without any delay.
+        // This query runs after the join is fully processed so it doesn't block the event thread.
+        final UUID joinUuid = player.getUniqueId();
+        plugin.getVanishScheduler().runAsync(() -> {
+            boolean dbVanished = plugin.getStorageProvider().isVanished(joinUuid);
+            plugin.getVanishScheduler().runGlobal(() -> {
+                if (!player.isOnline()) return;
+                plugin.reconcileVanishState(player, dbVanished);
+            });
+        });
+
         // DELAYED NOTIFICATIONS (250ms / 5 Ticks)
         plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (!player.isOnline())
