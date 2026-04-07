@@ -33,7 +33,7 @@ import java.util.logging.Level;
 public class Vanishpp extends JavaPlugin implements Listener {
 
     private Set<UUID> vanishedPlayers;
-    private Set<UUID> ignoredWarningPlayers;
+    private Set<UUID> ignoredWarningPlayers; // concurrent — accessed from async join reconciliation
 
     private ConfigManager configManager;
     private StorageProvider storageProvider;
@@ -187,7 +187,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // 7. Restore Player State
         this.vanishedPlayers = ConcurrentHashMap.newKeySet();
         this.vanishedPlayers.addAll(storageProvider.getVanishedPlayers());
-        this.ignoredWarningPlayers = new HashSet<>(); // Loaded per-player from storage on demand or pre-load
+        this.ignoredWarningPlayers = ConcurrentHashMap.newKeySet();
 
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
@@ -255,6 +255,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void reloadPluginConfig() {
         configManager.load();
+
+        // Reinitialize storage if the backend type changed
+        if (storageProvider != null) storageProvider.shutdown();
+        if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
+        initStorage();
 
         // Reload scoreboard config
         java.io.File sbFile = new java.io.File(getDataFolder(), "scoreboards.yml");
@@ -411,6 +416,45 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Reconciles this server's in-memory vanish state against the DB-authoritative value
+     * for a player who just joined. Must run on the main/global thread.
+     *
+     * <p>Three outcomes:
+     * <ul>
+     *   <li>DB == memory: already in sync, no-op.</li>
+     *   <li>DB vanished, not in memory: player was vanished on another server — apply locally.</li>
+     *   <li>DB not vanished, but in memory: player was unvanished on another server — clear locally.</li>
+     * </ul>
+     *
+     * <p>Both corrective branches call the normal apply/remove methods, which re-persist to DB
+     * (idempotent INSERT IGNORE / DELETE on an already-correct row) and re-broadcast via Redis
+     * (idempotent — other servers' handleNetworkVanishSync sees no state change and skips).
+     */
+    public void reconcileVanishState(Player player, boolean dbVanished) {
+        boolean memVanished = vanishedPlayers.contains(player.getUniqueId());
+        if (dbVanished == memVanished) return;
+
+        if (dbVanished) {
+            // Vanished on another server — apply vanish on this server
+            getLogger().fine("Cross-server vanish detected for " + player.getName() + " on join — applying locally");
+            applyVanishEffects(player);
+            updateVanishVisibility(player);
+            String joinMsg = configManager.getLanguageManager().getMessage("staff.silent-join")
+                    .replace("%player%", player.getName());
+            Component joinComp = messageManager.parse(joinMsg, player);
+            for (Player staff : Bukkit.getOnlinePlayers()) {
+                if (!staff.equals(player) && permissionManager.hasPermission(staff, "vanishpp.see"))
+                    staff.sendMessage(joinComp);
+            }
+            Bukkit.getConsoleSender().sendMessage(joinComp);
+        } else {
+            // Unvanished on another server — clear stale local state
+            getLogger().fine("Cross-server unvanish detected for " + player.getName() + " on join — clearing locally");
+            removeVanishEffects(player);
+        }
+    }
+
     private void hookProtocolLib() {
         ProtocolLibManager manager = new ProtocolLibManager(this);
         manager.load();
@@ -507,6 +551,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void cleanupPlayerCache(UUID uuid) {
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
+        ignoredWarningPlayers.remove(uuid);
         if (vanishScoreboard != null)
             vanishScoreboard.cleanup(uuid);
     }
@@ -637,6 +682,32 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 // Mob targeting is handled by EntityTargetEvent (PlayerListener) — no polling needed.
             }
         }, 10L, 10L);
+
+        // Periodic DB reconciliation for offline vanished players — runs every 60 seconds.
+        // Catches state changes made on other servers sharing the same database (without Redis).
+        // Only queries the DB when there are actually offline vanished UUIDs to check, so
+        // servers with no shared-DB setup pay near-zero cost.
+        vanishScheduler.runTimerGlobal(() -> {
+            // Collect offline UUIDs from the in-memory set (main thread — safe Bukkit API call)
+            Set<UUID> offlineVanished = new HashSet<>();
+            for (UUID uuid : vanishedPlayers) {
+                if (Bukkit.getPlayer(uuid) == null) offlineVanished.add(uuid);
+            }
+            if (offlineVanished.isEmpty()) return;
+
+            vanishScheduler.runAsync(() -> {
+                Set<UUID> dbVanished = storageProvider.getVanishedPlayers();
+                for (UUID uuid : offlineVanished) {
+                    if (!dbVanished.contains(uuid)) {
+                        // Player was unvanished on another server while offline here — remove stale entry.
+                        // ConcurrentHashMap.newKeySet() remove is safe from any thread.
+                        vanishedPlayers.remove(uuid);
+                        getLogger().fine("Removed stale offline vanish entry for " + uuid
+                                + " — unvanished on another server");
+                    }
+                }
+            });
+        }, 1200L, 1200L); // 60 seconds
     }
 
     public void applyVanishEffects(Player player) {
