@@ -40,6 +40,12 @@ public class ProxyBridge implements PluginMessageListener {
     private final ConcurrentHashMap<String, CompletableFuture<List<NetworkVanishState>>> pendingListRequests
             = new ConcurrentHashMap<>();
 
+    // Proxy update state — set when PROXY_UPDATE_NOTIFY is received from the proxy
+    private volatile boolean proxyUpdateAvailable = false;
+    private volatile String proxyCurrentVersion;
+    private volatile String proxyLatestVersion;
+    private volatile String proxyDownloadUrl;
+
     private static final long HANDSHAKE_TIMEOUT_TICKS = 100L; // 5 seconds (20 ticks/s)
     private static final long HELLO_RETRY_TICKS       = 100L; // retry interval when no player online
 
@@ -116,6 +122,7 @@ public class ProxyBridge implements PluginMessageListener {
             case VANISH_SYNC         -> handleVanishSync(json);
             case STATE_RESPONSE      -> handleStateResponse(json);
             case PLAYER_LIST_RESPONSE-> handlePlayerListResponse(json);
+            case PROXY_UPDATE_NOTIFY -> handleProxyUpdateNotify(json);
             default -> plugin.getLogger().fine("[Proxy] Unhandled packet type: " + packet.type());
         }
     }
@@ -146,6 +153,17 @@ public class ProxyBridge implements PluginMessageListener {
         JsonArray arr = json.getAsJsonArray("vanished");
         List<NetworkVanishState> states = parseStates(arr);
         plugin.getVanishScheduler().runGlobal(() -> plugin.applyNetworkVanishState(states));
+    }
+
+    private void handleProxyUpdateNotify(JsonObject json) {
+        proxyCurrentVersion = json.has("currentVersion") ? json.get("currentVersion").getAsString() : "?";
+        proxyLatestVersion  = json.has("latestVersion")  ? json.get("latestVersion").getAsString()  : "?";
+        proxyDownloadUrl    = json.has("downloadUrl")    ? json.get("downloadUrl").getAsString()    : "";
+        proxyUpdateAvailable = true;
+
+        plugin.getLogger().warning("[Proxy] Vanish++ Velocity has an update available: "
+                + proxyLatestVersion + " (running " + proxyCurrentVersion + ")");
+        plugin.getLogger().warning("[Proxy] Download: " + proxyDownloadUrl);
     }
 
     private void handlePlayerListResponse(JsonObject json) {
@@ -237,6 +255,10 @@ public class ProxyBridge implements PluginMessageListener {
         return result;
     }
 
-    public boolean isProxyDetected() { return proxyDetected; }
-    public String getServerName()    { return resolveServerName(); }
+    public boolean isProxyDetected()        { return proxyDetected; }
+    public String getServerName()           { return resolveServerName(); }
+    public boolean isProxyUpdateAvailable() { return proxyUpdateAvailable; }
+    public String getProxyCurrentVersion()  { return proxyCurrentVersion; }
+    public String getProxyLatestVersion()   { return proxyLatestVersion; }
+    public String getProxyDownloadUrl()     { return proxyDownloadUrl; }
 }

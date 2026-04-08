@@ -33,6 +33,13 @@ update:
   latest: "&7Latest: &a%version%"
   download: "&6&l[CLICK TO DOWNLOAD]"
   hover: "&eGo to Modrinth Version %version%"
+  # Proxy update notification — shown when the Velocity proxy plugin has an update
+  proxy-available: "&a&lVanish++ Proxy Update Available!"
+  proxy-note: "&7The &eVelocity proxy plugin &7needs updating — not this server's plugin."
+  proxy-current: "&7Proxy running: &c%version%"
+  proxy-latest: "&7New proxy version: &a%version%"
+  proxy-download: "&6&l[DOWNLOAD PROXY UPDATE]"
+  proxy-hover: "&eDownload Vanish++ Velocity %version% from Modrinth"
 
 # --- [ RULES COMMAND ] ---
 rules:

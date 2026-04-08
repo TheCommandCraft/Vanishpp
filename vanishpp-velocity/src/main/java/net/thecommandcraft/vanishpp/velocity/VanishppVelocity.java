@@ -29,6 +29,7 @@ public class VanishppVelocity {
     private VelocityConfigManager configManager;
     private ProxyStateManager stateManager;
     private PaperChannelDispatcher dispatcher;
+    private ProxyUpdateChecker updateChecker;
 
     @Inject
     public VanishppVelocity(ProxyServer proxy, Logger logger, @DataDirectory Path dataDirectory) {
@@ -58,7 +59,11 @@ public class VanishppVelocity {
         proxy.getEventManager().register(this, new PaperChannelListener(this, stateManager, dispatcher, configManager));
         proxy.getEventManager().register(this, new VelocityPlayerListener(this, stateManager, dispatcher));
 
-        // 5. Commands
+        // 5. Update checker
+        updateChecker = new ProxyUpdateChecker(this, dispatcher);
+        updateChecker.startChecking();
+
+        // 6. Commands
         var meta = proxy.getCommandManager().metaBuilder("vanishreload")
                 .aliases("vreload")
                 .plugin(this)
@@ -81,4 +86,5 @@ public class VanishppVelocity {
     public VelocityConfigManager getConfigManager(){ return configManager; }
     public ProxyStateManager getStateManager()     { return stateManager; }
     public PaperChannelDispatcher getDispatcher()  { return dispatcher; }
+    public ProxyUpdateChecker getUpdateChecker()   { return updateChecker; }
 }

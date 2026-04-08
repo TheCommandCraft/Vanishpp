@@ -110,19 +110,51 @@ public class UpdateChecker {
         return false;
     }
 
+    /**
+     * Notifies a player that the Vanish++ Velocity proxy plugin has an update.
+     * Only shown when proxy mode is active and a proxy update is known.
+     * Uses the same permission/list rules as the Paper plugin update notification.
+     */
+    public void notifyPlayerProxyUpdate(Player player) {
+        if (plugin.getProxyBridge() == null) return;
+        if (!plugin.getProxyBridge().isProxyUpdateAvailable()) return;
+        if (!shouldNotify(player)) return;
+
+        String currentV  = plugin.getProxyBridge().getProxyCurrentVersion();
+        String latestV   = plugin.getProxyBridge().getProxyLatestVersion();
+        String downloadU = plugin.getProxyBridge().getProxyDownloadUrl();
+
+        LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 2.0f);
+        player.sendMessage(Component.empty());
+        plugin.getMessageManager().sendMessage(player, lm.getMessage("update.proxy-available"));
+        plugin.getMessageManager().sendMessage(player, lm.getMessage("update.proxy-note"));
+        plugin.getMessageManager().sendMessage(player, lm.getMessage("update.proxy-current")
+                .replace("%version%", currentV));
+        plugin.getMessageManager().sendMessage(player, lm.getMessage("update.proxy-latest")
+                .replace("%version%", latestV));
+
+        String downloadBtn = lm.getMessage("update.proxy-download").replace("%version%", latestV);
+        String hoverText   = lm.getMessage("update.proxy-hover").replace("%version%", latestV);
+
+        Component button = plugin.getMessageManager().parse(downloadBtn, player)
+                .clickEvent(ClickEvent.openUrl(downloadU))
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(hoverText, player)));
+        player.sendMessage(button);
+        player.sendMessage(Component.empty());
+    }
+
+    private boolean shouldNotify(Player player) {
+        ConfigManager cm = plugin.getConfigManager();
+        if (cm.updateCheckerMode.equalsIgnoreCase("LIST")) {
+            return cm.updateCheckerList.contains(player.getName());
+        }
+        return player.hasPermission("vanishpp.update") || player.isOp();
+    }
+
     public void notifyPlayer(Player player) {
         if (!updateAvailable) return;
-
-        ConfigManager cm = plugin.getConfigManager();
-        boolean shouldNotify = false;
-
-        if (cm.updateCheckerMode.equalsIgnoreCase("LIST")) {
-            shouldNotify = cm.updateCheckerList.contains(player.getName());
-        } else {
-            shouldNotify = player.hasPermission("vanishpp.update") || player.isOp();
-        }
-
-        if (!shouldNotify) return;
+        if (!shouldNotify(player)) return;
 
         LanguageManager lm = plugin.getConfigManager().getLanguageManager();
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 2.0f);

@@ -91,6 +91,19 @@ public class PaperChannelDispatcher {
         send(server, VppMessage.PLAYER_LIST_RESPONSE, payload.toString());
     }
 
+    /**
+     * Sends a PROXY_UPDATE_NOTIFY to a server so its staff are informed that the
+     * Velocity proxy plugin needs updating.
+     */
+    public void sendProxyUpdateNotify(RegisteredServer server, String currentVersion,
+                                      String latestVersion, String downloadUrl) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("currentVersion", currentVersion);
+        payload.addProperty("latestVersion", latestVersion);
+        payload.addProperty("downloadUrl", downloadUrl);
+        send(server, VppMessage.PROXY_UPDATE_NOTIFY, payload.toString());
+    }
+
     /** Sends a PONG to a server to confirm this is a VanishPP proxy. */
     public void sendPong(RegisteredServer server, String proxyVersion) {
         JsonObject payload = new JsonObject();

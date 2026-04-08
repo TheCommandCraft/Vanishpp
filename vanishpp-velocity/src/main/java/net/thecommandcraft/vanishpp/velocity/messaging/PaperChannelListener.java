@@ -84,6 +84,9 @@ public class PaperChannelListener {
 
         // Full state sync
         dispatcher.sendStateResponse(server, stateManager.getAllVanishedPlayers());
+
+        // If a proxy update is already known, push it immediately to the newly connected server
+        plugin.getUpdateChecker().notifyServer(server);
     }
 
     /** A player vanished or unvanished on a Paper server — update state and broadcast to all other servers. */

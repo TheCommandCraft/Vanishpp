@@ -31,4 +31,10 @@ public enum VppMessage {
     STATE_RESPONSE,
     /** Proxy responds to PLAYER_LIST_QUERY. Payload: { requestId, players: [...] } */
     PLAYER_LIST_RESPONSE,
+    /**
+     * Proxy notifies Paper servers that the Velocity proxy plugin has an update available.
+     * Sent to all servers on startup (if update known) and immediately after the update check completes.
+     * Payload: { currentVersion, latestVersion, downloadUrl }
+     */
+    PROXY_UPDATE_NOTIFY,
 }

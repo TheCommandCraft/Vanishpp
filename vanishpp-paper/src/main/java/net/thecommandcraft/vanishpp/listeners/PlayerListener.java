@@ -177,6 +177,7 @@ public class PlayerListener implements Listener {
             // 3. Update Check
             if (plugin.getUpdateChecker() != null) {
                 plugin.getUpdateChecker().notifyPlayer(player);
+                plugin.getUpdateChecker().notifyPlayerProxyUpdate(player);
             }
 
             // 4. Setup / Config Sanity Warnings
