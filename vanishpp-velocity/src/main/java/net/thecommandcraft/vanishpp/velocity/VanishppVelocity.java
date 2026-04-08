@@ -4,7 +4,6 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
-import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
@@ -18,13 +17,9 @@ import org.slf4j.Logger;
 
 import java.nio.file.Path;
 
-@Plugin(
-    id = "vanishpp-velocity",
-    name = "Vanish++ Velocity",
-    version = "${project.version}",
-    description = "Velocity proxy component for Vanish++. Provides cross-server vanish sync and centralized config management.",
-    authors = {"TheCommandCraft"}
-)
+// Plugin descriptor is in src/main/resources/velocity-plugin.json (Maven-filtered for correct version).
+// The @Plugin annotation is intentionally omitted so the annotation processor does not generate
+// a duplicate descriptor with an unsubstituted ${project.version}.
 public class VanishppVelocity {
 
     private final ProxyServer proxy;

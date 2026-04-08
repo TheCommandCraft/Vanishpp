@@ -1,0 +1,9 @@
+{
+  "id": "vanishpp-velocity",
+  "name": "Vanish++ Velocity",
+  "version": "${project.version}",
+  "description": "Velocity proxy component for Vanish++. Provides cross-server vanish sync and centralized config management.",
+  "authors": ["TheCommandCraft"],
+  "main": "net.thecommandcraft.vanishpp.velocity.VanishppVelocity",
+  "dependencies": []
+}
