@@ -1,0 +1,82 @@
+# -------------------------------------------------------
+#          Vanish++ Scoreboard Configuration
+# -------------------------------------------------------
+# Reload with /vreload — no restart needed.
+#
+# Column alignment: lines containing "|" are auto-padded
+# so the separator lands at the same column on every line.
+# Label length is measured after stripping color codes.
+#
+# Built-in placeholders:
+#
+#  Coordinates & world
+#   %x% %y% %z%          Block coordinates
+#   %direction%          Compass direction  (N/NE/E/SE/S/SW/W/NW)
+#   %biome%              Biome name
+#   %world%              World name
+#
+#  Player
+#   %player%             Username
+#   %displayname%        Display name (e.g. nickname)
+#   %ping%               Latency in ms
+#   %gamemode%           Survival / Creative / Adventure / Spectator
+#   %health%             Current HP  (e.g. 18.0)
+#   %max_health%         Max HP
+#   %food%               Food level  (0–20)
+#   %armor%              Armor points (0–20)
+#   %level%              Vanish level
+#   %vanish_level%       Vanish level (alias)
+#
+#  Server
+#   %tps%                TPS with color  (green ≥18 / yellow ≥15 / red)
+#   %tps_raw%            TPS plain number
+#   %online%             Online players
+#   %max_players%        Max player slots
+#   %vanished_count%     How many players are currently vanished
+#   %memory_used%        JVM used memory (e.g. 512MB)
+#   %memory_max%         JVM max memory
+#   %entities%           Entity count in your world
+#   %chunks%             Loaded chunk count in your world
+#
+#  Time
+#   %time%               Current time  (HH:mm, respects timezone below)
+#   %date%               Current date  (dd/MM/yyyy)
+#
+# PlaceholderAPI placeholders are also supported if installed.
+# -------------------------------------------------------
+
+title: "&8[ &7Vanish&f++ &8]"
+
+lines:
+  - "&8&m                     "
+  - " &7World  &8| &f%world%"
+  - " &7TPS    &8| %tps%"
+  - " &7Online &8| &f%online%&8/&f%max_players%  &7(&f%vanished_count% &7hidden&8)"
+  - "&8&m                     "
+  - " &7X &f%x%  &7Y &f%y%  &7Z &f%z%"
+  - " &7Dir    &8| &f%direction%"
+  - " &7Biome  &8| &f%biome%"
+  - "&8&m                     "
+  - " &7Ping   &8| &f%ping%&7ms"
+  - " &7Health &8| &f%health%&8/&7%max_health%"
+  - " &7Food   &8| &f%food%&8/&720"
+  - " &7Armor  &8| &f%armor%"
+  - "&8&m                     "
+  - " &7Time   &8| &f%time%  &7%date%"
+
+# Timer refresh rate (ticks — 20 = 1 second).
+# Refreshes TPS, time, online count and other non-position values.
+update-interval: 1
+
+# Update coordinates/direction instantly when the player moves.
+# Requires ProtocolLib. Falls back to timer-only if not available.
+movement-update: true
+
+# Minimum time between movement-triggered refreshes (milliseconds).
+# Lower = snappier coords, higher = less CPU. 80–150ms is a good range.
+movement-cooldown: 100
+
+# Timezone for %time% and %date%.
+# Use "default" to follow the server's system timezone, or any IANA ID:
+#   Examples: UTC, America/New_York, Europe/Berlin, Asia/Tokyo
+timezone: "default"

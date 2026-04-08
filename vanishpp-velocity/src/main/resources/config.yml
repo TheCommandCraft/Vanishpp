@@ -1,0 +1,165 @@
+# ------------------------------------------------------------- #
+#                                                               #
+#               Vanish++ Velocity Configuration                 #
+#                                                               #
+# This file uses the exact same format as the Paper plugin's   #
+# config.yml so configs can be copy-pasted between them.       #
+# The proxy will push these values to all connected servers.   #
+# ------------------------------------------------------------- #
+
+config-version: 8
+
+# --- [ MESSAGES ] ---
+messages:
+  fake-join: ""
+  fake-quit: ""
+  staff-notify:
+    enabled: true
+
+# --- [ APPEARANCE ] ---
+vanish-appearance:
+  tab-prefix: "&7[VANISHED] "
+  nametag-prefix: "&7[V] "
+  action-bar:
+    enabled: true
+    text: "&bYou are currently VANISHED"
+  adjust-server-list: true
+  staff-glow: true
+
+# --- [ SPECTATOR MODE ] ---
+vanish-gamemodes:
+  enabled: true
+
+# --- [ FLIGHT MANAGEMENT ] ---
+flight-control:
+  vanish-enable-fly: true
+  unvanish-disable-fly: true
+
+# --- [ CHAT SETTINGS ] ---
+chat-format:
+  vanished-player-format: "%prefix%&7%player%: %message%"
+
+# --- [ INVISIBILITY FEATURES ] ---
+invisibility-features:
+  god-mode: true
+  prevent-potion-effects: true
+  night-vision: true
+  disable-mob-targeting: true
+  disable-hunger: true
+  silent-chests: true
+  ignore-projectiles: true
+  prevent-raid-trigger: true
+  prevent-sculk-sensors: true
+  prevent-trample: true
+  hide-from-tab-complete: true
+  prevent-sleeping: true
+  prevent-entity-interact: true
+  prevent-accidental-chat: true
+
+# --- [ VANISH EFFECTS ] ---
+vanish-effects:
+  hide-from-server-list: true
+  hide-real-quit-messages: true
+  hide-real-join-messages: true
+  broadcast-fake-quit: true
+  broadcast-fake-join: true
+  disable-block-triggering: true
+
+# --- [ GLOBAL HIDING ] ---
+hide-announcements:
+  death-messages: true
+  advancements: true
+  hide-from-plugin-list: true
+
+# --- [ DEFAULT RULES ] ---
+default-rules:
+  can_break_blocks: false
+  can_place_blocks: false
+  can_hit_entities: false
+  can_pickup_items: false
+  can_drop_items: false
+  can_trigger_physical: false
+  can_interact: true
+  can_throw: false
+  can_chat: false
+  mob_targeting: false
+  show_notifications: true
+  spectator_gamemode: true
+
+# --- [ HOOKS ] ---
+hooks:
+  simple-voice-chat:
+    enabled: true
+    isolate-vanished-players: true
+  essentials:
+    simulate-join-leave: false
+
+# --- [ STORAGE ] ---
+# The proxy manages the database. Paper servers in proxy mode do NOT need their
+# own DB configured — they receive all state from the proxy.
+storage:
+  type: "YAML"
+  mysql:
+    host: "localhost"
+    port: 3306
+    database: "vanishpp"
+    username: "root"
+    password: ""
+    use-ssl: false
+    pool-size: 10
+
+# --- [ SCOREBOARD ] ---
+scoreboard:
+  enabled: true
+  auto-show-on-vanish: true
+
+# --- [ UPDATE CHECKER ] ---
+update-checker:
+  enabled: true
+  modrinth-id: "vanishpp"
+  notify-mode: "PERMISSION"
+  notify-list: []
+
+# --- [ PERMISSIONS ] ---
+permissions:
+  layered-permissions-enabled: true
+  default-vanish-level: 1
+  default-see-level: 1
+  max-level: 100
+
+# ------------------------------------------------------------- #
+#              PROXY-SPECIFIC SETTINGS (Velocity only)          #
+# ------------------------------------------------------------- #
+
+proxy:
+  # Whether /vanishlist in-game shows players vanished on ALL proxy servers.
+  # Vanilla and other plugins are never affected — only Vanish++ commands.
+  cross-server-list: true
+
+# --- [ PER-SERVER OVERRIDES ] ---
+# Override any config value for specific servers.
+# Server names must match those in velocity.toml [servers].
+# Use "all" to apply to every server (lowest priority).
+# Multiple servers can share an override with comma-separated names: "lobby, hub"
+# Per-server overrides take priority over "all" overrides.
+#
+# Supported override keys mirror config.yml paths, e.g.:
+#   invisibility-features.god-mode
+#   vanish-effects.broadcast-fake-quit
+#   default-rules.can_break_blocks
+#
+# Example:
+# servers:
+#   all:
+#     scoreboard:
+#       enabled: false
+#   survival:
+#     invisibility-features:
+#       god-mode: false
+#     default-rules:
+#       can_break_blocks: true
+#   "lobby, hub":
+#     vanish-effects:
+#       broadcast-fake-quit: false
+#       broadcast-fake-join: false
+servers: {}
