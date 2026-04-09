@@ -58,8 +58,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private boolean hasProtocolLib = false;
     private ProtocolLibManager protocolLibManager;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
-    public final java.util.concurrent.ConcurrentHashMap<String, UUID> silentlyOpenedBlocks = new java.util.concurrent.ConcurrentHashMap<>();
-
+    public final Set<String> silentlyOpenedBlocks = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     @Override
     public void onEnable() {
         // 0. Folia Detection
