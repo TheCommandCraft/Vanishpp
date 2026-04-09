@@ -37,4 +37,10 @@ public enum VppMessage {
      * Payload: { currentVersion, latestVersion, downloadUrl }
      */
     PROXY_UPDATE_NOTIFY,
+    /**
+     * Paper sends a map of config key → value pairs to apply on the proxy (and push to all servers).
+     * Used when /vconfig is run in proxy mode, or when "Apply to Proxy" is clicked.
+     * Payload: { entries: { "dotted.key": "value", ... } }
+     */
+    CONFIG_SYNC,
 }

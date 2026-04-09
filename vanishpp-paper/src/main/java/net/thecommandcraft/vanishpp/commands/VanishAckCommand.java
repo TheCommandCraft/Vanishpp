@@ -58,6 +58,29 @@ public class VanishAckCommand implements TabExecutor {
                         "hiding_v" + plugin.getConfigManager().getLatestVersion());
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.hiding-dismissed"));
             }
+            case "proxy_config" -> {
+                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                        "proxy_config_v" + plugin.getConfigManager().getLatestVersion());
+                plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
+            }
+            case "apply_proxy" -> {
+                var bridge = plugin.getProxyBridge();
+                if (bridge == null || !bridge.isProxyDetected()) {
+                    plugin.getMessageManager().sendMessage(p, lm.getMessage("config.proxy-not-connected"));
+                    return true;
+                }
+                java.util.Map<String, String> nonDefaults = plugin.getConfigManager().getNonDefaultValues();
+                if (nonDefaults.isEmpty()) {
+                    plugin.getMessageManager().sendMessage(p, lm.getMessage("config.proxy-nothing-to-sync"));
+                    return true;
+                }
+                bridge.sendConfigSync(nonDefaults);
+                // Also dismiss the warning
+                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                        "proxy_config_v" + plugin.getConfigManager().getLatestVersion());
+                plugin.getMessageManager().sendMessage(p,
+                        lm.getMessage("config.proxy-applied").replace("%count%", String.valueOf(nonDefaults.size())));
+            }
             default -> plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
         }
 

@@ -1,0 +1,35 @@
+# Velocity configuration for Vanish++ proxy test environment
+
+config-version = "2.7"
+
+bind = "0.0.0.0:25577"
+
+motd = "<aqua>Vanish++ Proxy Test"
+
+show-max-players = 100
+
+online-mode = false
+
+force-key-authentication = false
+
+prevent-client-proxy-connections = false
+
+player-info-forwarding-mode = "modern"
+
+forwarding-secret-file = "forwarding.secret"
+
+announce-forge = false
+
+kick-existing-players = false
+
+ping-passthrough = "DISABLED"
+
+enable-player-address-logging = true
+
+[servers]
+paper1 = "paper1:25565"
+paper2 = "paper2:25565"
+
+try = ["paper1", "paper2"]
+
+[forced-hosts]

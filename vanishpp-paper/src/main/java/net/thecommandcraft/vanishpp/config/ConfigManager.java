@@ -224,6 +224,30 @@ public class ConfigManager {
     }
 
     /**
+     * Returns all config keys whose current value differs from the bundled defaults.
+     * Storage, proxy, and config-version keys are excluded — they're server-specific.
+     * Used to show the proxy config mismatch warning and to sync changes to the proxy.
+     */
+    public Map<String, String> getNonDefaultValues() {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        try (java.io.InputStream in = plugin.getResource("config.yml")) {
+            if (in == null) return result;
+            YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new java.io.InputStreamReader(in));
+            for (String key : config.getKeys(true)) {
+                if (config.isConfigurationSection(key)) continue;
+                if (key.startsWith("storage.") || key.startsWith("proxy.")
+                        || key.startsWith("redis.") || key.equals("config-version")) continue;
+                Object current = config.get(key);
+                Object def = defaults.get(key);
+                if (def != null && !Objects.equals(current, def)) {
+                    result.put(key, current != null ? current.toString() : "null");
+                }
+            }
+        } catch (Exception ignored) {}
+        return result;
+    }
+
+    /**
      * Applies a {@link ProxyConfigSnapshot} pushed by the Velocity proxy into this ConfigManager's
      * cached fields. Does NOT write to disk. Language strings are re-loaded from local lang files
      * (they are not part of the proxy config).

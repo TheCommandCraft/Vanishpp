@@ -98,6 +98,13 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
         plugin.getConfigManager().setAndSave(path, newValue);
         plugin.getMessageManager().sendMessage(sender,
                 lm.getMessage("config.updated").replace("%path%", path).replace("%value%", valInput));
+
+        // When proxy is active, forward the change to Velocity so all servers get it
+        var bridge = plugin.getProxyBridge();
+        if (bridge != null && bridge.isProxyDetected()) {
+            bridge.sendConfigSync(java.util.Map.of(path, valInput));
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("config.proxy-synced"));
+        }
         return true;
     }
 

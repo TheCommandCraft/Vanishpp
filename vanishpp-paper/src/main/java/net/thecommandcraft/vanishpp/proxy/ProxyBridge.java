@@ -40,6 +40,10 @@ public class ProxyBridge implements PluginMessageListener {
     private final ConcurrentHashMap<String, CompletableFuture<List<NetworkVanishState>>> pendingListRequests
             = new ConcurrentHashMap<>();
 
+    /** Outbound packets queued when no player is online to act as carrier. */
+    private final java.util.concurrent.ConcurrentLinkedDeque<byte[]> pendingPackets
+            = new java.util.concurrent.ConcurrentLinkedDeque<>();
+
     // Proxy update state — set when PROXY_UPDATE_NOTIFY is received from the proxy
     private volatile boolean proxyUpdateAvailable = false;
     private volatile String proxyCurrentVersion;
@@ -213,6 +217,19 @@ public class ProxyBridge implements PluginMessageListener {
         sendPacket(VppPacket.encode(VppMessage.PLAYER_LIST_QUERY, payload.toString()));
     }
 
+    /**
+     * Sends a CONFIG_SYNC to the proxy with a map of dotted config keys → values.
+     * Velocity will apply them in-memory and push the updated config to all servers.
+     */
+    public void sendConfigSync(java.util.Map<String, String> entries) {
+        if (!proxyDetected) return;
+        com.google.gson.JsonObject payload = new com.google.gson.JsonObject();
+        com.google.gson.JsonObject entriesObj = new com.google.gson.JsonObject();
+        entries.forEach(entriesObj::addProperty);
+        payload.add("entries", entriesObj);
+        sendPacket(VppPacket.encode(VppMessage.CONFIG_SYNC, payload.toString()));
+    }
+
     /** Sends a RELOAD_REQUEST to the proxy (triggered by /vanishreload on this server). */
     public void sendReloadRequest(String requestedBy) {
         if (!proxyDetected) return;
@@ -223,13 +240,22 @@ public class ProxyBridge implements PluginMessageListener {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /** Sends a raw packet via the first available online player. */
+    /** Sends a raw packet via the first available online player, or queues it for later. */
     public void sendPacket(byte[] data) {
         Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
         if (carrier != null) {
             carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data);
+        } else {
+            pendingPackets.addLast(data);
         }
-        // If no players online, message is dropped — harmless, proxy will push on next HELLO
+    }
+
+    /** Flushes any queued packets now that a carrier player is available. Call on PlayerJoinEvent. */
+    public void flushPendingPackets(Player carrier) {
+        byte[] data;
+        while ((data = pendingPackets.pollFirst()) != null) {
+            carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data);
+        }
     }
 
     private String resolveServerName() {

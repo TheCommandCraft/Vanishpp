@@ -174,13 +174,68 @@ public class PlayerListener implements Listener {
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
             }
 
-            // 3. Update Check
+            // 3. Flush any queued proxy packets now that we have a carrier
+            if (plugin.getProxyBridge() != null) {
+                plugin.getProxyBridge().flushPendingPackets(player);
+            }
+
+            // 4. Update Check
             if (plugin.getUpdateChecker() != null) {
                 plugin.getUpdateChecker().notifyPlayer(player);
                 plugin.getUpdateChecker().notifyPlayerProxyUpdate(player);
             }
 
-            // 4. Setup / Config Sanity Warnings
+            // 5. Proxy config mismatch warning (ackable)
+            if (plugin.getProxyBridge() != null && plugin.getProxyBridge().isProxyDetected()
+                    && player.hasPermission("vanishpp.admin")) {
+                String notifId = "proxy_config_v" + config.getLatestVersion();
+                if (!plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), notifId)) {
+                    java.util.Map<String, String> nonDefaults = config.getNonDefaultValues();
+                    if (!nonDefaults.isEmpty()) {
+                        LanguageManager lm = config.getLanguageManager();
+                        player.sendMessage(Component.text(" "));
+                        player.sendMessage(
+                                Component.text("⚠ ", NamedTextColor.GOLD)
+                                        .append(Component.text(lm.getMessage("config.proxy-mismatch-title"),
+                                                NamedTextColor.GOLD, TextDecoration.BOLD)));
+                        player.sendMessage(Component.text(
+                                lm.getMessage("config.proxy-mismatch-line1"), NamedTextColor.YELLOW));
+                        player.sendMessage(Component.text(
+                                lm.getMessage("config.proxy-mismatch-line2"), NamedTextColor.GRAY));
+                        player.sendMessage(Component.text(
+                                lm.getMessage("config.proxy-mismatch-line3"), NamedTextColor.GRAY));
+                        // Show up to 5 changed keys
+                        int shown = 0;
+                        StringBuilder changed = new StringBuilder();
+                        for (java.util.Map.Entry<String, String> e : nonDefaults.entrySet()) {
+                            if (shown++ > 0) changed.append(", ");
+                            changed.append(e.getKey()).append("=").append(e.getValue());
+                            if (shown >= 5 && nonDefaults.size() > 5) {
+                                changed.append(" (+").append(nonDefaults.size() - 5).append(" more)");
+                                break;
+                            }
+                        }
+                        player.sendMessage(
+                                Component.text(" • ", NamedTextColor.DARK_GRAY)
+                                        .append(Component.text(changed.toString(), NamedTextColor.WHITE)));
+                        player.sendMessage(
+                                Component.text("   ")
+                                        .append(Component.text("[Apply to Proxy]", NamedTextColor.GREEN, TextDecoration.BOLD)
+                                                .clickEvent(ClickEvent.runCommand("/vack apply_proxy"))
+                                                .hoverEvent(HoverEvent.showText(Component.text(
+                                                        "Push all " + nonDefaults.size() + " changed setting(s) to the proxy config\n"
+                                                        + "and sync them to all connected servers", NamedTextColor.GRAY))))
+                                        .append(Component.text("  "))
+                                        .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                                                .clickEvent(ClickEvent.runCommand("/vack proxy_config"))
+                                                .hoverEvent(HoverEvent.showText(Component.text(
+                                                        "Stop seeing this warning", NamedTextColor.GRAY)))));
+                        player.sendMessage(Component.text(" "));
+                    }
+                }
+            }
+
+            // 6. Setup / Config Sanity Warnings
             if (plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
                 java.util.List<StartupChecker.Warning> warnings = plugin.getStartupWarnings();
                 if (!warnings.isEmpty()) {

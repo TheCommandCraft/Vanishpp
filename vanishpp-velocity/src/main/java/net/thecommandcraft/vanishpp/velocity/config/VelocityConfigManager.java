@@ -63,6 +63,45 @@ public class VelocityConfigManager {
         logger.info("Config reloaded.");
     }
 
+    /**
+     * Applies a map of dotted config keys → string values directly into the in-memory
+     * rawConfig, then rebuilds the snapshot. Does NOT write to disk.
+     * Called when a Paper server sends a CONFIG_SYNC packet.
+     *
+     * @param entries map of dotted path (e.g. "invisibility-features.god-mode") → value string
+     */
+    public void applyRuntimePatch(Map<String, String> entries) {
+        for (Map.Entry<String, String> e : entries.entrySet()) {
+            setDotted(rawConfig, e.getKey(), parseValue(e.getValue()));
+        }
+        buildSnapshot();
+        logger.info("Applied {} runtime config override(s) from Paper server.", entries.size());
+    }
+
+    /** Navigates/creates nested maps for a dotted key and sets the leaf value. */
+    @SuppressWarnings("unchecked")
+    private void setDotted(Map<String, Object> map, String dotPath, Object value) {
+        String[] parts = dotPath.split("\\.", 2);
+        if (parts.length == 1) {
+            map.put(parts[0], value);
+        } else {
+            Object child = map.get(parts[0]);
+            if (!(child instanceof Map)) {
+                child = new LinkedHashMap<String, Object>();
+                map.put(parts[0], child);
+            }
+            setDotted((Map<String, Object>) child, parts[1], value);
+        }
+    }
+
+    /** Parses "true"/"false" as Boolean, integers as Integer, else keeps as String. */
+    private static Object parseValue(String s) {
+        if ("true".equalsIgnoreCase(s)) return Boolean.TRUE;
+        if ("false".equalsIgnoreCase(s)) return Boolean.FALSE;
+        try { return Integer.parseInt(s); } catch (NumberFormatException ignored) {}
+        return s;
+    }
+
     public ProxyConfigSnapshot getSnapshot() {
         return snapshot;
     }
@@ -244,11 +283,11 @@ public class VelocityConfigManager {
     // ── Storage config accessors (used by ProxySqlStorage) ────────────────────
 
     public String getStorageType() { return str("storage.type", "YAML").toUpperCase(); }
-    public String getDbHost()      { return str("storage.mysql.host", "localhost"); }
-    public int    getDbPort()      { return intVal("storage.mysql.port", 3306); }
-    public String getDbName()      { return str("storage.mysql.database", "vanishpp"); }
-    public String getDbUser()      { return str("storage.mysql.username", "root"); }
-    public String getDbPass()      { return str("storage.mysql.password", ""); }
-    public boolean getDbSsl()      { return bool("storage.mysql.use-ssl", false); }
-    public int    getPoolSize()    { return intVal("storage.mysql.pool-size", 10); }
+    public String getDbHost()      { return str("storage.host", "localhost"); }
+    public int    getDbPort()      { return intVal("storage.port", 3306); }
+    public String getDbName()      { return str("storage.database", "vanishpp"); }
+    public String getDbUser()      { return str("storage.username", "root"); }
+    public String getDbPass()      { return str("storage.password", ""); }
+    public boolean getDbSsl()      { return bool("storage.use-ssl", false); }
+    public int    getPoolSize()    { return intVal("storage.pool-size", 10); }
 }

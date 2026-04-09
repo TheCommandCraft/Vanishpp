@@ -1,0 +1,128 @@
+# Vanish++ Velocity proxy test environment
+# Topology: Velocity → paper1 (25565/RCON 25575) + paper2 (25566/RCON 25576)
+#
+# Usage:
+#   docker compose -f docker-compose-proxy.yml up -d
+#   docker compose -f docker-compose-proxy.yml logs -f
+#   docker compose -f docker-compose-proxy.yml down
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vpp_proxy_postgres
+
+    environment:
+      POSTGRES_DB: vanishpp
+      POSTGRES_USER: vanishpp
+      POSTGRES_PASSWORD: vanishtest
+    volumes:
+      - proxy_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vanishpp -d vanishpp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  velocity:
+    image: eclipse-temurin:21-jre
+    container_name: vpp_velocity
+
+    working_dir: /server
+    command: >
+      java -Xms512M -Xmx512M
+      -XX:+UseG1GC -XX:G1HeapRegionSize=4M
+      -XX:+UnlockExperimentalVMOptions -XX:+ParallelRefProcEnabled
+      -jar /server/velocity.jar
+    ports:
+      - "25577:25577"
+    volumes:
+      - ./velocity/velocity.jar:/server/velocity.jar:ro
+      - ./velocity/velocity.toml:/server/velocity.toml:ro
+      - ./velocity/forwarding.secret:/server/forwarding.secret:ro
+      - ./velocity/plugins:/server/plugins
+      - velocity_data:/server
+    depends_on:
+      - postgres
+    stdin_open: true
+    tty: true
+
+  paper1:
+    image: itzg/minecraft-server:latest
+    container_name: vpp_proxy_paper1
+
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "25565:25565"
+      - "25575:25575"
+    environment:
+      EULA: "TRUE"
+      TYPE: PAPER
+      VERSION: "1.21.11"
+      MEMORY: "1536M"
+      ONLINE_MODE: "FALSE"
+      OPS: "TheCommandCraft,TCC_STUDIOS"
+      SPAWN_PROTECTION: "0"
+      DIFFICULTY: "easy"
+      RCON_PASSWORD: "vanishtest"
+      ENABLE_RCON: "TRUE"
+      RCON_PORT: "25575"
+      MOTD: "§aVanish++ Proxy Test §7— §fPaper1"
+      # No ProtocolLib download — plugin works without it
+      PLUGINS: " "
+      # Velocity modern forwarding
+      PAPER_VELOCITY_ENABLED: "true"
+      PAPER_VELOCITY_SECRET: "test-forwarding-secret"
+    volumes:
+      - proxy_paper1_data:/data
+      - ./paper1-config/vanishpp:/data/plugins/vanishpp
+
+  paper2:
+    image: itzg/minecraft-server:latest
+    container_name: vpp_proxy_paper2
+
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "25566:25565"
+      - "25576:25575"
+    environment:
+      EULA: "TRUE"
+      TYPE: PAPER
+      VERSION: "1.21.11"
+      MEMORY: "1536M"
+      ONLINE_MODE: "FALSE"
+      OPS: "TheCommandCraft,TCC_STUDIOS"
+      SPAWN_PROTECTION: "0"
+      DIFFICULTY: "easy"
+      RCON_PASSWORD: "vanishtest"
+      ENABLE_RCON: "TRUE"
+      RCON_PORT: "25576"
+      MOTD: "§aVanish++ Proxy Test §7— §fPaper2"
+      PLUGINS: " "
+      PAPER_VELOCITY_ENABLED: "true"
+      PAPER_VELOCITY_SECRET: "test-forwarding-secret"
+    volumes:
+      - proxy_paper2_data:/data
+      - ./paper2-config/vanishpp:/data/plugins/vanishpp
+
+volumes:
+  proxy_postgres_data:
+  proxy_paper1_data:
+  proxy_paper2_data:
+  velocity_data:
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1450"

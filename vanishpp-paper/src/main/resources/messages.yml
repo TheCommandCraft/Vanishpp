@@ -105,6 +105,14 @@ config:
   current-value: "&6%path% &7is currently: &f%value%"
   usage: "&cUsage: /vconfig <key> [value]"
   sensitive-warning: "&c⚠ Warning: &e%path% &cis a sensitive setting. Changing it may affect server stability. Run the command again with &b--confirm &cto apply."
+  proxy-synced: "&7↳ &aSynced to proxy &7— all connected servers updated."
+  proxy-not-connected: "&cNo proxy detected. Cannot sync."
+  proxy-nothing-to-sync: "&7All settings are already at their defaults — nothing to sync."
+  proxy-applied: "&a%count% setting(s) applied to proxy &7— all connected servers updated."
+  proxy-mismatch-title: "Proxy Config Mismatch"
+  proxy-mismatch-line1: "&eThis server's config has settings that differ from the defaults."
+  proxy-mismatch-line2: "&7When using a proxy, configure settings in the &eproxy config.yml&7."
+  proxy-mismatch-line3: "&7&o/vconfig changes automatically apply to the proxy while connected."
 
 # --- [ PLUGIN LIST ] ---
 plugins:

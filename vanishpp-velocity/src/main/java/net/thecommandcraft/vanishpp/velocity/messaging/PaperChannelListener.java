@@ -64,6 +64,7 @@ public class PaperChannelListener {
             case CONFIG_REQUEST     -> handleConfigRequest(server, serverName);
             case RELOAD_REQUEST     -> handleReloadRequest(json);
             case PLAYER_LIST_QUERY  -> handlePlayerListQuery(server, json);
+            case CONFIG_SYNC        -> handleConfigSync(serverName, json);
             default -> plugin.getLogger().debug("Unhandled message type {} from {}", packet.type(), serverName);
         }
     }
@@ -123,6 +124,29 @@ public class PaperChannelListener {
         configManager.reload();
 
         // Build per-server snapshots and push to all
+        Map<String, ProxyConfigSnapshot> perServer = new HashMap<>();
+        for (var server : plugin.getProxy().getAllServers()) {
+            String name = server.getServerInfo().getName();
+            perServer.put(name, configManager.getSnapshot().applyOverride(name));
+        }
+        dispatcher.pushConfigToAll(plugin.getProxy(), perServer);
+    }
+
+    /**
+     * Paper sends a CONFIG_SYNC — apply key-value pairs in-memory and push updated
+     * config to all servers so the change propagates network-wide.
+     */
+    private void handleConfigSync(String fromServer, JsonObject json) {
+        if (!json.has("entries")) return;
+        JsonObject entries = json.getAsJsonObject("entries");
+        Map<String, String> patch = new HashMap<>();
+        for (Map.Entry<String, com.google.gson.JsonElement> e : entries.entrySet()) {
+            patch.put(e.getKey(), e.getValue().getAsString());
+        }
+        configManager.applyRuntimePatch(patch);
+        plugin.getLogger().info("CONFIG_SYNC from {} — {} key(s) applied, pushing to all servers.", fromServer, patch.size());
+
+        // Push updated snapshot to every connected server
         Map<String, ProxyConfigSnapshot> perServer = new HashMap<>();
         for (var server : plugin.getProxy().getAllServers()) {
             String name = server.getServerInfo().getName();
