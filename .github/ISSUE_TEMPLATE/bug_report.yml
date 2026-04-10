@@ -1,0 +1,108 @@
+name: Bug Report
+description: Something is not working as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, please check the [existing issues](https://github.com/TheCommandCraft/Vanishpp/issues) to avoid duplicates.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you expect to happen, and what actually happened instead?
+      placeholder: "When I do X, Y happens instead of Z."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps to trigger the bug every time.
+      placeholder: |
+        1. Vanish as a player with permission X
+        2. Do Y
+        3. Bug occurs
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or errors
+      description: Paste any errors or warnings from your server console. Find them in `logs/latest.log`. Do not paste screenshots of logs.
+      render: text
+      placeholder: "[ERROR] ..."
+    validations:
+      required: false
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Vanish++ version
+      description: Found in `plugins/` or with `/pl`. E.g. `1.1.6`.
+      placeholder: "1.1.6"
+    validations:
+      required: true
+
+  - type: input
+    id: server-software
+    attributes:
+      label: Server software and version
+      description: E.g. `Paper 1.21.4 build 123`, `Folia 1.21.1`, `Purpur 1.21.3`.
+      placeholder: "Paper 1.21.4 build 123"
+    validations:
+      required: true
+
+  - type: input
+    id: java-version
+    attributes:
+      label: Java version
+      description: Run `java -version` in your terminal.
+      placeholder: "Java 21.0.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Storage backend
+      description: What storage type are you using in your Vanish++ config?
+      options:
+        - YAML (default)
+        - MySQL
+        - PostgreSQL
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: other-plugins
+    attributes:
+      label: Other plugins installed
+      description: List any plugins that might be relevant, especially ProtocolLib, EssentialsX, TAB, DiscordSRV, LuckPerms, or any anti-cheat/obfuscation plugin.
+      placeholder: "ProtocolLib 5.3.0, LuckPerms 5.4.x, Orebfuscator 5.x ..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: proxy
+    attributes:
+      label: Are you running a proxy?
+      options:
+        - "No"
+        - "Yes - Velocity"
+        - "Yes - BungeeCord / Waterfall"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Vanish++ config (if relevant)
+      description: Paste your `config.yml` if the bug might be config-related. Remove any sensitive values.
+      render: yaml
+    validations:
+      required: false
