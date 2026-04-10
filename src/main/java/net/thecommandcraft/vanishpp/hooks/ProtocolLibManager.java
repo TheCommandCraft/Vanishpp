@@ -14,15 +14,32 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ProtocolLibManager {
 
     private final Vanishpp plugin;
     private ProtocolManager protocolManager;
 
+    private final ConcurrentHashMap<Integer, UUID> entityIdCache = new ConcurrentHashMap<>();
+
     public ProtocolLibManager(Vanishpp plugin) {
         this.plugin = plugin;
     }
+
+    public void cachePlayer(Player p) {
+        entityIdCache.put(p.getEntityId(), p.getUniqueId());
+    }
+
+    public void uncachePlayer(Player p) {
+        entityIdCache.remove(p.getEntityId());
+    }
+
+    private boolean isVanishedEntity(int entityId) {
+        UUID uuid = entityIdCache.get(entityId);
+        return uuid != null && plugin.isVanished(uuid);
+    }
+
 
     public void load() {
         if (Bukkit.getPluginManager().getPlugin("ProtocolLib") == null)
@@ -96,10 +113,8 @@ public class ProtocolLibManager {
 
                     // Handle packets where index 0 is the primary entity
                     int entityId = packet.getIntegers().read(0);
-                    Entity entity = protocolManager.getEntityFromID(observer.getWorld(), entityId);
 
-                    if (entity instanceof Player target
-                            && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
+                    if (isVanishedEntity(entityId)) {
                         if (!canSee) {
                             event.setCancelled(true);
                             return;
@@ -116,9 +131,7 @@ public class ProtocolLibManager {
                         if (type == PacketType.Play.Server.COLLECT) {
                             // Index 1 is the collector ID
                             int collectorId = packet.getIntegers().read(1);
-                            Entity collector = protocolManager.getEntityFromID(observer.getWorld(), collectorId);
-                            if (collector instanceof Player p
-                                    && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                            if (isVanishedEntity(collectorId)) {
                                 event.setCancelled(true);
                             }
                         } else if (type == PacketType.Play.Server.MOUNT) {
@@ -128,9 +141,7 @@ public class ProtocolLibManager {
                                 boolean hasVanished = false;
                                 List<Integer> filtered = new ArrayList<>();
                                 for (int id : passengers) {
-                                    Entity e = protocolManager.getEntityFromID(observer.getWorld(), id);
-                                    if (e instanceof Player p
-                                            && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                    if (isVanishedEntity(id)) {
                                         hasVanished = true;
                                     } else {
                                         filtered.add(id);
@@ -196,10 +207,8 @@ public class ProtocolLibManager {
 
                 try {
                     int entityId = event.getPacket().getIntegers().read(0);
-                    Entity entity = protocolManager.getEntityFromID(event.getPlayer().getWorld(), entityId);
 
-                    if (entity instanceof Player target
-                            && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
+                    if (isVanishedEntity(entityId)) {
                         event.setCancelled(true);
                     }
                 } catch (Exception ignored) {

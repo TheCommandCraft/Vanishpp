@@ -58,10 +58,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private boolean hasProtocolLib = false;
     private ProtocolLibManager protocolLibManager;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
-    /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
-     *  Key format: "x,y,z" */
     public final Set<String> silentlyOpenedBlocks = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
-
     @Override
     public void onEnable() {
         // 0. Folia Detection
