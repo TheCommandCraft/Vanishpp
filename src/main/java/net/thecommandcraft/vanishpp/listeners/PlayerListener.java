@@ -74,7 +74,9 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        plugin.getProtocolLibManager().cachePlayer(player);
+        if (plugin.hasProtocolLib()){
+            plugin.getProtocolLibManager().cachePlayer(player);
+        }
         final UUID joinUuid = player.getUniqueId();
 
         // Apply pre-fetched DB vanish state immediately (no async round-trip needed).
@@ -255,7 +257,9 @@ public class PlayerListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        plugin.getProtocolLibManager().uncachePlayer(player);
+        if (plugin.hasProtocolLib()){
+            plugin.getProtocolLibManager().uncachePlayer(player);
+        }
         if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
