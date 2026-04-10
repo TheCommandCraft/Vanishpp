@@ -5,7 +5,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before submitting, please check the [existing issues](https://github.com/TheCommandCraft/Vanishpp/issues) to avoid duplicates.
+        **Before submitting, please:**
+        - Check the [Wiki](https://github.com/TheCommandCraft/Vanishpp/wiki) — your issue may already be documented or explained there.
+        - Check the [existing issues](https://github.com/TheCommandCraft/Vanishpp/issues) to make sure this has not already been reported.
+        - If you need help or are unsure if this is a bug, join the [Discord](https://discord.gg/qdbhNBJnP6) first.
 
   - type: textarea
     id: description
