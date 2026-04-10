@@ -2,7 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.6] - 2026-04-04
+## [1.1.7] - Unreleased
+
+### Added
+- **Cross-Server Vanish State Reconciliation:** When a player joins a server that shares a MySQL/PostgreSQL database with other servers, their vanish state from any other server is immediately applied — no manual `/vanish` needed after switching. Works on BungeeCord/Velocity networks with a shared database. Stale in-memory entries for offline players are also periodically purged so no server accumulates phantom vanished UUIDs.
+- **Instant Proxy-Ready Vanish State on Join:** Vanish state is now pre-fetched from the database during `AsyncPlayerPreLoginEvent` (before the player fully connects), so it is applied on the very first tick of `PlayerJoinEvent` with zero additional delay. On a proxy network, players switching servers appear vanished or visible to staff immediately, with no visible flicker or catch-up period.
+
+### Fixed
+- **ProtocolLib Async Entity Lookup Spam:** `getEntityFromID()` was being called from ProtocolLib packet listeners on async threads (e.g. triggered by Orebfuscator), causing console spam and unsafe cross-thread world access. Entity ID to UUID resolution is now handled via a local `ConcurrentHashMap` cache populated at join and cleared at quit, keeping all lookups off the world thread entirely. (Thanks SimplyRan, PR #5)
+- **Folia Crash: Night Vision Applied from Global Scheduler:** When cross-server vanish sync (Redis) applied vanish effects from the global region scheduler, calling `player.addPotionEffect()` and `player.removePotionEffect()` directly caused an `UnsupportedOperationException` on Folia because the global scheduler does not own any player entity's region. Night vision potion calls in `applyVanishEffects`, `removeVanishEffects`, and `resyncVanishEffects` are now dispatched through `vanishScheduler.runEntity()`, which routes to the entity's own region scheduler on Folia and to the main thread on all other platforms. (Thanks SimplyRan, PR #1)
+- **Silent Container Item Duplication:** Opening containers while vanished could cause items to duplicate or appear as wrong state. The root cause was a snapshot-copy approach — changes were written to a copy of the inventory and synced back on close, but the sync-back could overwrite concurrent item movements (hoppers, other players) and double-count items. Containers are now opened directly against the real inventory, matching vanilla behaviour exactly.
+- **Storage Backend Not Applied After `/vanishreload`:** Changing `storage.type` in `config.yml` (e.g. from `YAML` to `POSTGRESQL`) had no effect until the server was fully restarted. `/vanishreload` now shuts down the active storage provider and reinitializes it from the current config, making storage type changes take effect immediately.
+- **`/vanishscoreboard` Visible in Tab-Complete for All Players:** The command appeared in tab-complete for players who lacked `vanishpp.scoreboard`, revealing the feature's existence. The command entry in `plugin.yml` now declares `permission: vanishpp.scoreboard`, causing Bukkit to hide it from players without that node.
+
+---
+
+## [1.1.6] - 2026-04-07
 
 ### Added
 - **Vanish Scoreboard:** A configurable sidebar scoreboard shown automatically to vanished players (`vanishpp.scoreboard`). Displays world, TPS, online count, coordinates, direction, biome, ping, health, food, armor, time, date, vanish level, and more. Updates coordinates in real-time on movement via ProtocolLib packet listener (with configurable cooldown). Toggle manually with `/vscoreboard`. Auto-shows on vanish, hides on unvanish. Configured in `scoreboards.yml`. Reloads with `/vreload`.
@@ -14,8 +29,6 @@ All notable changes to this project will be documented in this file.
 - **Real-Time Database Sync:** Vanish state changes (vanish/unvanish) are now persisted to the database asynchronously, so storage I/O never blocks the main thread on join or leave. Rules and vanish state are kept in a per-player in-memory cache — pre-populated async on join and cleared on quit — eliminating database round-trips on hot event paths (block breaks, entity damage, etc.).
 - **Database Connection Error Notifications:** When database connectivity fails, staff with `vanishpp.admin` or OP status are notified in-game (throttled every 5 minutes to prevent spam). Helps identify infrastructure issues without requiring log file access.
 - **Proxy Plugin Integration Documentation:** Complete guide for proxy plugins (BungeeCord/Velocity) to read vanish state directly from the database. Includes example adapters and security best practices.
-- **Cross-Server Vanish State Reconciliation:** When a player joins a server that shares a MySQL/PostgreSQL database with other servers, their vanish state from any other server is immediately applied — no manual `/vanish` needed after switching. Works on BungeeCord/Velocity networks with a shared database. Stale in-memory entries for offline players are also periodically purged so no server accumulates phantom vanished UUIDs.
-- **Instant Proxy-Ready Vanish State on Join:** Vanish state is now pre-fetched from the database during `AsyncPlayerPreLoginEvent` (before the player fully connects), so it is applied on the very first tick of `PlayerJoinEvent` with zero additional delay. On a proxy network, players switching servers appear vanished or visible to staff immediately, with no visible flicker or catch-up period.
 
 ### Changed
 - **Spectator Quick-Switch Restores Exact Gamemode:** Double-shifting out of Spectator now returns the player to the gamemode they were in *before* entering Spectator (Creative, Adventure, Survival), not always Survival.
@@ -40,10 +53,6 @@ All notable changes to this project will be documented in this file.
 - **Database Error Visibility:** Silent database failures provided no feedback to admins. Connection errors are now logged to console and notified to staff in-game.
 - **DiscordSRV Advancement Leak:** Vanished players completing advancements no longer trigger Discord announcements. Suppressed via `AchievementMessagePreProcessEvent` as a safety net in addition to DiscordSRV's native vanish check.
 - **DiscordSRV Death Leak:** Vanished players dying no longer trigger Discord death announcements. Suppressed via `DeathMessagePreProcessEvent` as a safety net.
-- **Folia Crash: Night Vision Applied from Global Scheduler:** When cross-server vanish sync (Redis) applied vanish effects from the global region scheduler, calling `player.addPotionEffect()` and `player.removePotionEffect()` directly caused an `UnsupportedOperationException` on Folia because the global scheduler does not own any player entity's region. Night vision potion calls in `applyVanishEffects`, `removeVanishEffects`, and `resyncVanishEffects` are now dispatched through `vanishScheduler.runEntity()`, which routes to the entity's own region scheduler on Folia and to the main thread on all other platforms. (Thanks SimplyRan, PR #1)
-- **Silent Container Item Duplication:** Opening containers while vanished could cause items to duplicate or appear as wrong state. The root cause was a snapshot-copy approach — changes were written to a copy of the inventory and synced back on close, but the sync-back could overwrite concurrent item movements (hoppers, other players) and double-count items. Containers are now opened directly against the real inventory, matching vanilla behaviour exactly.
-- **Storage Backend Not Applied After `/vanishreload`:** Changing `storage.type` in `config.yml` (e.g. from `YAML` to `POSTGRESQL`) had no effect until the server was fully restarted. `/vanishreload` now shuts down the active storage provider and reinitializes it from the current config, making storage type changes take effect immediately.
-- **`/vanishscoreboard` Visible in Tab-Complete for All Players:** The command appeared in tab-complete for players who lacked `vanishpp.scoreboard`, revealing the feature's existence. The command entry in `plugin.yml` now declares `permission: vanishpp.scoreboard`, causing Bukkit to hide it from players without that node.
 
 ## [1.1.5] - 2026-03-28
 
