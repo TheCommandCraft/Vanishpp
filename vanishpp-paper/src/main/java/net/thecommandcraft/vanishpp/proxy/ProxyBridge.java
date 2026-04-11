@@ -230,6 +230,19 @@ public class ProxyBridge implements PluginMessageListener {
         sendPacket(VppPacket.encode(VppMessage.CONFIG_SYNC, payload.toString()));
     }
 
+    /**
+     * Asks the proxy to deliver a chat message to a specific player by UUID on whatever
+     * server they are currently connected to. Returns true if the request was queued/sent.
+     */
+    public boolean sendPlayerMessage(UUID uuid, String message) {
+        if (!proxyDetected) return false;
+        JsonObject payload = new JsonObject();
+        payload.addProperty("uuid", uuid.toString());
+        payload.addProperty("message", message);
+        sendPacket(VppPacket.encode(VppMessage.PLAYER_MESSAGE, payload.toString()));
+        return true;
+    }
+
     /** Sends a RELOAD_REQUEST to the proxy (triggered by /vanishreload on this server). */
     public void sendReloadRequest(String requestedBy) {
         if (!proxyDetected) return;

@@ -65,8 +65,23 @@ public class PaperChannelListener {
             case RELOAD_REQUEST     -> handleReloadRequest(json);
             case PLAYER_LIST_QUERY  -> handlePlayerListQuery(server, json);
             case CONFIG_SYNC        -> handleConfigSync(serverName, json);
+            case PLAYER_MESSAGE     -> handlePlayerMessage(json);
             default -> plugin.getLogger().debug("Unhandled message type {} from {}", packet.type(), serverName);
         }
+    }
+
+    /** Paper asks us to deliver a chat message to a player by UUID on whatever server they are on. */
+    private void handlePlayerMessage(JsonObject json) {
+        if (!json.has("uuid") || !json.has("message")) return;
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(json.get("uuid").getAsString());
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        String message = json.get("message").getAsString();
+        plugin.getProxy().getPlayer(uuid).ifPresent(p ->
+                p.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(message)));
     }
 
     // ── Handlers ─────────────────────────────────────────────────────────────

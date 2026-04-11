@@ -1,5 +1,6 @@
 # Vanish++ Velocity proxy test environment
 # Topology: Velocity → paper1 (25565/RCON 25575) + paper2 (25566/RCON 25576)
+# Versions: Minecraft 1.21.11, Velocity 3.4.0-SNAPSHOT build 559
 #
 # Usage:
 #   docker compose -f docker-compose-proxy.yml up -d
@@ -35,10 +36,10 @@ services:
       -XX:+UnlockExperimentalVMOptions -XX:+ParallelRefProcEnabled
       -jar /server/velocity.jar
     ports:
-      - "25577:25577"
+      - "25565:25565"
     volumes:
       - ./velocity/velocity.jar:/server/velocity.jar:ro
-      - ./velocity/velocity.toml:/server/velocity.toml:ro
+      - ./velocity/velocity.toml:/server/velocity.toml
       - ./velocity/forwarding.secret:/server/forwarding.secret:ro
       - ./velocity/plugins:/server/plugins
       - velocity_data:/server
@@ -48,7 +49,7 @@ services:
     tty: true
 
   paper1:
-    image: itzg/minecraft-server:latest
+    image: itzg/minecraft-server:latest  # Latest Paper 1.21.11 build (69)
     container_name: vpp_proxy_paper1
 
     tty: true
@@ -58,12 +59,11 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "25565:25565"
       - "25575:25575"
     environment:
       EULA: "TRUE"
       TYPE: PAPER
-      VERSION: "1.21.11"
+      VERSION: "1.21.11"  # Latest: build 69
       MEMORY: "1536M"
       ONLINE_MODE: "FALSE"
       OPS: "TheCommandCraft,TCC_STUDIOS"
@@ -80,10 +80,11 @@ services:
       PAPER_VELOCITY_SECRET: "test-forwarding-secret"
     volumes:
       - proxy_paper1_data:/data
+      - ./plugins:/plugins:ro
       - ./paper1-config/vanishpp:/data/plugins/vanishpp
 
   paper2:
-    image: itzg/minecraft-server:latest
+    image: itzg/minecraft-server:latest  # Latest Paper 1.21.11 build (69)
     container_name: vpp_proxy_paper2
 
     tty: true
@@ -93,12 +94,11 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "25566:25565"
       - "25576:25575"
     environment:
       EULA: "TRUE"
       TYPE: PAPER
-      VERSION: "1.21.11"
+      VERSION: "1.21.11"  # Latest: build 69
       MEMORY: "1536M"
       ONLINE_MODE: "FALSE"
       OPS: "TheCommandCraft,TCC_STUDIOS"
@@ -113,6 +113,7 @@ services:
       PAPER_VELOCITY_SECRET: "test-forwarding-secret"
     volumes:
       - proxy_paper2_data:/data
+      - ./plugins:/plugins:ro
       - ./paper2-config/vanishpp:/data/plugins/vanishpp
 
 volumes:

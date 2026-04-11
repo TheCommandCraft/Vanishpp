@@ -35,6 +35,9 @@ import java.util.logging.Level;
 
 public class Vanishpp extends JavaPlugin implements Listener {
 
+    /** Rule-key prefix used to persist cross-server expiry notifications in the shared DB. */
+    public static final String PENDING_NOTIFY_PREFIX = "__notify_expired__";
+
     private Set<UUID> vanishedPlayers;
     private Set<UUID> ignoredWarningPlayers; // concurrent — accessed from async join reconciliation
 
@@ -173,6 +176,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(this, this); // Preprocess listener
+        new MobAiManager(this).register();
 
 
         boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
@@ -793,13 +797,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         player.setCollidable(false);
 
-        // Clear existing mob targets only if mob_targeting rule is OFF
-        if (!ruleManager.getRule(player, RuleManager.MOB_TARGETING)) {
-            for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
-                if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                    mob.setTarget(null);
-                    mob.getPathfinder().stopPathfinding();
-                }
+        // ALWAYS clear existing mob targets when vanishing (regardless of mob_targeting rule)
+        // The rule only controls whether new targets can be acquired AFTER vanishing
+        for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
+            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
+                mob.setTarget(null);
+                mob.getPathfinder().stopPathfinding();
             }
         }
 
@@ -1088,13 +1091,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (configManager.preventSleeping)
             try { player.setSleepingIgnored(true); } catch (Throwable ignored) {}
 
-        // Clear mob targets
-        if (!ruleManager.getRule(player, RuleManager.MOB_TARGETING)) {
-            for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
-                if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                    mob.setTarget(null);
-                    mob.getPathfinder().stopPathfinding();
-                }
+        // ALWAYS clear mob targets (regardless of mob_targeting rule)
+        // The rule only controls whether new targets can be acquired AFTER vanishing
+        for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
+            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
+                mob.setTarget(null);
+                mob.getPathfinder().stopPathfinding();
             }
         }
 
@@ -1108,12 +1110,32 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void scheduleRuleRevert(Player player, String rule, boolean originalValue, int seconds) {
+        UUID playerUuid = player.getUniqueId();
+        String playerName = player.getName();
         vanishScheduler.runLaterGlobal(() -> {
-            ruleManager.setRule(player, rule, originalValue);
-            if (player.isOnline()) {
-                String msg = configManager.getLanguageManager().getMessage("rules.expired")
-                        .replace("%rule%", rule);
-                messageManager.sendMessage(player, msg);
+            // Apply rule revert to storage
+            storageProvider.setRule(playerUuid, rule, originalValue);
+
+            String msg = configManager.getLanguageManager().getMessage("rules.expired")
+                    .replace("%rule%", rule).replace("%player%", playerName);
+
+            // Try to send to target player first
+            Player onlinePlayer = Bukkit.getPlayer(playerUuid);
+            if (onlinePlayer != null && onlinePlayer.isOnline()) {
+                messageManager.sendMessage(onlinePlayer, msg);
+            } else if (proxyBridge != null && proxyBridge.isProxyDetected()
+                    && !Bukkit.getOnlinePlayers().isEmpty()) {
+                // Proxy is active and there is a carrier player on this server — send now.
+                proxyBridge.sendPlayerMessage(playerUuid, msg);
+                getLogger().info("[Vanishpp] Rule '" + rule + "' expired for " + playerName
+                        + " — delivering expiry message via proxy.");
+            } else {
+                // No local carrier (player switched servers and this server is now empty).
+                // Persist a pending notification in the shared DB; it will be delivered
+                // the next time the player connects to any server in the network.
+                storageProvider.setRule(playerUuid, PENDING_NOTIFY_PREFIX + rule, "true");
+                getLogger().info("[Vanishpp] Rule '" + rule + "' expired for " + playerName
+                        + " — no carrier available, queued delivery for next login.");
             }
         }, seconds * 20L);
     }

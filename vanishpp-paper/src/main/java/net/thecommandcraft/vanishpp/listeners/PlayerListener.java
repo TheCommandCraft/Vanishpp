@@ -179,6 +179,22 @@ public class PlayerListener implements Listener {
                 plugin.getProxyBridge().flushPendingPackets(player);
             }
 
+            // 3b. Deliver any pending cross-server rule-expiry notifications stored in the DB.
+            // These are written when the rule expired on another server while no carrier was available.
+            java.util.Map<String, Object> allRules = plugin.getStorageProvider().getRules(player.getUniqueId());
+            for (java.util.Map.Entry<String, Object> entry : allRules.entrySet()) {
+                if (!entry.getKey().startsWith(net.thecommandcraft.vanishpp.Vanishpp.PENDING_NOTIFY_PREFIX)) continue;
+                Object val = entry.getValue();
+                boolean pending = (val instanceof Boolean) ? (Boolean) val : Boolean.parseBoolean(String.valueOf(val));
+                if (!pending) continue;
+                String expiredRule = entry.getKey().substring(net.thecommandcraft.vanishpp.Vanishpp.PENDING_NOTIFY_PREFIX.length());
+                String expMsg = config.getLanguageManager().getMessage("rules.expired")
+                        .replace("%rule%", expiredRule).replace("%player%", player.getName());
+                plugin.getMessageManager().sendMessage(player, expMsg);
+                // Clear the flag so it is not delivered again
+                plugin.getStorageProvider().setRule(player.getUniqueId(), entry.getKey(), false);
+            }
+
             // 4. Update Check
             if (plugin.getUpdateChecker() != null) {
                 plugin.getUpdateChecker().notifyPlayer(player);
@@ -271,6 +287,16 @@ public class PlayerListener implements Listener {
                                             .clickEvent(ClickEvent.openUrl(w.installUrl))
                                             .hoverEvent(HoverEvent.showText(Component.text(
                                                     "Open download page in browser", NamedTextColor.GRAY))));
+                            if (w.featureList != null) {
+                                buttons = buttons
+                                        .append(Component.text("  "))
+                                        .append(Component.text("[Disabled Features ▶]",
+                                                NamedTextColor.YELLOW, TextDecoration.BOLD)
+                                                .hoverEvent(HoverEvent.showText(
+                                                        Component.text("Features disabled without this plugin:\n",
+                                                                NamedTextColor.GOLD, TextDecoration.BOLD)
+                                                        .append(Component.text(w.featureList, NamedTextColor.WHITE)))));
+                            }
                         }
                         if (hasButtons) {
                             player.sendMessage(buttons);

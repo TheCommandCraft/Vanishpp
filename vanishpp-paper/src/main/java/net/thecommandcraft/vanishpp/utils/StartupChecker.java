@@ -26,20 +26,30 @@ public class StartupChecker {
         public final String fixValue;
         /** Plugin download URL to open, or null if not applicable. */
         public final String installUrl;
+        /**
+         * Newline-separated list of features that are disabled without this plugin.
+         * When non-null a "Disabled Features" hover button is shown next to [Install Plugin].
+         */
+        public final String featureList;
 
-        public Warning(String message, String configPath, String fixValue, String installUrl) {
+        public Warning(String message, String configPath, String fixValue, String installUrl, String featureList) {
             this.message = message;
             this.configPath = configPath;
             this.fixValue = fixValue;
             this.installUrl = installUrl;
+            this.featureList = featureList;
         }
 
         public static Warning configFix(String msg, String path, String value) {
-            return new Warning(msg, path, value, null);
+            return new Warning(msg, path, value, null, null);
         }
 
         public static Warning pluginInstall(String msg, String url) {
-            return new Warning(msg, null, null, url);
+            return new Warning(msg, null, null, url, null);
+        }
+
+        public static Warning pluginInstallWithFeatures(String msg, String url, String featureList) {
+            return new Warning(msg, null, null, url, featureList);
         }
     }
 
@@ -68,6 +78,7 @@ public class StartupChecker {
      */
     public List<Warning> run() {
         List<Warning> warnings = new ArrayList<>();
+        checkProtocolLib(warnings);
         checkVoiceChat(warnings);
         checkEssentials(warnings);
         checkPapi(warnings);
@@ -77,6 +88,30 @@ public class StartupChecker {
     // -------------------------------------------------------------------------
     // Individual checks
     // -------------------------------------------------------------------------
+
+    private static final String PROTOCOLLIB_FEATURES =
+            "• Tab-complete scrubbing — vanished names hidden\n"
+            + "  from non-staff's /tab suggestions\n"
+            + "• Entity packet filtering — movement, animations,\n"
+            + "  equipment, effects blocked for non-staff\n"
+            + "• Ghost-proof spawning — spawn packets suppressed\n"
+            + "  so vanished players never render client-side\n"
+            + "• Scoreboard team scrubbing — nametag prefix\n"
+            + "  hidden from non-staff\n"
+            + "• Server list count — vanished players excluded\n"
+            + "  from the displayed online count\n"
+            + "• Silent chests — lid animations & sounds\n"
+            + "  suppressed when opening silently\n"
+            + "• Staff glow — glowing outline shown to staff\n"
+            + "  so they can spot vanished players easily";
+
+    private void checkProtocolLib(List<Warning> warnings) {
+        if (Bukkit.getPluginManager().getPlugin("ProtocolLib") != null) return;
+        warnings.add(Warning.pluginInstallWithFeatures(
+                "ProtocolLib is NOT installed. Several advanced vanish features are disabled.",
+                "https://github.com/dmulloy2/ProtocolLib/releases/latest",
+                PROTOCOLLIB_FEATURES));
+    }
 
     private void checkVoiceChat(List<Warning> warnings) {
         // Plugin registers under "voicechat" (bukkit jar name), fallback to "SimpleVoiceChat"

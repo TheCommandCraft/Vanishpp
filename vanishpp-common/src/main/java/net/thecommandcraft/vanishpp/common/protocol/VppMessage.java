@@ -43,4 +43,11 @@ public enum VppMessage {
      * Payload: { entries: { "dotted.key": "value", ... } }
      */
     CONFIG_SYNC,
+    /**
+     * Paper asks the proxy to deliver a chat message to a specific player by UUID, on whatever
+     * server they are currently connected to. Used for cross-server notifications such as
+     * timed rule expiry messages when the target has switched servers since the timer was scheduled.
+     * Payload: { uuid, message }
+     */
+    PLAYER_MESSAGE,
 }

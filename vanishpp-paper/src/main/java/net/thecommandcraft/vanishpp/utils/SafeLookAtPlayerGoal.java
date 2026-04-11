@@ -27,37 +27,57 @@ public class SafeLookAtPlayerGoal implements Goal<Mob> {
     @Override
     public boolean shouldActivate() {
         if (mob.getTarget() instanceof Player p) {
-            if (plugin.isVanished(p)) return false;
+            if (plugin.isVanished(p)) {
+                // Combat target is vanished: claim the LOOK slot so vanilla can't fall through,
+                // but don't set a targetPlayer (tick() will be a no-op).
+                targetPlayer = null;
+                return true;
+            }
             targetPlayer = p;
             return true;
         }
 
-        // Replicate vanilla LookAtPlayerGoal: nearest non-vanished player within 8 blocks
+        // Scan nearby players within vanilla range (8 blocks).
+        // We ALWAYS activate (claiming the LOOK slot) if ANY player is nearby,
+        // so the vanilla LookAtPlayerGoal can never fill the slot for vanished players.
         Player nearest = null;
-        double nearestDistSq = 64.0; // 8 * 8 — vanilla range
+        boolean anyNearby = false;
+        double nearestDistSq = 64.0; // 8 * 8
         for (Entity e : mob.getLocation().getNearbyEntitiesByType(Player.class, 8.0)) {
             if (!(e instanceof Player p)) continue;
-            if (plugin.isVanished(p)) continue;
+            anyNearby = true;
+            if (plugin.isVanished(p)) continue; // skip vanished — don't track them
             double d = mob.getLocation().distanceSquared(p.getLocation());
             if (d < nearestDistSq) {
                 nearestDistSq = d;
                 nearest = p;
             }
         }
-        if (nearest == null) return false;
-        targetPlayer = nearest;
-        return true;
+        targetPlayer = nearest; // may be null if only vanished players nearby
+        // Activate whenever ANY player is nearby so we hold the slot and vanilla stays idle.
+        return anyNearby;
     }
 
     @Override
     public boolean shouldStayActive() {
-        if (targetPlayer == null || !targetPlayer.isOnline() || targetPlayer.isDead()) {
-            return false;
+        // If we have a live non-vanished target in range, keep tracking.
+        if (targetPlayer != null && targetPlayer.isOnline() && !targetPlayer.isDead()
+                && !plugin.isVanished(targetPlayer)
+                && mob.getLocation().distanceSquared(targetPlayer.getLocation()) < 64.0) {
+            return true;
         }
-        if (plugin.isVanished(targetPlayer)) {
-            return false; // Stop looking if they vanish
+        // Target gone/vanished — but keep the slot active if any player (vanished or not)
+        // is still nearby, so vanilla can't claim the slot and look at vanished players.
+        targetPlayer = null;
+        for (Entity e : mob.getLocation().getNearbyEntitiesByType(Player.class, 8.0)) {
+            if (e instanceof Player p && !plugin.isVanished(p)) {
+                targetPlayer = p; // re-acquire a non-vanished target
+                return true;
+            } else if (e instanceof Player) {
+                return true; // vanished player nearby — hold the slot, do nothing
+            }
         }
-        return mob.getLocation().distanceSquared(targetPlayer.getLocation()) < 64.0;
+        return false;
     }
 
     @Override
@@ -72,7 +92,7 @@ public class SafeLookAtPlayerGoal implements Goal<Mob> {
 
     @Override
     public void tick() {
-        if (targetPlayer != null) {
+        if (targetPlayer != null && !plugin.isVanished(targetPlayer)) {
             mob.lookAt(targetPlayer);
         }
     }
