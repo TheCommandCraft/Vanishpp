@@ -252,4 +252,120 @@ class FeatureTest {
         assertTrue(plugin.getStorageProvider().hasAcknowledged(uuid, "protocol-lib-warning"),
                 "Acknowledgement must be persisted");
     }
+
+    // -------------------------------------------------------------------------
+    // Multiple vanished players
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testMultipleVanishedPlayers_trackedCorrectly() {
+        PlayerMock p1 = server.addPlayer();
+        PlayerMock p2 = server.addPlayer();
+        PlayerMock p3 = server.addPlayer();
+        p1.setOp(true);
+        p2.setOp(true);
+
+        plugin.vanishPlayer(p1, p1);
+        plugin.vanishPlayer(p2, p2);
+
+        assertTrue(plugin.isVanished(p1), "p1 must be vanished");
+        assertTrue(plugin.isVanished(p2), "p2 must be vanished");
+        assertFalse(plugin.isVanished(p3), "p3 must not be vanished");
+        assertEquals(2, plugin.getRawVanishedPlayers().size(), "Exactly two players must be vanished");
+    }
+
+    @Test
+    void testVanishedCount_decreasesOnUnvanish() {
+        PlayerMock p1 = server.addPlayer();
+        PlayerMock p2 = server.addPlayer();
+        p1.setOp(true);
+        p2.setOp(true);
+
+        plugin.vanishPlayer(p1, p1);
+        plugin.vanishPlayer(p2, p2);
+        assertEquals(2, plugin.getRawVanishedPlayers().size());
+
+        plugin.unvanishPlayer(p1, p1);
+        assertEquals(1, plugin.getRawVanishedPlayers().size(), "Count must drop to 1 after one player unvanishes");
+        assertFalse(plugin.isVanished(p1), "p1 must be unvanished");
+        assertTrue(plugin.isVanished(p2), "p2 must remain vanished");
+    }
+
+    // -------------------------------------------------------------------------
+    // Join/quit config combinations
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testSilentQuit_msgPreserved_whenConfigFalse() {
+        plugin.getConfigManager().hideRealQuit = false;
+        player.setOp(true);
+        plugin.vanishPlayer(player, player);
+
+        PlayerQuitEvent event = new PlayerQuitEvent(player, Component.text("left the game"),
+                PlayerQuitEvent.QuitReason.DISCONNECTED);
+        server.getPluginManager().callEvent(event);
+
+        assertNotNull(event.quitMessage(), "Quit message must not be suppressed when hideRealQuit=false");
+    }
+
+    @Test
+    void testSilentJoin_msgPreserved_whenConfigFalse() {
+        plugin.getConfigManager().hideRealJoin = false;
+        player.setOp(true);
+        plugin.vanishPlayer(player, player);
+
+        PlayerJoinEvent event = new PlayerJoinEvent(player, Component.text("joined the game"));
+        server.getPluginManager().callEvent(event);
+
+        assertNotNull(event.joinMessage(), "Join message must not be suppressed when hideRealJoin=false");
+    }
+
+    // -------------------------------------------------------------------------
+    // Scoreboard config
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testScoreboard_notVisible_initially() {
+        // Without calling show(), the player must not be in the boards map
+        assertFalse(plugin.getVanishScoreboard().isVisible(player),
+                "Scoreboard must not be visible before show() is called");
+    }
+
+    @Test
+    void testScoreboard_config_autoShow_flag_readable() {
+        plugin.getConfigManager().scoreboardAutoShow = true;
+        assertTrue(plugin.getConfigManager().scoreboardAutoShow,
+                "scoreboardAutoShow config flag must be settable and readable");
+
+        plugin.getConfigManager().scoreboardAutoShow = false;
+        assertFalse(plugin.getConfigManager().scoreboardAutoShow);
+    }
+
+    // -------------------------------------------------------------------------
+    // Vanish level
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testVanishLevel_defaultIsOne() {
+        // YamlStorage defaults to 1 when no level has been explicitly set
+        assertEquals(1, plugin.getStorageProvider().getVanishLevel(player.getUniqueId()),
+                "Default vanish level must be 1 (YamlStorage default)");
+    }
+
+    @Test
+    void testVanishLevel_setAndGet() {
+        plugin.getStorageProvider().setVanishLevel(player.getUniqueId(), 3);
+        assertEquals(3, plugin.getStorageProvider().getVanishLevel(player.getUniqueId()),
+                "Vanish level must equal what was set");
+    }
+
+    @Test
+    void testVanishLevel_distinguishesTwoPlayers() {
+        PlayerMock p2 = server.addPlayer();
+        plugin.getStorageProvider().setVanishLevel(player.getUniqueId(), 2);
+        plugin.getStorageProvider().setVanishLevel(p2.getUniqueId(), 5);
+
+        assertEquals(2, plugin.getStorageProvider().getVanishLevel(player.getUniqueId()));
+        assertEquals(5, plugin.getStorageProvider().getVanishLevel(p2.getUniqueId()));
+    }
 }

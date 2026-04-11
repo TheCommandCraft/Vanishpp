@@ -50,7 +50,7 @@ public class MobAiManager implements Listener {
                 if (!plugin.isVanished(p)) continue;
                 if (plugin.getRuleManager().getRule(p, RuleManager.MOB_TARGETING)) continue;
                 mob.setTarget(null);
-                mob.getPathfinder().stopPathfinding();
+                try { mob.getPathfinder().stopPathfinding(); } catch (Throwable ignored) {}
             }
         }
     }

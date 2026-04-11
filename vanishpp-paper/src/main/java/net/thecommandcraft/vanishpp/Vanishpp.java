@@ -62,6 +62,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private final Map<UUID, Long> actionBarPausedUntil = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, Component> actionBarWarningComponent = new java.util.concurrent.ConcurrentHashMap<>();
     private boolean hasProtocolLib = false;
+    private boolean hasPaperApi = false;
     private ProtocolLibManager protocolLibManager;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
     /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
@@ -176,7 +177,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(this, this); // Preprocess listener
-        new MobAiManager(this).register();
+        if (hasPaperApi()) new MobAiManager(this).register(); // Paper API (MobGoals) required
 
 
         boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
@@ -230,6 +231,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
             isPaper = true;
         } catch (ClassNotFoundException ignored) {
         }
+        // Folia also carries the full Paper API surface
+        this.hasPaperApi = isPaper || isFolia;
 
         if (isFolia) {
             getLogger().info("Platform: Folia (natively supported).");
@@ -511,6 +514,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public boolean hasProtocolLib() {
         return hasProtocolLib;
+    }
+
+    /** True when running on Paper, Purpur, or Folia — platforms that expose the Paper API (MobGoals, etc.). */
+    public boolean hasPaperApi() {
+        return hasPaperApi;
     }
 
     public Set<UUID> getIgnoredWarningPlayers() {

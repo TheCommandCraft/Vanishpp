@@ -542,7 +542,7 @@ public class PlayerListener implements Listener {
                 if (event.getEntity() instanceof org.bukkit.entity.Mob mob) {
                     mob.setTarget(null);
                     // Also stop pathfinding to prevent baby mobs from chasing after target is cleared
-                    mob.getPathfinder().stopPathfinding();
+                    try { mob.getPathfinder().stopPathfinding(); } catch (Throwable ignored) {}
                 }
             }
         }

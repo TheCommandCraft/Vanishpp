@@ -338,4 +338,193 @@ class CommandTest {
         player.performCommand("vconfig invisibility-features.god-mode false");
         assertFalse(plugin.getConfigManager().godMode, "vconfig must update the config value in memory");
     }
+
+    @Test
+    void vanishconfig_setBooleanTrue_thenCheckMemory() {
+        player.setOp(true);
+        plugin.getConfigManager().godMode = false;
+        player.performCommand("vconfig invisibility-features.god-mode true");
+        assertTrue(plugin.getConfigManager().godMode, "vconfig must set god-mode to true");
+    }
+
+    @Test
+    void vanishconfig_deniedWithoutPermission() {
+        player.setOp(false);
+        plugin.getConfigManager().godMode = true;
+        player.performCommand("vconfig invisibility-features.god-mode false");
+        // Without permission the value must not change
+        assertTrue(plugin.getConfigManager().godMode, "vconfig must be denied without permission");
+    }
+
+    // =========================================================================
+    // /vanish — aliases
+    // =========================================================================
+
+    @Test
+    void vanish_aliasV_works() {
+        player.setOp(true);
+        player.performCommand("v");
+        assertTrue(plugin.isVanished(player), "Alias /v must toggle vanish");
+    }
+
+    @Test
+    void vanish_aliasSV_works() {
+        player.setOp(true);
+        player.performCommand("sv");
+        assertTrue(plugin.isVanished(player), "Alias /sv must toggle vanish");
+    }
+
+    // =========================================================================
+    // /vanishrules — additional rules
+    // =========================================================================
+
+    @Test
+    void vanishrules_canHitEntities_true() {
+        player.setOp(true);
+        player.performCommand("vanishrules can_hit_entities true");
+        assertTrue(plugin.getRuleManager().getRule(player, RuleManager.CAN_HIT_ENTITIES));
+    }
+
+    @Test
+    void vanishrules_canHitEntities_false() {
+        player.setOp(true);
+        plugin.getRuleManager().setRule(player, RuleManager.CAN_HIT_ENTITIES, true);
+        player.performCommand("vanishrules can_hit_entities false");
+        assertFalse(plugin.getRuleManager().getRule(player, RuleManager.CAN_HIT_ENTITIES));
+    }
+
+    @Test
+    void vanishrules_canThrow_true() {
+        player.setOp(true);
+        player.performCommand("vanishrules can_throw true");
+        assertTrue(plugin.getRuleManager().getRule(player, RuleManager.CAN_THROW));
+    }
+
+    @Test
+    void vanishrules_canThrow_false() {
+        player.setOp(true);
+        plugin.getRuleManager().setRule(player, RuleManager.CAN_THROW, true);
+        player.performCommand("vanishrules can_throw false");
+        assertFalse(plugin.getRuleManager().getRule(player, RuleManager.CAN_THROW));
+    }
+
+    @Test
+    void vanishrules_canTriggerPhysical_true() {
+        player.setOp(true);
+        player.performCommand("vanishrules can_trigger_physical true");
+        assertTrue(plugin.getRuleManager().getRule(player, RuleManager.CAN_TRIGGER_PHYSICAL));
+    }
+
+    @Test
+    void vanishrules_mobTargeting_true() {
+        player.setOp(true);
+        player.performCommand("vanishrules mob_targeting true");
+        assertTrue(plugin.getRuleManager().getRule(player, RuleManager.MOB_TARGETING));
+    }
+
+    @Test
+    void vanishrules_mobTargeting_false() {
+        player.setOp(true);
+        plugin.getRuleManager().setRule(player, RuleManager.MOB_TARGETING, true);
+        player.performCommand("vanishrules mob_targeting false");
+        assertFalse(plugin.getRuleManager().getRule(player, RuleManager.MOB_TARGETING));
+    }
+
+    @Test
+    void vanishrules_spectatorGamemode_false() {
+        player.setOp(true);
+        player.performCommand("vanishrules spectator_gamemode false");
+        assertFalse(plugin.getRuleManager().getRule(player, RuleManager.SPECTATOR_GAMEMODE));
+    }
+
+    @Test
+    void vanishrules_showNotifications_false() {
+        player.setOp(true);
+        player.performCommand("vanishrules show_notifications false");
+        assertFalse(plugin.getRuleManager().getRule(player, RuleManager.SHOW_NOTIFICATIONS));
+    }
+
+    // =========================================================================
+    // /vlist — multiple vanished players
+    // =========================================================================
+
+    @Test
+    void vlist_showsAllVanishedPlayers() {
+        PlayerMock vanished1 = server.addPlayer();
+        PlayerMock vanished2 = server.addPlayer();
+        vanished1.setOp(true);
+        vanished2.setOp(true);
+        plugin.vanishPlayer(vanished1, vanished1);
+        plugin.vanishPlayer(vanished2, vanished2);
+
+        player.setOp(true);
+        player.performCommand("vlist");
+
+        StringBuilder allText = new StringBuilder();
+        net.kyori.adventure.text.Component msg;
+        while ((msg = player.nextComponentMessage()) != null) {
+            allText.append(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                    .plainText().serialize(msg));
+        }
+        String text = allText.toString();
+        assertTrue(text.contains(vanished1.getName()), "/vlist must show first vanished player");
+        assertTrue(text.contains(vanished2.getName()), "/vlist must show second vanished player");
+    }
+
+    // =========================================================================
+    // /vanishreload — preserves existing vanish state
+    // =========================================================================
+
+    @Test
+    void vanishreload_preservesVanishState() {
+        player.setOp(true);
+        plugin.vanishPlayer(player, player);
+        assertTrue(plugin.isVanished(player));
+
+        PlayerMock admin = server.addPlayer();
+        admin.setOp(true);
+        admin.performCommand("vanishreload");
+
+        assertTrue(plugin.isVanished(player), "Vanish state must survive a config reload");
+    }
+
+    @Test
+    void vanishreload_sendsConfirmation() {
+        player.setOp(true);
+        player.performCommand("vanishreload");
+        assertNotNull(player.nextComponentMessage(), "/vanishreload must send a confirmation message");
+    }
+
+    // =========================================================================
+    // /vanish — idempotency / toggle consistency
+    // =========================================================================
+
+    @Test
+    void vanish_toggleOnOff_multipleRounds() {
+        player.setOp(true);
+        for (int i = 0; i < 3; i++) {
+            player.performCommand("vanish");
+            assertTrue(plugin.isVanished(player), "Player must be vanished on odd toggle (round " + (i + 1) + ")");
+            player.performCommand("vanish");
+            assertFalse(plugin.isVanished(player), "Player must be visible on even toggle (round " + (i + 1) + ")");
+        }
+    }
+
+    @Test
+    void vanish_selfAndOther_independentStates() {
+        PlayerMock executor = server.addPlayer();
+        executor.setOp(true);
+        PlayerMock target = server.addPlayer();
+        target.setOp(true);
+
+        executor.performCommand("vanish");           // executor vanishes
+        executor.performCommand("vanish " + target.getName()); // target vanishes
+
+        assertTrue(plugin.isVanished(executor), "Executor must be vanished");
+        assertTrue(plugin.isVanished(target), "Target must be vanished");
+
+        executor.performCommand("vanish");           // executor unvanishes
+        assertFalse(plugin.isVanished(executor), "Executor must be unvanished");
+        assertTrue(plugin.isVanished(target), "Target must remain vanished");
+    }
 }
