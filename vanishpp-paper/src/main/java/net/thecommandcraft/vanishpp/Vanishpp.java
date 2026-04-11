@@ -748,6 +748,36 @@ public class Vanishpp extends JavaPlugin implements Listener {
             }
         }, 10L, 10L);
 
+        // Pending rule-expiry notification delivery — runs every 100 ticks (5 seconds).
+        // Handles the case where a timed rule expired on another server while the player was
+        // already connected here (so no PlayerJoinEvent fired to trigger the join-time check).
+        // DB lookup is async; message delivery is marshalled back to the main thread.
+        vanishScheduler.runTimerGlobal(() -> {
+            Collection<? extends Player> online = List.copyOf(Bukkit.getOnlinePlayers());
+            if (online.isEmpty()) return;
+            vanishScheduler.runAsync(() -> {
+                for (Player p : online) {
+                    if (!p.isOnline()) continue;
+                    java.util.Map<String, Object> rules = storageProvider.getRules(p.getUniqueId());
+                    boolean hasPending = rules.entrySet().stream().anyMatch(e ->
+                            e.getKey().startsWith(PENDING_NOTIFY_PREFIX) && Boolean.parseBoolean(String.valueOf(e.getValue())));
+                    if (!hasPending) continue;
+                    vanishScheduler.runGlobal(() -> {
+                        if (!p.isOnline()) return;
+                        for (java.util.Map.Entry<String, Object> entry : rules.entrySet()) {
+                            if (!entry.getKey().startsWith(PENDING_NOTIFY_PREFIX)) continue;
+                            if (!Boolean.parseBoolean(String.valueOf(entry.getValue()))) continue;
+                            String expiredRule = entry.getKey().substring(PENDING_NOTIFY_PREFIX.length());
+                            String msg = configManager.getLanguageManager().getMessage("rules.expired")
+                                    .replace("%rule%", expiredRule).replace("%player%", p.getName());
+                            messageManager.sendMessage(p, msg);
+                            storageProvider.setRule(p.getUniqueId(), entry.getKey(), false);
+                        }
+                    });
+                }
+            });
+        }, 100L, 100L);
+
         // Periodic DB reconciliation for offline vanished players — runs every 60 seconds.
         // Catches state changes made on other servers sharing the same database (without Redis).
         // Only queries the DB when there are actually offline vanished UUIDs to check, so
