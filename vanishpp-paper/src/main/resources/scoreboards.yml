@@ -80,3 +80,9 @@ movement-cooldown: 100
 # Use "default" to follow the server's system timezone, or any IANA ID:
 #   Examples: UTC, America/New_York, Europe/Berlin, Asia/Tokyo
 timezone: "default"
+
+# Optional hour offset applied on top of the timezone above.
+# Useful when you want the server timezone but shifted by a fixed amount.
+# Accepts decimals for half-hour zones (e.g. 5.5 for IST, -9.5 for MART).
+# Set to 0 to disable.
+timezone-offset-hours: 0

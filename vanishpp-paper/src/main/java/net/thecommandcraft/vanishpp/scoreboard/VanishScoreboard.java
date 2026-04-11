@@ -278,12 +278,14 @@ public class VanishScoreboard {
         long memUsed = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024;
         long memMax  = Runtime.getRuntime().maxMemory() / 1024 / 1024;
 
-        // --- Time with configured timezone ---
+        // --- Time with configured timezone + optional offset ---
         String tzId = plugin.getScoreboardConfig().getString("timezone", "default");
         TimeZone tz = "default".equalsIgnoreCase(tzId)
                 ? TimeZone.getDefault()
                 : TimeZone.getTimeZone(tzId);
-        Date now = new Date();
+        double offsetHours = plugin.getScoreboardConfig().getDouble("timezone-offset-hours", 0.0);
+        long offsetMillis  = (long) (offsetHours * 3600_000L);
+        Date now = new Date(System.currentTimeMillis() + offsetMillis);
         SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm");
         timeFmt.setTimeZone(tz);
         SimpleDateFormat dateFmt = new SimpleDateFormat("dd/MM/yyyy");
