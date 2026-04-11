@@ -70,7 +70,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 <br>
 
 - **Spectator Quick-Switch:** Double-tap Shift while vanished to enter Spectator mode instantly. Requires `vanishpp.spectator`.
-- **Vanish Scoreboard (`/vscoreboard`):** Fully configurable sidebar scoreboard showing world, TPS, player counts, real-time coordinates, direction, biome, ping, health, food, armor, and more. Coordinates refresh on movement via ProtocolLib packet listening. Supports all built-in placeholders plus full PlaceholderAPI.
+- **Vanish Scoreboard (`/vscoreboard`):** Fully configurable sidebar scoreboard showing world, TPS, player counts, real-time coordinates, direction, biome, ping, health, food, armor, time, date, and more. `%time%`/`%date%` respect `timezone` (IANA ID or `"default"` for server time) and `timezone-offset-hours` in `scoreboards.yml`. Coordinates refresh on movement via ProtocolLib packet listening. Supports all built-in placeholders plus full PlaceholderAPI.
 - **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` directly in-game.
 - **Personal Rules System (`/vrules`):** Per-player toggles for block breaking, entity interaction, chat confirmation, item pickup, mob targeting, and more.
 - **Async Data Persistence:** All data saved asynchronously. State is preserved across restarts.
