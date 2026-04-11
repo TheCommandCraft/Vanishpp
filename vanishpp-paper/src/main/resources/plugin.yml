@@ -1,0 +1,175 @@
+name: Vanishpp
+version: '${project.version}'
+main: net.thecommandcraft.vanishpp.Vanishpp
+api-version: '1.21'
+authors: [ tcc ]
+description: The ultimate vanish plugin with anti-detection, hooks, and ProtocolLib support.
+folia-supported: true
+softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB, DiscordSRV]
+
+commands:
+  vanish:
+    description: Toggles your or another player's vanish state.
+    usage: /vanish [player]
+    aliases: [ v, sv ]
+  vperms:
+    description: Manages Vanish++ specific permissions for players.
+    usage: /vperms <player> <permission> <set|remove|get>
+  vanishrules:
+    description: Configure personal vanish rules.
+    usage: /vanishrules [player] <rule> [true|false] [seconds]
+    aliases: [ vrules, vsettings ]
+  vanishchat:
+    description: Confirms sending a chat message while vanished.
+    usage: /vanishchat confirm
+    aliases: [ vchat ]
+  vanishignore:
+    description: Toggles the ProtocolLib missing warning on join.
+    usage: /vanishignore [player]
+    aliases: [ vignore ]
+  vanishlist:
+    description: Lists all currently vanished players.
+    usage: /vanishlist
+    aliases: [ vlist ]
+  vanishhelp:
+    description: Shows the interactive help menu.
+    usage: /vanishhelp [command]
+    aliases: [ vhelp ]
+  vanishconfig:
+    description: Edit config settings in-game.
+    usage: /vanishconfig <key> [value] [--confirm]
+    aliases: [ vconfig ]
+  vack:
+    description: Internal command to acknowledge and hide notifications.
+    usage: /vack <type>
+  vanishreload:
+    description: Reloads the plugin configuration.
+    usage: /vanishreload
+    aliases: [ vreload ]
+  vanishscoreboard:
+    description: Toggles the vanish info scoreboard.
+    usage: /vanishscoreboard
+    aliases: [ vsb ]
+    permission: vanishpp.scoreboard
+
+permissions:
+  vanishpp.*:
+    description: Grants absolute access to all Vanish++ features.
+    default: op
+    children:
+      vanishpp.vanish: true
+      vanishpp.vanish.others: true
+      vanishpp.see: true
+      vanishpp.list: true
+      vanishpp.manageperms: true
+      vanishpp.rules: true
+      vanishpp.rules.others: true
+      vanishpp.chat: true
+      vanishpp.silentchest: true
+      vanishpp.notarget: true
+      vanishpp.nohunger: true
+      vanishpp.nightvision: true
+      vanishpp.fly: true
+      vanishpp.pickup: true
+      vanishpp.pickup.others: true
+      vanishpp.no-raid: true
+      vanishpp.no-sculk: true
+      vanishpp.no-trample: true
+      vanishpp.join-vanished: true
+      vanishpp.spectator: true
+      vanishpp.spectator.bypass: true
+      vanishpp.ignorewarning: true
+      vanishpp.ignorewarning.others: true
+      vanishpp.config: true
+      vanishpp.update: true
+      vanishpp.reload: true
+      vanishpp.help: true
+      vanishpp.scoreboard: true
+
+  vanishpp.vanish:
+    description: Allows a player to vanish themselves.
+    default: op
+  vanishpp.vanish.others:
+    description: Allows vanishing other players.
+    default: op
+  vanishpp.see:
+    description: Allows seeing other vanished players.
+    default: op
+  vanishpp.manageperms:
+    description: Allows using the /vperms command.
+    default: op
+  vanishpp.rules:
+    description: Allows using /vanishrules.
+    default: op
+  vanishpp.rules.others:
+    description: Allows modifying rules for others.
+    default: op
+  vanishpp.chat:
+    description: Allows chatting while vanished.
+    default: op
+  vanishpp.silentchest:
+    description: Allows opening chests silently.
+    default: op
+  vanishpp.pickup:
+    description: Allows picking up items.
+    default: op
+  vanishpp.pickup.others:
+    description: Allows toggling pickup for others.
+    default: op
+  vanishpp.nightvision:
+    description: Grants automatic night vision.
+    default: op
+  vanishpp.fly:
+    description: Grants automatic flight.
+    default: op
+  vanishpp.nohunger:
+    description: Prevents hunger loss.
+    default: op
+  vanishpp.notarget:
+    description: Prevents mobs from targeting.
+    default: op
+  vanishpp.ignorewarning:
+    description: Allows using /vignore.
+    default: op
+  vanishpp.ignorewarning.others:
+    description: Allows using /vignore for others.
+    default: op
+  vanishpp.config:
+    description: Allows using /vconfig to manage the plugin settings.
+    default: op
+  vanishpp.update:
+    description: Receive notifications about plugin updates.
+    default: op
+  vanishpp.list:
+    description: Allows using /vlist.
+    default: op
+  vanishpp.help:
+    description: Allows using the help menu.
+    default: op
+  vanishpp.reload:
+    description: Allows using /vreload.
+    default: op
+  vanishpp.no-raid:
+    description: Prevents triggering raids while vanished.
+    default: op
+  vanishpp.no-sculk:
+    description: Prevents activating sculk sensors while vanished.
+    default: op
+  vanishpp.no-trample:
+    description: Prevents trampling farmland while vanished.
+    default: op
+  vanishpp.join-vanished:
+    description: Allows joining the server already vanished.
+    default: op
+  vanishpp.spectator:
+    description: Allows using double-shift to enter spectator mode while vanished.
+    default: op
+  vanishpp.spectator.bypass:
+    description: Stays in spectator mode after unvanishing instead of being forced back.
+    default: op
+  vanishpp.scoreboard:
+    description: Allows using the vanish info scoreboard (/vsb).
+    default: op
+  vanishpp.scoreboard.bypass:
+    description: Prevents auto-showing the scoreboard on vanish (for players with their own scoreboard plugin).
+    default: false

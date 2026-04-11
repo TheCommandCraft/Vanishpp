@@ -1,0 +1,56 @@
+# ================================================================= #
+#                 Vanish++ Simple Permissions File                  #
+# ================================================================= #
+#
+# This file allows you to grant Vanish++ permissions to players
+# based on their UUID, without needing a plugin like LuckPerms.
+#
+# ======================== HOW TO USE ========================
+# 1. Get the player's UUID (e.g. from namemc.com).
+# 2. Add the UUID as a key below 'permissions:'.
+# 3. List the permissions they should have.
+#
+# ==================== AVAILABLE PERMISSIONS ====================
+#
+# --- WILDCARDS (Groups) ---
+# - 'vanishpp.*'             : Grants EVERYTHING.
+# - 'vanishpp.core'          : Grants vanish, vanish.others, see.
+# - 'vanishpp.abilities'     : Grants all passive abilities (fly, nightvision, nohunger, etc.).
+# - 'vanishpp.management'    : Grants all admin tools (vperms, vrules, vignore, etc.).
+#
+# --- Core Commands ---
+# - 'vanishpp.vanish'        : Use /vanish on self.
+# - 'vanishpp.vanish.others' : Use /vanish on others.
+# - 'vanishpp.see'           : See other vanished players.
+#
+# --- Management ---
+# - 'vanishpp.manageperms'   : Use /vperms to manage this file in-game.
+# - 'vanishpp.ignorewarning' : Use /vignore to stop ProtocolLib warnings.
+# - 'vanishpp.update'        : Receive notifications about new plugin versions.
+#
+# --- Rules & Configuration ---
+# - 'vanishpp.rules'         : Use /vrules to toggle personal settings.
+# - 'vanishpp.rules.others'  : Use /vrules on other players.
+#
+# --- Abilities (Bypass Restrictions) ---
+# - 'vanishpp.silentchest'   : Open chests silently (no animation).
+# - 'vanishpp.chat'          : Chat while vanished (bypasses confirmation).
+# - 'vanishpp.notarget'      : Mobs will not target you.
+# - 'vanishpp.nohunger'      : You will not lose hunger.
+# - 'vanishpp.nightvision'   : You get Night Vision automatically.
+# - 'vanishpp.fly'           : You can fly automatically.
+# - 'vanishpp.no-raid'       : You won't trigger Raids.
+# - 'vanishpp.no-sculk'      : You won't trigger Sculk Sensors.
+# - 'vanishpp.no-trample'    : You won't trample Crops/Turtle Eggs.
+# - 'vanishpp.join-vanished' : Join the server vanished automatically.
+#
+# ========================= EXAMPLE =========================
+# permissions:
+#   '069a79f4-44e9-4726-a5befca27dae9745': # Notch
+#     - 'vanishpp.*'
+#   '853c80ef-3c37-49fd-aa49-938b674adae6': # Jeb
+#     - 'vanishpp.core'
+#     - 'vanishpp.abilities'
+#
+# Add players below:
+permissions:

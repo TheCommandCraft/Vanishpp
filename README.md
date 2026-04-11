@@ -29,7 +29,7 @@ Works out of the box with zero configuration required.
 Most plugins just hide you visually. Vanish++ removes you physically.
 
 - **Invincibility:** No damage, immune to all potion effects, cannot burn.
-- **Smart Mob AI:** Custom AI goals injected into mobs — they look right through you, no head tracking, no awkward staring. Mobs that had already locked on to you before you vanished instantly lose you.
+- **Smart Mob AI:** Custom AI goals injected into every mob — they look right through you with no head tracking or awkward staring. `SafeLookAtPlayerGoal` holds the mob's `LOOK` goal slot whenever you are nearby, preventing vanilla AI from noticing you at all. Mobs that had already locked on before you vanished are force-detargeted within one tick.
 - **Projectile Pass-Through:** Arrows, tridents, and snowballs fly physically through your body via native Paper events — impossible to hit a vanished player.
 - **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you.
 - **No Physical Triggers:** Walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration.
@@ -70,12 +70,12 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 <br>
 
 - **Spectator Quick-Switch:** Double-tap Shift while vanished to enter Spectator mode instantly. Requires `vanishpp.spectator`.
-- **Vanish Scoreboard (`/vscoreboard`):** Fully configurable sidebar scoreboard showing world, TPS, player counts, real-time coordinates, direction, biome, ping, health, food, armor, and more. Coordinates refresh on movement via ProtocolLib packet listening. Supports all built-in placeholders plus full PlaceholderAPI.
+- **Vanish Scoreboard (`/vscoreboard`):** Fully configurable sidebar scoreboard showing world, TPS, player counts, real-time coordinates, direction, biome, ping, health, food, armor, time, date, and more. `%time%`/`%date%` respect `timezone` (IANA ID or `"default"` for server time) and `timezone-offset-hours` in `scoreboards.yml`. Coordinates refresh on movement via ProtocolLib packet listening. Supports all built-in placeholders plus full PlaceholderAPI.
 - **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` directly in-game.
 - **Personal Rules System (`/vrules`):** Per-player toggles for block breaking, entity interaction, chat confirmation, item pickup, mob targeting, and more.
 - **Async Data Persistence:** All data saved asynchronously. State is preserved across restarts.
 - **Database Connection Monitoring:** Staff notified in-game when database connectivity fails.
-- **Proxy-Ready Cross-Server Sync:** Vanish state is pre-fetched from the shared database during login — players switching servers on a BungeeCord/Velocity network appear vanished or visible to staff instantly, with zero flicker or catch-up delay. See [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).
+- **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Timed rule expiry notifications are delivered to whichever server the player is currently on — no reconnect required. Servers auto-detect the proxy on startup and fall back to standalone mode if none is found. See [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).
 
 </details>
 

@@ -38,6 +38,10 @@ PUBLISH_MODRINTH.md
 RELEASE_NOTES_*.md
 DATABASE_PRODUCTION_VERIFICATION.md
 
+# Docker test server binaries (too large for git)
+docker/velocity/velocity.jar
+docker/**/*.jar
+
 # Dev server data
 server-data/
 

@@ -1,0 +1,79 @@
+package net.thecommandcraft.vanishpp.commands;
+
+import net.thecommandcraft.vanishpp.Vanishpp;
+import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
+import org.bukkit.util.StringUtil;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class VanishIgnoreCommand implements CommandExecutor, TabCompleter {
+
+    private final Vanishpp plugin;
+
+    public VanishIgnoreCommand(Vanishpp plugin) {
+        this.plugin = plugin;
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+            @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.ignorewarning")) {
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
+            return true;
+        }
+        Player target;
+
+        if (args.length > 0) {
+            if (!sender.hasPermission("vanishpp.ignorewarning.others")) {
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
+                return true;
+            }
+            target = Bukkit.getPlayer(args[0]);
+            if (target == null) {
+                plugin.getMessageManager().sendMessage(sender, "<red>Player not found.");
+                return true;
+            }
+        } else {
+            if (!(sender instanceof Player)) {
+                plugin.getMessageManager().sendMessage(sender, "<red>Console must specify a player.");
+                return true;
+            }
+            target = (Player) sender;
+        }
+
+        if (plugin.isWarningIgnored(target)) {
+            plugin.setWarningIgnored(target, false);
+            plugin.getMessageManager().sendMessage(target, "<green>You will now receive ProtocolLib warnings again.");
+            if (!target.equals(sender))
+                plugin.getMessageManager().sendMessage(sender,
+                        "<green>" + target.getName() + " will receive warnings.");
+        } else {
+            plugin.setWarningIgnored(target, true);
+            plugin.getMessageManager().sendMessage(target, "<red>You will no longer receive ProtocolLib warnings.");
+            if (!target.equals(sender))
+                plugin.getMessageManager().sendMessage(sender, "<red>" + target.getName() + " will ignore warnings.");
+        }
+        return true;
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+            @NotNull String label, @NotNull String[] args) {
+        if (args.length == 1 && sender.hasPermission("vanishpp.ignorewarning.others")) {
+            List<String> names = new ArrayList<>();
+            for (Player p : Bukkit.getOnlinePlayers()) names.add(p.getName());
+            return StringUtil.copyPartialMatches(args[0], names, new ArrayList<>());
+        }
+        return new ArrayList<>();
+    }
+}

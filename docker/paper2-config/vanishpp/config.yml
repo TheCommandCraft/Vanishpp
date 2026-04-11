@@ -1,0 +1,24 @@
+storage:
+  type: postgresql
+  host: postgres
+  port: 5432
+  database: vanishpp
+  username: vanishpp
+  password: vanishtest
+
+proxy:
+  server-name: "paper2"
+  cross-server-list: true
+
+update-checker:
+  enabled: true
+  mode: PERMISSION
+  list: []
+
+hooks:
+  simple-voice-chat:
+    enabled: false
+
+invisibility-features:
+  god-mode: true
+  no-collision: true

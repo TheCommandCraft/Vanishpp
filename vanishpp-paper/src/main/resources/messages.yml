@@ -1,0 +1,165 @@
+# Vanish++ English Language File
+# Supports MiniMessage tags (<red>, <bold>, etc.), legacy color codes (&c, &a, etc.),
+# and PlaceholderAPI %placeholders%.
+
+# --- [ GENERAL ] ---
+no-permission: "&cYou do not have permission to use this command."
+player-not-found: "&cPlayer not found."
+invalid-usage: "&cUsage: %usage%"
+console-specify: "&cConsole must specify a player."
+unknown-command: "&cUnknown command. Type \"/help\" for help."
+
+# --- [ VANISH COMMANDS ] ---
+vanish:
+  self: "&6You are now vanished."
+  others: "&6You have vanished %player%."
+  unvanish-self: "&6You are no longer vanished."
+  unvanish-others: "&6You have unvanished %player%."
+
+# --- [ VPERMS COMMAND ] ---
+vperms:
+  reload: "&aVanish++ permissions reloaded."
+  invalid-usage: "&cUsage: /vperms <player> <permission> <set|remove|get>"
+  invalid-permission: "&cInvalid permission."
+  perm-set: "&aSet permission '%perm%' for %player%."
+  perm-removed: "&eRemoved permission '%perm%' from %player%."
+  perm-get-has: "&a%player% HAS the permission '%perm%'."
+  perm-get-does-not-have: "&c%player% DOES NOT HAVE the permission '%perm%'."
+
+# --- [ UPDATE CHECKER ] ---
+update:
+  available: "&a&lVanish++ Update Available!"
+  current: "&7Current: &c%version%"
+  latest: "&7Latest: &a%version%"
+  download: "&6&l[CLICK TO DOWNLOAD]"
+  hover: "&eGo to Modrinth Version %version%"
+  # Proxy update notification — shown when the Velocity proxy plugin has an update
+  proxy-available: "&a&lVanish++ Proxy Update Available!"
+  proxy-note: "&7The &eVelocity proxy plugin &7needs updating — not this server's plugin."
+  proxy-current: "&7Proxy running: &c%version%"
+  proxy-latest: "&7New proxy version: &a%version%"
+  proxy-download: "&6&l[DOWNLOAD PROXY UPDATE]"
+  proxy-hover: "&eDownload Vanish++ Velocity %version% from Modrinth"
+
+# --- [ RULES COMMAND ] ---
+rules:
+  usage: "&cUsage: /vrules [player] <rule> [true|false] [seconds] &7— omit seconds for permanent"
+  invalid-name: "&cInvalid rule name. Use /vrules to see available rules."
+  invalid-value: "&cValue must be 'true' or 'false'."
+  invalid-seconds: "&cInvalid number of seconds."
+  header: "&6Rules for %player%:"
+  line: " • %rule%: <%color%>%status%"
+  status-on: "ENABLED"
+  status-off: "DISABLED"
+  set: "&aRule '%rule%' for %player% set to %status%."
+  set-temp: "&aRule '%rule%' for %player% set to %status% for %seconds%s."
+  expired: "&eTemporary rule '%rule%' has expired."
+
+# --- [ CHAT ] ---
+chat:
+  locked: "<red>You are vanished! <gray>Click <click:run_command:'/vchat confirm'><aqua><underlined>[Confirm Send]</underlined></aqua></click> <gray>to send this message."
+  sent: "&aMessage sent."
+  no-pending: "&cYou have no pending chat messages to confirm."
+  usage: "&7Usage: &b/vchat confirm &7— send your pending vanish chat message."
+
+# --- [ PICKUP ] ---
+pickup:
+  enabled: "&eItem pickup is now &aENABLED&e."
+  disabled: "&eItem pickup is now &cDISABLED&e."
+  blocked-actionbar: "&c✖ Item Pickup Blocked"
+
+# --- [ WARNINGS & NOTIFICATIONS ] ---
+warnings:
+  protocollib-missing-title: "&c⚠ WARNING ⚠"
+  protocollib-missing-subtitle: "&eProtocolLib Missing!"
+  box-top: "&4&l█▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀█"
+  header: "&c&l CRITICAL DEPENDENCY MISSING"
+  line: "&e ProtocolLib is NOT installed."
+  sub: "&c ⚠ YOU ARE NOT FULLY HIDDEN! ⚠"
+  box-bottom: "&4&l█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█"
+  action-blocked-actionbar: "&c&l✖ Action Blocked: %action%"
+  vanish-blocked: "&cVanish blocked &e%action%&c. Use &b/vrules %rule% true &cto enable."
+  config-blocked: "&cVanish blocked &e%action%&c (config: &7%path%&c)."
+  spawn-egg-blocked: "&cSpawn eggs are always blocked while vanished to protect your cover."
+  throwable-blocked: "&cVanish blocked &ethrowing items&c. Use &b/vrules can_throw true &cto enable."
+  ignore-tip: "&7Tip: Type &b/vrules show_notifications false &7to disable these messages."
+  setup-header: "&c⚠ Vanish++ Setup Issues:"
+
+# --- [ STAFF NOTIFICATIONS ] ---
+staff:
+  silent-join: "&8[&7+&8] &7%player% has silently joined."
+  silent-quit: "&8[&7-&8] &7%player% has silently left."
+  notify-vanish: "&e[Staff] %player% has vanished (by %staff%)."
+  notify-unvanish: "&e[Staff] %player% has unvanished (by %staff%)."
+
+# --- [ APPEARANCE ] ---
+appearance:
+  action-bar: "&bYou are currently VANISHED"
+  vanished-player-format: "%prefix%&7%player%: %message%"
+
+# --- [ CONFIG COMMAND ] ---
+config:
+  reloaded: "&aVanish++ configuration reloaded successfully!"
+  updated: "&aSuccessfully updated &e%path% &ato &f%value%"
+  invalid-path: "&cInvalid config path!"
+  current-value: "&6%path% &7is currently: &f%value%"
+  usage: "&cUsage: /vconfig <key> [value]"
+  sensitive-warning: "&c⚠ Warning: &e%path% &cis a sensitive setting. Changing it may affect server stability. Run the command again with &b--confirm &cto apply."
+  proxy-synced: "&7↳ &aSynced to proxy &7— all connected servers updated."
+  proxy-not-connected: "&cNo proxy detected. Cannot sync."
+  proxy-nothing-to-sync: "&7All settings are already at their defaults — nothing to sync."
+  proxy-applied: "&a%count% setting(s) applied to proxy &7— all connected servers updated."
+  proxy-mismatch-title: "Proxy Config Mismatch"
+  proxy-mismatch-line1: "&eThis server's config has settings that differ from the defaults."
+  proxy-mismatch-line2: "&7When using a proxy, configure settings in the &eproxy config.yml&7."
+  proxy-mismatch-line3: "&7&o/vconfig changes automatically apply to the proxy while connected."
+
+# --- [ PLUGIN LIST ] ---
+plugins:
+  hidden-info: "&8Plugin list is filtered (Vanish++ hidden from non-staff)."
+
+# --- [ VANISHED LIST ] ---
+list:
+  no-vanished-online: "&eThere are no vanished players online."
+  header: "&6Vanished Players (%count%):"
+
+# --- [ ACKNOWLEDGEMENT ] ---
+acknowledgement:
+  acknowledged: "&aNotification acknowledged."
+  hiding-dismissed: "&7Notification dismissed for this version."
+  hiding-visible: "&aVanish++ is now VISIBLE in the plugin list."
+
+# --- [ IGNORE WARNING ] ---
+ignore-warning:
+  protocol-denied: "&cPermission denied."
+  player-not-found: "&cPlayer not found."
+  console-specify: "&cConsole must specify a player."
+  enabled: "&aYou will now receive ProtocolLib warnings again."
+  disabled: "&cYou will no longer receive ProtocolLib warnings."
+  others-enabled: "&a%player% will receive warnings."
+  others-disabled: "&c%player% will ignore warnings."
+
+# --- [ SPECTATOR MODE ] ---
+spectator:
+  entered: "&bEntered spectator. &7Double-shift to return."
+  exited: "&aReturned to &6%gamemode% &amode."
+  forced-unvanish: "&eReturned to &6%gamemode% &emode on unvanish."
+
+# --- [ SILENT CHEST ] ---
+silent-chest:
+  blocked: "&cYou cannot open this silently (Inventory Type not supported or protected)."
+
+# --- [ HELP MENU ] ---
+help:
+  header: "\n&6&l      Vanish++ Help Menu      "
+  subheader: "&7Click a command to see details:"
+  footer: "&7-------------------------------"
+  unknown-command: "&cUnknown command '&f%command%&c'. Showing full list:"
+  cmd-vanish: "Toggle vanish state."
+  cmd-vrules: "Configure personal vanish rules."
+  cmd-vconfig: "Change plugin settings live."
+  cmd-vlist: "List all vanished players."
+  cmd-vperms: "Manage local permissions."
+  cmd-vignore: "Stop ProtocolLib warnings."
+  cmd-vchat: "Confirm sending chat while vanished."
+  cmd-vreload: "Reload plugin configuration."
