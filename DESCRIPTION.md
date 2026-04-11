@@ -26,7 +26,7 @@ It works perfectly out of the box with zero configuration required, but offers g
 Most plugins just hide you visually. **Vanish++ removes you physically.**
 
 *   **Titan God Mode:** While vanished, you are strictly invincible. You take no damage, are immune to all potion effects, and cannot burn. You are a spectator in survival mode.
-*   **Smart Mob AI (True Sight):** We inject custom AI goals into mobs. They don't just "not target" you—they look right through you. No head tracking, no awkward staring. Mobs that had already locked on to you before you vanished also instantly lose you.
+*   **Smart Mob AI (True Sight):** We inject custom AI goals into every mob. They look right through you — no head tracking, no awkward staring. Our `SafeLookAtPlayerGoal` holds the mob's look slot whenever you are nearby so the vanilla AI never notices you exist. Mobs that had already locked on before you vanished are force-detargeted within one tick.
 *   **Projectile Pass-Through:** We don't use "teleport hacks." Using native Paper events, arrows, tridents, and snowballs fly **physically through** your body. It is impossible to hit a vanished player.
 *   **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you. You are a ghost.
 *   **No Physical Triggers:** You can walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration or block update.
@@ -81,7 +81,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Dependency Warnings:** The plugin intelligently warns admins if ProtocolLib is missing, but allows you to silence these warnings permanently with `/vignore`.
 *   **Accidental Chat Prevention:** If enabled, typing in chat blocks the message and asks you to confirm with `/vchat confirm`. Never leak your presence by accident again.
 *   **Async Data Persistence:** All data is saved asynchronously. Server crash? Restart? Your vanish state is saved instantly. No accidental logins.
-*   **Proxy Plugin Compatibility:** Vanish state is stored in a persistent database (MySQL, PostgreSQL, or YAML) that proxy plugins can read directly. Enables cross-network vanish synchronization without plugin-to-plugin integration. See documentation for example adapters.
+*   **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Timed rule expiry notifications are delivered to the server the player is currently on — no reconnect required. Servers auto-detect the proxy on startup and fall back to standalone mode if none is present.
 *   **Database Connection Monitoring:** When database connectivity fails, staff are notified in-game so infrastructure issues don't go unnoticed. Includes graceful error handling and connection pooling.
 
 
