@@ -5,7 +5,7 @@ api-version: '1.21'
 authors: [ tcc ]
 description: The ultimate vanish plugin with anti-detection, hooks, and ProtocolLib support.
 folia-supported: true
-softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB, DiscordSRV]
+softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB, DiscordSRV, LuckPerms, WorldGuard]
 
 commands:
   vanish:
@@ -51,6 +51,49 @@ commands:
     usage: /vanishscoreboard
     aliases: [ vsb ]
     permission: vanishpp.scoreboard
+  vspec:
+    description: Quick-spectate a player while vanished.
+    usage: /vspec <player|stop>
+    aliases: []
+    permission: vanishpp.spectator
+  vfollow:
+    description: Lock spectator camera onto a target player with HUD overlay.
+    usage: /vfollow <player|stop>
+    permission: vanishpp.spectator
+  vhistory:
+    description: View the vanish/unvanish audit log.
+    usage: /vhistory [player] [page]
+    permission: vanishpp.history
+  vautovanish:
+    description: Toggle auto-vanish on join for a player.
+    usage: /vautovanish [player] [on|off]
+    aliases: [ vav ]
+    permission: vanishpp.vanish
+  vstats:
+    description: View vanish statistics for a player.
+    usage: /vstats [player]
+    permission: vanishpp.stats
+  vadmin:
+    description: Open the admin dashboard GUI.
+    usage: /vadmin
+    permission: vanishpp.admin
+  vwand:
+    description: Give yourself the vanish toggle wand.
+    usage: /vwand
+    permission: vanishpp.wand
+  vchangelog:
+    description: View the Vanish++ in-game changelog.
+    usage: /vchangelog
+    permission: vanishpp.changelog
+  vzone:
+    description: Manage no-vanish zones.
+    usage: /vzone <create|delete|list|reload> [name] [radius]
+    permission: vanishpp.zone
+  vincognito:
+    description: Toggle incognito mode (hide your real identity in chat).
+    usage: /vincognito [player] [fakename|off]
+    aliases: [ vincog ]
+    permission: vanishpp.incognito
 
 permissions:
   vanishpp.*:
@@ -85,6 +128,20 @@ permissions:
       vanishpp.reload: true
       vanishpp.help: true
       vanishpp.scoreboard: true
+      vanishpp.history: true
+      vanishpp.stats: true
+      vanishpp.stats.others: true
+      vanishpp.admin: true
+      vanishpp.wand: true
+      vanishpp.changelog: true
+      vanishpp.zone: true
+      vanishpp.zone.bypass: true
+      vanishpp.incognito: true
+      vanishpp.incognito.others: true
+      vanishpp.vanish.bulk: true
+      vanishpp.vanish.timed: true
+      vanishpp.combat.bypass: true
+      vanishpp.ratelimit.bypass: true
 
   vanishpp.vanish:
     description: Allows a player to vanish themselves.
@@ -172,4 +229,46 @@ permissions:
     default: op
   vanishpp.scoreboard.bypass:
     description: Prevents auto-showing the scoreboard on vanish (for players with their own scoreboard plugin).
+    default: false
+  vanishpp.history:
+    description: Allows viewing the vanish audit log (/vhistory).
+    default: op
+  vanishpp.stats:
+    description: Allows viewing own vanish statistics (/vstats).
+    default: op
+  vanishpp.stats.others:
+    description: Allows viewing vanish statistics for other players.
+    default: op
+  vanishpp.admin:
+    description: Allows opening the admin dashboard GUI (/vadmin).
+    default: op
+  vanishpp.wand:
+    description: Allows receiving the vanish toggle wand (/vwand).
+    default: op
+  vanishpp.changelog:
+    description: Allows viewing the in-game changelog (/vchangelog).
+    default: op
+  vanishpp.zone:
+    description: Allows creating and managing no-vanish zones (/vzone).
+    default: op
+  vanishpp.zone.bypass:
+    description: Bypasses forced-unvanish in no-vanish zones.
+    default: false
+  vanishpp.incognito:
+    description: Allows using incognito mode (/vincognito).
+    default: op
+  vanishpp.incognito.others:
+    description: Allows toggling incognito mode for other players.
+    default: op
+  vanishpp.vanish.bulk:
+    description: Allows bulk-vanishing all/group/world players.
+    default: op
+  vanishpp.vanish.timed:
+    description: Allows using timed vanish (/vanish <player> <duration>).
+    default: op
+  vanishpp.combat.bypass:
+    description: Bypasses the anti-combat-vanish cooldown.
+    default: false
+  vanishpp.ratelimit.bypass:
+    description: Bypasses the vanish toggle rate limit.
     default: false

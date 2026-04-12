@@ -8,10 +8,12 @@ import net.thecommandcraft.vanishpp.listeners.*;
 import net.thecommandcraft.vanishpp.hooks.*;
 import net.thecommandcraft.vanishpp.utils.*;
 import net.thecommandcraft.vanishpp.storage.*;
+import net.thecommandcraft.vanishpp.zone.VanishZoneManager;
 import net.thecommandcraft.vanishpp.scoreboard.VanishScoreboard;
 import net.thecommandcraft.vanishpp.common.state.NetworkVanishState;
 import net.thecommandcraft.vanishpp.proxy.ProxyBridge;
 import net.thecommandcraft.vanishpp.proxy.ProxyConfigCache;
+import org.bukkit.Location;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
@@ -72,6 +74,24 @@ public class Vanishpp extends JavaPlugin implements Listener {
     // ── Proxy support ─────────────────────────────────────────────────────────
     private ProxyBridge proxyBridge;
     private ProxyConfigCache proxyConfigCache;
+
+    // ── New feature state ────────────────────────────────────────────────────
+    /** Spectator follow: follower UUID → target UUID */
+    public final Map<UUID, UUID> spectateFollowTargets = new ConcurrentHashMap<>();
+    /** Spectator origin locations to teleport back to on stop */
+    public final Map<UUID, Location> spectateOrigins = new ConcurrentHashMap<>();
+    /** Gamemodes before entering spectator via /vspec or /vfollow */
+    public final Map<UUID, GameMode> spectateOriginalGamemodes = new ConcurrentHashMap<>();
+    /** Incognito mode: player UUID → fake name */
+    public final Map<UUID, String> incognitoNames = new ConcurrentHashMap<>();
+
+    private final Map<UUID, String> vanishReasons = new ConcurrentHashMap<>();
+    public final Map<UUID, Long> vanishStartTimes = new ConcurrentHashMap<>();
+
+    private VanishZoneManager vanishZoneManager;
+    private LuckPermsHook luckPermsHook;
+    private WebhookManager webhookManager;
+    private WorldGuardHook worldGuardHook;
 
     @Override
     public void onEnable() {
@@ -154,6 +174,31 @@ public class Vanishpp extends JavaPlugin implements Listener {
             setupTeams();
         }
 
+        // ── Optional hooks ─────────────────────────────────────────────────
+        if (Bukkit.getPluginManager().getPlugin("LuckPerms") != null) {
+            try {
+                this.luckPermsHook = new LuckPermsHook(this);
+                this.luckPermsHook.load();
+                getLogger().info("LuckPerms context integration enabled.");
+            } catch (Throwable e) {
+                getLogger().warning("LuckPerms found but context hook failed: " + e.getMessage());
+                this.luckPermsHook = null;
+            }
+        }
+        if (Bukkit.getPluginManager().getPlugin("WorldGuard") != null) {
+            try {
+                this.worldGuardHook = new WorldGuardHook(this);
+                this.worldGuardHook.load();
+                getLogger().info("WorldGuard integration enabled.");
+            } catch (Throwable e) {
+                getLogger().warning("WorldGuard found but hook failed: " + e.getMessage());
+                this.worldGuardHook = null;
+            }
+        }
+        this.webhookManager = new WebhookManager(this);
+        this.vanishZoneManager = new VanishZoneManager(this);
+        this.vanishZoneManager.load();
+
         // 4. Register Commands
         registerCommand("vanish", new VanishCommand(this));
         registerCommand("vperms", new VpermsCommand(this));
@@ -166,6 +211,18 @@ public class Vanishpp extends JavaPlugin implements Listener {
         registerCommand("vack", new VanishAckCommand(this));
         registerCommand("vanishreload", new VanishReloadCommand(this));
         registerCommand("vanishscoreboard", new VanishScoreboardCommand(this));
+        // New feature commands
+        VanishFollowCommand followCmd = new VanishFollowCommand(this); // self-registering listener
+        registerCommand("vspec", new VanishSpectateCommand(this));
+        registerCommand("vfollow", followCmd);
+        registerCommand("vhistory", new VanishHistoryCommand(this));
+        registerCommand("vautovanish", new VanishAutoCommand(this));
+        registerCommand("vstats", new VanishStatsCommand(this));
+        registerCommand("vadmin", new VanishAdminCommand(this));
+        registerCommand("vwand", new VanishWandCommand(this));
+        registerCommand("vchangelog", new VanishChangelogCommand(this));
+        registerCommand("vzone", new VanishZoneCommand(this));
+        registerCommand("vincognito", new IncognitoCommand(this));
 
         // Scoreboard
         saveResource("scoreboards.yml", false);
@@ -178,6 +235,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(this, this); // Preprocess listener
         if (hasPaperApi()) new MobAiManager(this).register(); // Paper API (MobGoals) required
+        getServer().getPluginManager().registerEvents(new VanishWandListener(this), this);
+        getServer().getPluginManager().registerEvents(new IncognitoListener(this), this);
+        getServer().getPluginManager().registerEvents(new VanishZoneListener(this), this);
+        if (worldGuardHook != null) {
+            getServer().getPluginManager().registerEvents(new WorldGuardVanishListener(this), this);
+        }
 
 
         boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
@@ -334,6 +397,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         if (vanishScoreboard != null) {
             vanishScoreboard.shutdown();
+        }
+        // Record sessions for all currently vanished online players
+        for (UUID uuid : new java.util.HashSet<>(vanishStartTimes.keySet())) {
+            long start = vanishStartTimes.remove(uuid);
+            long duration = System.currentTimeMillis() - start;
+            if (duration > 0 && storageProvider != null) {
+                try { storageProvider.recordVanishSession(uuid, duration); } catch (Exception ignored) {}
+            }
         }
     }
 
@@ -625,6 +696,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
         ignoredWarningPlayers.remove(uuid);
+        spectateFollowTargets.remove(uuid);
+        spectateOrigins.remove(uuid);
+        spectateOriginalGamemodes.remove(uuid);
+        incognitoNames.remove(uuid);
+        vanishReasons.remove(uuid);
+        // Record session on quit if still vanished
+        Long start = vanishStartTimes.remove(uuid);
+        if (start != null) {
+            long duration = System.currentTimeMillis() - start;
+            if (duration > 0) {
+                vanishScheduler.runAsync(() -> {
+                    try { storageProvider.recordVanishSession(uuid, duration); } catch (Exception ignored) {}
+                });
+            }
+        }
         if (vanishScoreboard != null)
             vanishScoreboard.cleanup(uuid);
     }
@@ -864,11 +950,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
             player.sendActionBar(messageManager.parse(configManager.actionBarText, player));
         }
 
+        // Track vanish start time for stats
+        vanishStartTimes.put(player.getUniqueId(), System.currentTimeMillis());
+
         UUID persistUuid = player.getUniqueId();
         String persistName = player.getName();
         int persistLevel = storageProvider.getVanishLevel(persistUuid);
+        String reason = vanishReasons.getOrDefault(persistUuid, null);
         vanishScheduler.runAsync(() -> {
             storageProvider.setVanished(persistUuid, true);
+            // Add history entry
+            try {
+                String serverName = Bukkit.getServer().getName();
+                storageProvider.addHistoryEntry(
+                    net.thecommandcraft.vanishpp.storage.VanishHistoryEntry.vanish(persistUuid, persistName, serverName, reason));
+            } catch (Exception ignored) {}
             if (proxyBridge != null && proxyBridge.isProxyDetected()) {
                 // Proxy handles cross-server broadcast
                 proxyBridge.sendVanishEvent(persistUuid, persistName, true, persistLevel);
@@ -876,6 +972,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 redisStorage.broadcastVanish(persistUuid, true);
             }
         });
+        // Update LuckPerms context
+        if (luckPermsHook != null) luckPermsHook.setVanished(player, true);
+        // Fire webhooks
+        if (webhookManager != null) {
+            webhookManager.send(player, "VANISH", reason != null ? reason : "");
+        }
 
         if (vanishScoreboard != null) {
             try {
@@ -935,16 +1037,37 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Instantly clear the action bar — don't leave it showing until the next scheduler tick
         player.sendActionBar(Component.empty());
 
+        // Record session duration
+        Long vanishStart = vanishStartTimes.remove(player.getUniqueId());
+        long sessionDuration = (vanishStart != null) ? (System.currentTimeMillis() - vanishStart) : 0L;
+
         UUID persistUuid = player.getUniqueId();
         String persistNameUv = player.getName();
         vanishScheduler.runAsync(() -> {
             storageProvider.setVanished(persistUuid, false);
+            // Add history entry
+            try {
+                String serverName = Bukkit.getServer().getName();
+                storageProvider.addHistoryEntry(
+                    net.thecommandcraft.vanishpp.storage.VanishHistoryEntry.unvanish(persistUuid, persistNameUv, serverName, null, sessionDuration));
+                if (sessionDuration > 0) {
+                    storageProvider.recordVanishSession(persistUuid, sessionDuration);
+                }
+            } catch (Exception ignored) {}
             if (proxyBridge != null && proxyBridge.isProxyDetected()) {
                 proxyBridge.sendVanishEvent(persistUuid, persistNameUv, false, 1);
             } else if (redisStorage != null) {
                 redisStorage.broadcastVanish(persistUuid, false);
             }
         });
+        // Update LuckPerms context
+        if (luckPermsHook != null) luckPermsHook.setVanished(player, false);
+        // Fire webhooks
+        if (webhookManager != null) {
+            webhookManager.send(player, "UNVANISH", "");
+        }
+        // Clear vanish reason
+        vanishReasons.remove(player.getUniqueId());
 
         if (vanishScoreboard != null) {
             try {
@@ -1008,6 +1131,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
             player.sendMessage(messageManager.parse(configManager.unvanishMessage, player));
         }
         notifyStaff(player, executor, false);
+    }
+
+    /** Vanish a player with an optional reason string. */
+    public void vanishPlayer(Player player, CommandSender executor, String reason) {
+        if (reason != null && !reason.isEmpty()) {
+            vanishReasons.put(player.getUniqueId(), reason);
+        }
+        vanishPlayer(player, executor);
     }
 
     private boolean isValidMessage(String msg) {
@@ -1195,6 +1326,58 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public boolean isWarningIgnored(Player player) {
         return ignoredWarningPlayers.contains(player.getUniqueId());
+    }
+
+    // ── New feature getters ──────────────────────────────────────────────────
+
+    public WorldGuardHook getWorldGuardHook() {
+        return worldGuardHook;
+    }
+
+    public VanishZoneManager getVanishZoneManager() {
+        return vanishZoneManager;
+    }
+
+    public LuckPermsHook getLuckPermsHook() {
+        return luckPermsHook;
+    }
+
+    public WebhookManager getWebhookManager() {
+        return webhookManager;
+    }
+
+    public boolean isIncognito(Player player) {
+        return incognitoNames.containsKey(player.getUniqueId());
+    }
+
+    public String getIncognitoName(UUID uuid) {
+        return incognitoNames.get(uuid);
+    }
+
+    public String getVanishReason(UUID uuid) {
+        return vanishReasons.get(uuid);
+    }
+
+    /** Returns the epoch-ms timestamp when this player entered vanish, or -1 if not vanished. */
+    public long getVanishStartTime(UUID uuid) {
+        return vanishStartTimes.getOrDefault(uuid, -1L);
+    }
+
+    /** Updates the vanish reason for an already-vanished player (API support). */
+    public void setVanishReason(UUID uuid, String reason) {
+        if (reason == null || reason.isEmpty()) {
+            vanishReasons.remove(uuid);
+        } else {
+            vanishReasons.put(uuid, reason);
+        }
+    }
+
+    /**
+     * Returns ms remaining on a timed vanish, or -1 if the vanish is not timed.
+     * Timed vanish is not yet implemented — always returns -1.
+     */
+    public long getTimedRemaining(UUID uuid) {
+        return -1L;
     }
 
     public void setWarningIgnored(Player player, boolean ignored) {

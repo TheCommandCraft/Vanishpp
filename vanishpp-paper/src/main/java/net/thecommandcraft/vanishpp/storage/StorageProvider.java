@@ -1,8 +1,9 @@
 package net.thecommandcraft.vanishpp.storage;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Map;
 
 public interface StorageProvider {
 
@@ -43,4 +44,36 @@ public interface StorageProvider {
 
     /** Returns all notification IDs acknowledged by this player. */
     Set<String> getAcknowledgements(UUID uuid);
+
+    // ── Rule Presets ──────────────────────────────────────────────────────────
+
+    void saveRulePreset(UUID uuid, String presetName, Map<String, Boolean> rules);
+
+    Map<String, Boolean> loadRulePreset(UUID uuid, String presetName);
+
+    Set<String> listRulePresets(UUID uuid);
+
+    void deleteRulePreset(UUID uuid, String presetName);
+
+    // ── Per-player Preferences ────────────────────────────────────────────────
+
+    boolean getAutoVanishOnJoin(UUID uuid);
+
+    void setAutoVanishOnJoin(UUID uuid, boolean value);
+
+    // ── Vanish History ────────────────────────────────────────────────────────
+
+    void addHistoryEntry(VanishHistoryEntry entry);
+
+    List<VanishHistoryEntry> getPlayerHistory(UUID uuid, int page, int perPage);
+
+    List<VanishHistoryEntry> getAllHistory(int page, int perPage);
+
+    int pruneHistory(int retentionDays);
+
+    // ── Vanish Statistics ─────────────────────────────────────────────────────
+
+    VanishStats getStats(UUID uuid);
+
+    void recordVanishSession(UUID uuid, long durationMs);
 }

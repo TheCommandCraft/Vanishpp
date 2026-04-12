@@ -63,6 +63,22 @@ public class ConfigManager {
     public List<String> updateCheckerList;
     public Map<String, Boolean> defaultRules = new HashMap<>();
 
+    // Vanish Wand
+    public boolean wandEnabled;
+    public String wandMaterial, wandDisplayName;
+
+    // Incognito
+    public List<String> incognitoFakeNames;
+
+    // Webhooks
+    public boolean webhookEnabled;
+    public List<String> webhookUrls;
+    public String webhookPayloadTemplate, webhookAuthHeader;
+
+    // Bossbar
+    public boolean bossbarEnabled;
+    public String bossbarTitle, bossbarColor, bossbarStyle;
+
     public ConfigManager(Vanishpp plugin) {
         this.plugin = plugin;
         this.languageManager = new LanguageManager(plugin);
@@ -217,6 +233,30 @@ public class ConfigManager {
                 defaultRules.put(key, rulesSection.getBoolean(key));
             }
         }
+
+        // Vanish Wand
+        wandEnabled = config.getBoolean("vanish-wand.enabled", true);
+        wandMaterial = config.getString("vanish-wand.material", "BLAZE_ROD");
+        wandDisplayName = config.getString("vanish-wand.display-name", "<gold><bold>Vanish Wand</bold></gold>");
+
+        // Incognito fake names
+        incognitoFakeNames = config.getStringList("incognito.fake-names");
+        if (incognitoFakeNames.isEmpty()) {
+            incognitoFakeNames = List.of("Steve", "Alex", "Notch", "Herobrine", "Player");
+        }
+
+        // Webhooks
+        webhookEnabled = config.getBoolean("webhook.enabled", false);
+        webhookUrls = config.getStringList("webhook.urls");
+        webhookPayloadTemplate = config.getString("webhook.payload-template",
+            "{\"player\":\"{player}\",\"action\":\"{action}\",\"reason\":\"{reason}\",\"server\":\"{server}\",\"timestamp\":\"{timestamp}\"}");
+        webhookAuthHeader = config.getString("webhook.authorization", "");
+
+        // Bossbar
+        bossbarEnabled = config.getBoolean("bossbar.enabled", false);
+        bossbarTitle = config.getString("bossbar.title", "<gold>✦ You are <red>Vanished</red></gold>");
+        bossbarColor = config.getString("bossbar.color", "GOLD");
+        bossbarStyle = config.getString("bossbar.style", "PROGRESS");
     }
 
     public int getLatestVersion() {

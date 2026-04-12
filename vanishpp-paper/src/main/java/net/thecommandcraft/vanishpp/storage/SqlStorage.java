@@ -6,7 +6,12 @@ import net.thecommandcraft.vanishpp.Vanishpp;
 
 import javax.sql.DataSource;
 import java.sql.*;
+import java.time.Instant;
 import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 
 public class SqlStorage implements StorageProvider {
 
@@ -80,7 +85,7 @@ public class SqlStorage implements StorageProvider {
         }
     }
 
-    private static final int CURRENT_SCHEMA_VERSION = 2;
+    private static final int CURRENT_SCHEMA_VERSION = 3;
 
     private void runSchemaMigrations(Connection conn) throws SQLException {
         int version;
@@ -93,11 +98,65 @@ public class SqlStorage implements StorageProvider {
         // Schema migration chain: run all migrations from current version upwards
         if (version < 2) {
             try (Statement st = conn.createStatement()) {
-                // Schema v2: Add created_at and updated_at columns for audit trails
-                // Use a helper method to safely add columns that might already exist
                 addColumnIfNotExists(st, "vpp_vanished", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
                 addColumnIfNotExists(st, "vpp_rules", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
                 addColumnIfNotExists(st, "vpp_levels", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+            }
+        }
+
+        if (version < 3) {
+            try (Statement st = conn.createStatement()) {
+                // v3: rule presets, preferences, history, stats tables
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_rule_presets ("
+                        + "uuid VARCHAR(36), preset_name VARCHAR(64), rule_key VARCHAR(64), rule_value TEXT,"
+                        + "PRIMARY KEY(uuid, preset_name, rule_key))");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_preferences ("
+                        + "uuid VARCHAR(36), pref_key VARCHAR(64), pref_value TEXT,"
+                        + "PRIMARY KEY(uuid, pref_key))");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_history ("
+                        + "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                        + "uuid VARCHAR(36) NOT NULL,"
+                        + "player_name VARCHAR(64),"
+                        + "action VARCHAR(16) NOT NULL,"
+                        + "timestamp BIGINT NOT NULL,"
+                        + "server VARCHAR(64),"
+                        + "reason TEXT,"
+                        + "duration_ms BIGINT DEFAULT 0,"
+                        + "INDEX idx_hist_uuid (uuid),"
+                        + "INDEX idx_hist_ts (timestamp))");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_stats ("
+                        + "uuid VARCHAR(36) PRIMARY KEY,"
+                        + "total_ms BIGINT DEFAULT 0,"
+                        + "vanish_count INT DEFAULT 0,"
+                        + "longest_ms BIGINT DEFAULT 0)");
+            }
+            // PostgreSQL uses SERIAL / SEQUENCE instead of AUTO_INCREMENT
+            if (type.equals("postgresql")) {
+                try (Statement st = conn.createStatement()) {
+                    st.execute("CREATE TABLE IF NOT EXISTS vpp_rule_presets ("
+                            + "uuid VARCHAR(36), preset_name VARCHAR(64), rule_key VARCHAR(64), rule_value TEXT,"
+                            + "PRIMARY KEY(uuid, preset_name, rule_key))");
+                    st.execute("CREATE TABLE IF NOT EXISTS vpp_preferences ("
+                            + "uuid VARCHAR(36), pref_key VARCHAR(64), pref_value TEXT,"
+                            + "PRIMARY KEY(uuid, pref_key))");
+                    st.execute("CREATE SEQUENCE IF NOT EXISTS vpp_history_id_seq");
+                    st.execute("CREATE TABLE IF NOT EXISTS vpp_history ("
+                            + "id BIGINT DEFAULT nextval('vpp_history_id_seq') PRIMARY KEY,"
+                            + "uuid VARCHAR(36) NOT NULL,"
+                            + "player_name VARCHAR(64),"
+                            + "action VARCHAR(16) NOT NULL,"
+                            + "timestamp BIGINT NOT NULL,"
+                            + "server VARCHAR(64),"
+                            + "reason TEXT,"
+                            + "duration_ms BIGINT DEFAULT 0)");
+                    st.execute("CREATE INDEX IF NOT EXISTS idx_hist_uuid ON vpp_history(uuid)");
+                    st.execute("CREATE INDEX IF NOT EXISTS idx_hist_ts  ON vpp_history(timestamp)");
+                    st.execute("CREATE TABLE IF NOT EXISTS vpp_stats ("
+                            + "uuid VARCHAR(36) PRIMARY KEY,"
+                            + "total_ms BIGINT DEFAULT 0,"
+                            + "vanish_count INT DEFAULT 0,"
+                            + "longest_ms BIGINT DEFAULT 0)");
+                }
             }
         }
 
@@ -327,6 +386,212 @@ public class SqlStorage implements StorageProvider {
         }
     }
 
+    // ── Rule Presets ──────────────────────────────────────────────────────────
+
+    @Override
+    public void saveRulePreset(UUID uuid, String presetName, Map<String, Boolean> rules) {
+        // Delete existing rows for this preset first, then re-insert
+        String del = "DELETE FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?";
+        String ins = type.equals("postgresql")
+                ? "INSERT INTO vpp_rule_presets (uuid, preset_name, rule_key, rule_value) VALUES (?,?,?,?)"
+                  + " ON CONFLICT (uuid, preset_name, rule_key) DO UPDATE SET rule_value = EXCLUDED.rule_value"
+                : "REPLACE INTO vpp_rule_presets (uuid, preset_name, rule_key, rule_value) VALUES (?,?,?,?)";
+        try (Connection conn = dataSource.getConnection()) {
+            try (PreparedStatement d = conn.prepareStatement(del)) {
+                d.setString(1, uuid.toString()); d.setString(2, presetName); d.executeUpdate();
+            }
+            try (PreparedStatement i = conn.prepareStatement(ins)) {
+                for (Map.Entry<String, Boolean> e : rules.entrySet()) {
+                    i.setString(1, uuid.toString()); i.setString(2, presetName);
+                    i.setString(3, e.getKey()); i.setString(4, e.getValue().toString());
+                    i.addBatch();
+                }
+                i.executeBatch();
+            }
+        } catch (SQLException e) { handleDatabaseError(e); }
+    }
+
+    @Override
+    public Map<String, Boolean> loadRulePreset(UUID uuid, String presetName) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT rule_key, rule_value FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?")) {
+            ps.setString(1, uuid.toString()); ps.setString(2, presetName);
+            try (ResultSet rs = ps.executeQuery()) {
+                Map<String, Boolean> result = new LinkedHashMap<>();
+                while (rs.next())
+                    result.put(rs.getString("rule_key"), Boolean.parseBoolean(rs.getString("rule_value")));
+                return result.isEmpty() ? null : result;
+            }
+        } catch (SQLException e) { handleDatabaseError(e); return null; }
+    }
+
+    @Override
+    public Set<String> listRulePresets(UUID uuid) {
+        Set<String> names = new LinkedHashSet<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT DISTINCT preset_name FROM vpp_rule_presets WHERE uuid = ?")) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) names.add(rs.getString("preset_name"));
+            }
+        } catch (SQLException e) { handleDatabaseError(e); }
+        return names;
+    }
+
+    @Override
+    public void deleteRulePreset(UUID uuid, String presetName) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "DELETE FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?")) {
+            ps.setString(1, uuid.toString()); ps.setString(2, presetName);
+            ps.executeUpdate();
+        } catch (SQLException e) { handleDatabaseError(e); }
+    }
+
+    // ── Preferences ───────────────────────────────────────────────────────────
+
+    @Override
+    public boolean getAutoVanishOnJoin(UUID uuid) {
+        return getPref(uuid, "auto_vanish_join", "false").equalsIgnoreCase("true");
+    }
+
+    @Override
+    public void setAutoVanishOnJoin(UUID uuid, boolean value) {
+        setPref(uuid, "auto_vanish_join", String.valueOf(value));
+    }
+
+    private String getPref(UUID uuid, String key, String def) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT pref_value FROM vpp_preferences WHERE uuid = ? AND pref_key = ?")) {
+            ps.setString(1, uuid.toString()); ps.setString(2, key);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getString("pref_value");
+            }
+        } catch (SQLException e) { handleDatabaseError(e); }
+        return def;
+    }
+
+    private void setPref(UUID uuid, String key, String value) {
+        String q = type.equals("postgresql")
+                ? "INSERT INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?) ON CONFLICT (uuid,pref_key) DO UPDATE SET pref_value=EXCLUDED.pref_value"
+                : "REPLACE INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?)";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(q)) {
+            ps.setString(1, uuid.toString()); ps.setString(2, key); ps.setString(3, value);
+            ps.executeUpdate();
+        } catch (SQLException e) { handleDatabaseError(e); }
+    }
+
+    // ── Vanish History ────────────────────────────────────────────────────────
+
+    @Override
+    public void addHistoryEntry(VanishHistoryEntry entry) {
+        String q = "INSERT INTO vpp_history (uuid,player_name,action,timestamp,server,reason,duration_ms)"
+                + " VALUES (?,?,?,?,?,?,?)";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(q)) {
+            ps.setString(1, entry.getPlayerUuid().toString());
+            ps.setString(2, entry.getPlayerName());
+            ps.setString(3, entry.getAction().name());
+            ps.setLong(4, entry.getTimestamp().toEpochMilli());
+            ps.setString(5, entry.getServer());
+            ps.setString(6, entry.getReason() != null ? entry.getReason() : "");
+            ps.setLong(7, entry.getDurationMs());
+            ps.executeUpdate();
+        } catch (SQLException e) { handleDatabaseError(e); }
+    }
+
+    @Override
+    public List<VanishHistoryEntry> getPlayerHistory(UUID uuid, int page, int perPage) {
+        String q = "SELECT * FROM vpp_history WHERE uuid = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?";
+        return queryHistory(q, uuid.toString(), perPage, (page - 1) * perPage);
+    }
+
+    @Override
+    public List<VanishHistoryEntry> getAllHistory(int page, int perPage) {
+        String q = "SELECT * FROM vpp_history ORDER BY timestamp DESC LIMIT ? OFFSET ?";
+        return queryHistory(q, null, perPage, (page - 1) * perPage);
+    }
+
+    private List<VanishHistoryEntry> queryHistory(String query, String uuidFilter, int limit, int offset) {
+        List<VanishHistoryEntry> list = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(query)) {
+            int idx = 1;
+            if (uuidFilter != null) ps.setString(idx++, uuidFilter);
+            ps.setInt(idx++, limit);
+            ps.setInt(idx, offset);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new VanishHistoryEntry(
+                            UUID.fromString(rs.getString("uuid")),
+                            rs.getString("player_name"),
+                            VanishHistoryEntry.Action.valueOf(rs.getString("action")),
+                            java.time.Instant.ofEpochMilli(rs.getLong("timestamp")),
+                            rs.getString("server"),
+                            rs.getString("reason"),
+                            rs.getLong("duration_ms")));
+                }
+            }
+        } catch (SQLException e) { handleDatabaseError(e); }
+        return list;
+    }
+
+    @Override
+    public int pruneHistory(int retentionDays) {
+        if (retentionDays <= 0) return 0;
+        long cutoff = java.time.Instant.now().minusSeconds((long) retentionDays * 86400).toEpochMilli();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "DELETE FROM vpp_history WHERE timestamp < ?")) {
+            ps.setLong(1, cutoff);
+            return ps.executeUpdate();
+        } catch (SQLException e) { handleDatabaseError(e); return 0; }
+    }
+
+    // ── Vanish Statistics ─────────────────────────────────────────────────────
+
+    @Override
+    public VanishStats getStats(UUID uuid) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT total_ms, vanish_count, longest_ms FROM vpp_stats WHERE uuid = ?")) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next())
+                    return new VanishStats(rs.getLong("total_ms"),
+                            rs.getInt("vanish_count"), rs.getLong("longest_ms"));
+            }
+        } catch (SQLException e) { handleDatabaseError(e); }
+        return VanishStats.empty();
+    }
+
+    @Override
+    public void recordVanishSession(UUID uuid, long durationMs) {
+        if (durationMs <= 0) return;
+        String q = type.equals("postgresql")
+                ? "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,1,?)"
+                  + " ON CONFLICT (uuid) DO UPDATE SET total_ms=vpp_stats.total_ms+EXCLUDED.total_ms,"
+                  + " vanish_count=vpp_stats.vanish_count+1,"
+                  + " longest_ms=GREATEST(vpp_stats.longest_ms,EXCLUDED.longest_ms)"
+                : "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,1,?)"
+                  + " ON DUPLICATE KEY UPDATE total_ms=total_ms+VALUES(total_ms),"
+                  + " vanish_count=vanish_count+1,"
+                  + " longest_ms=GREATEST(longest_ms,VALUES(longest_ms))";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(q)) {
+            ps.setString(1, uuid.toString());
+            ps.setLong(2, durationMs);
+            ps.setLong(3, durationMs);
+            ps.executeUpdate();
+        } catch (SQLException e) { handleDatabaseError(e); }
+    }
+
+    // ── Existing methods ──────────────────────────────────────────────────────
+
     @Override
     public Set<UUID> getAllKnownPlayers() {
         Set<UUID> uuids = new HashSet<>();
@@ -364,26 +629,14 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void removePlayerData(UUID uuid) {
-        // Clears rule customizations, acknowledgements, and permission levels.
-        // Vanish state is NOT cleared here — it's managed separately via vanish/unvanish commands.
-        // This separation allows admins to remove a player's rule cache without affecting vanish status.
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {
-                // Delete rules
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_rules WHERE uuid = ?")) {
-                    ps.setString(1, uuid.toString());
-                    ps.executeUpdate();
-                }
-                // Delete acknowledgements
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_acknowledgements WHERE uuid = ?")) {
-                    ps.setString(1, uuid.toString());
-                    ps.executeUpdate();
-                }
-                // Delete permission levels
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_levels WHERE uuid = ?")) {
-                    ps.setString(1, uuid.toString());
-                    ps.executeUpdate();
+                for (String table : new String[]{"vpp_rules","vpp_acknowledgements","vpp_levels",
+                                                 "vpp_rule_presets","vpp_preferences","vpp_stats"}) {
+                    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM " + table + " WHERE uuid = ?")) {
+                        ps.setString(1, uuid.toString()); ps.executeUpdate();
+                    }
                 }
                 conn.commit();
             } catch (SQLException e) {

@@ -141,6 +141,20 @@ public class PlayerListener implements Listener {
             });
         }
 
+        // Auto-vanish on join: if player enabled this preference, vanish them now
+        // Only applies if they are not already vanished after reconciliation
+        if (!plugin.isVanished(player) && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")) {
+            plugin.getVanishScheduler().runAsync(() -> {
+                boolean autoVanish = plugin.getStorageProvider().getAutoVanishOnJoin(joinUuid);
+                if (autoVanish) {
+                    plugin.getVanishScheduler().runGlobal(() -> {
+                        if (!player.isOnline() || plugin.isVanished(player)) return;
+                        plugin.vanishPlayer(player, player);
+                    });
+                }
+            });
+        }
+
         // DELAYED NOTIFICATIONS (250ms / 5 Ticks)
         plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (!player.isOnline())

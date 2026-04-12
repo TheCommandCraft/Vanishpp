@@ -82,5 +82,15 @@
             <id>scarsz</id>
             <url>https://nexus.scarsz.me/content/groups/public/</url>
         </repository>
+        <!-- LuckPerms -->
+        <repository>
+            <id>lucko</id>
+            <url>https://repo.lucko.me/</url>
+        </repository>
+        <!-- WorldGuard / WorldEdit -->
+        <repository>
+            <id>sk89q-repo</id>
+            <url>https://maven.enginehub.org/repo/</url>
+        </repository>
     </repositories>
 </project>

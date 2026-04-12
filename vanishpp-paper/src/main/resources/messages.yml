@@ -33,13 +33,6 @@ update:
   latest: "&7Latest: &a%version%"
   download: "&6&l[CLICK TO DOWNLOAD]"
   hover: "&eGo to Modrinth Version %version%"
-  # Proxy update notification — shown when the Velocity proxy plugin has an update
-  proxy-available: "&a&lVanish++ Proxy Update Available!"
-  proxy-note: "&7The &eVelocity proxy plugin &7needs updating — not this server's plugin."
-  proxy-current: "&7Proxy running: &c%version%"
-  proxy-latest: "&7New proxy version: &a%version%"
-  proxy-download: "&6&l[DOWNLOAD PROXY UPDATE]"
-  proxy-hover: "&eDownload Vanish++ Velocity %version% from Modrinth"
 
 # --- [ RULES COMMAND ] ---
 rules:
@@ -105,14 +98,6 @@ config:
   current-value: "&6%path% &7is currently: &f%value%"
   usage: "&cUsage: /vconfig <key> [value]"
   sensitive-warning: "&c⚠ Warning: &e%path% &cis a sensitive setting. Changing it may affect server stability. Run the command again with &b--confirm &cto apply."
-  proxy-synced: "&7↳ &aSynced to proxy &7— all connected servers updated."
-  proxy-not-connected: "&cNo proxy detected. Cannot sync."
-  proxy-nothing-to-sync: "&7All settings are already at their defaults — nothing to sync."
-  proxy-applied: "&a%count% setting(s) applied to proxy &7— all connected servers updated."
-  proxy-mismatch-title: "Proxy Config Mismatch"
-  proxy-mismatch-line1: "&eThis server's config has settings that differ from the defaults."
-  proxy-mismatch-line2: "&7When using a proxy, configure settings in the &eproxy config.yml&7."
-  proxy-mismatch-line3: "&7&o/vconfig changes automatically apply to the proxy while connected."
 
 # --- [ PLUGIN LIST ] ---
 plugins:
@@ -148,6 +133,92 @@ spectator:
 # --- [ SILENT CHEST ] ---
 silent-chest:
   blocked: "&cYou cannot open this silently (Inventory Type not supported or protected)."
+
+# --- [ TIMED VANISH ] ---
+timed-vanish:
+  expired: "&eYour timed vanish has expired."
+  set: "&aYou will be unvanished in &e%seconds%s&a."
+  invalid-duration: "&cInvalid duration. Use formats like &e30s&c, &e5m&c, &e1h&c."
+
+# --- [ RATE LIMIT ] ---
+rate-limit:
+  blocked: "&cYou are toggling vanish too quickly. Please wait a moment."
+
+# --- [ ANTI-COMBAT VANISH ] ---
+combat:
+  pvp-cooldown: "&cCannot vanish — PvP cooldown (%seconds%s remaining)."
+  pve-cooldown: "&cCannot vanish — PvE cooldown (%seconds%s remaining)."
+
+# --- [ VSPEC COMMAND ] ---
+vspec:
+  usage: "&cUsage: /vspec <player|stop>"
+  started: "&bNow spectating &e%player%&b. Use &f/vspec stop &bto return."
+  stopped: "&aReturned to your previous location and gamemode."
+  not-spectating: "&cYou are not currently spectating anyone."
+
+# --- [ VFOLLOW COMMAND ] ---
+vfollow:
+  usage: "&cUsage: /vfollow <player|stop>"
+  must-be-vanished: "&cYou must be vanished to use /vfollow."
+  started: "&bNow following &e%player%&b. Use &f/vfollow stop &bto release."
+  stopped: "&aCamera lock released."
+  not-following: "&cYou are not currently following anyone."
+  target-disconnected: "&e%player% disconnected. Follow mode ended."
+
+# --- [ HISTORY COMMAND ] ---
+history:
+  no-entries: "&7No history entries found."
+
+# --- [ AUTO-VANISH ] ---
+auto-vanish:
+  enabled: "&aAuto-vanish on join is now &2ENABLED &afor &e%player%&a."
+  disabled: "&cAuto-vanish on join is now &4DISABLED &cfor &e%player%&c."
+
+# --- [ STATS COMMAND ] ---
+stats:
+  header: "&6Vanish Statistics &7— &e%player%"
+  total-time: " &7Total time: &f%time%"
+  session-count: " &7Sessions: &f%count%"
+  longest-session: " &7Longest session: &f%time%"
+
+# --- [ AFK ] ---
+afk:
+  auto-vanished: "&7You have been automatically vanished due to inactivity."
+  unvanished-on-return: "&aWelcome back! You have been automatically unvanished."
+
+# --- [ WORLDGUARD ] ---
+worldguard:
+  deny-vanish: "&cYou cannot vanish in this region."
+  deny-unvanish: "&cYou cannot unvanish in this region."
+  force-vanished: "&7You have been automatically vanished in this region."
+
+# --- [ ZONES ] ---
+zone:
+  usage: "&cUsage: /vzone <create|delete|list|reload>"
+  create-usage: "&cUsage: /vzone create <name> [radius]"
+  delete-usage: "&cUsage: /vzone delete <name>"
+  created: "&aNo-vanish zone &e%name% &acreated with radius &e%radius%m&a."
+  deleted: "&aZone &e%name% &adeleted."
+  already-exists: "&cA zone named &e%name% &calready exists."
+  not-found: "&cZone &e%name% &cnot found."
+  none: "&7No no-vanish zones are configured."
+  list-header: "&6No-Vanish Zones &7(%count%):"
+  list-entry: " &8• &e%name% &7— &f%world% &7(&fX:%x% Z:%z%&7, r=&f%radius%m&7)"
+  reloaded: "&aZones reloaded."
+  forced-unvanish: "&cYou have been unvanished — &e%zone% &cis a no-vanish zone."
+  invalid-radius: "&cRadius must be a positive number."
+
+# --- [ INCOGNITO ] ---
+incognito:
+  enabled: "&bIncognito mode &2ENABLED &bfor &e%player%&b. Fake name: &f%fakename%"
+  disabled: "&bIncognito mode &4DISABLED &bfor &e%player%&b."
+  not-active: "&e%player% &7is not in incognito mode."
+  invalid-name: "&cFake name must be 1–16 characters and non-blank."
+
+# --- [ WAND ] ---
+wand:
+  given: "&aVanish wand placed in your inventory."
+  disabled: "&cThe vanish wand feature is not enabled on this server."
 
 # --- [ HELP MENU ] ---
 help:

@@ -206,6 +206,103 @@ scoreboard:
   # Players can still toggle manually with /vsb regardless of this setting.
   auto-show-on-vanish: true
 
+# --- [ ANTI-COMBAT VANISH ] ---
+# Prevent staff from vanishing immediately after combat.
+anti-combat-vanish:
+  enabled: false
+  # Seconds after PvP damage before vanish is allowed again.
+  pvp-cooldown-seconds: 10
+  # Seconds after PvE damage before vanish is allowed again.
+  pve-cooldown-seconds: 5
+
+# --- [ VANISH RATE LIMIT ] ---
+# Prevent rapid vanish/unvanish toggling.
+vanish-rate-limit:
+  enabled: false
+  # Minimum seconds between consecutive vanish toggles.
+  seconds: 3
+
+# --- [ TIMED VANISH ] ---
+# Allow vanish with an automatic expiry timer (/vanish <player> <duration>).
+timed-vanish:
+  enabled: true
+
+# --- [ STAFF SOUNDS ] ---
+# Play sounds to staff when a player vanishes/unvanishes.
+staff-sounds:
+  enabled: false
+  vanish:
+    sound: "BLOCK_NOTE_BLOCK_PLING"
+    volume: 1.0
+    pitch: 1.2
+  unvanish:
+    sound: "BLOCK_NOTE_BLOCK_PLING"
+    volume: 1.0
+    pitch: 0.8
+
+# --- [ BOSSBAR ] ---
+# Show a bossbar to the vanished player as a status indicator.
+bossbar:
+  enabled: true
+  title: "&7[Vanished]"
+  color: "BLUE"
+  style: "SOLID"
+
+# --- [ VANISH HISTORY ] ---
+# Audit log of vanish/unvanish events.
+vanish-history:
+  enabled: true
+  # Days to keep history entries. Set to 0 to keep forever.
+  retention-days: 30
+
+# --- [ PER-WORLD RULE DEFAULTS ] ---
+# Override default vanish rules for specific worlds.
+# world-rules:
+#   world_nether:
+#     can_break_blocks: true
+#   world_the_end:
+#     mob_targeting: true
+world-rules: {}
+
+# --- [ WEBHOOK ] ---
+# POST vanish/unvanish events to external URLs (e.g., Discord bots, dashboards).
+webhook:
+  enabled: false
+  urls: []
+  # Template variables: {player}, {uuid}, {action}, {reason}, {server}, {timestamp}
+  payload-template: '{"player":"{player}","action":"{action}","reason":"{reason}","server":"{server}","timestamp":"{timestamp}"}'
+  # Optional Authorization header value (e.g., "Bearer mytoken")
+  auth-header: ""
+
+# --- [ WORLDGUARD ] ---
+worldguard:
+  enabled: true
+
+# --- [ AFK AUTO-VANISH ] ---
+afk-auto-vanish:
+  enabled: false
+  # Seconds of no movement before auto-vanishing.
+  seconds: 300
+
+# --- [ VANISH WAND ] ---
+vanish-wand:
+  enabled: true
+  material: "BLAZE_ROD"
+  display-name: "&6✦ Vanish Wand"
+
+# --- [ INCOGNITO ] ---
+incognito:
+  # Pool of fake names to randomly assign. Must be valid (≤16 chars).
+  fake-names:
+    - "Steve"
+    - "Alex"
+    - "Notch"
+    - "Herobrine"
+    - "Jeb_"
+    - "Dinnerbone"
+    - "grumm"
+    - "Technoblade"
+
 # --- [ UPDATE CHECKER ] ---
 update-checker:
   # Whether to check for plugin updates on startup.
@@ -223,19 +320,3 @@ permissions:
   default-vanish-level: 1
   default-see-level: 1
   max-level: 100
-
-# --- [ PROXY ] ---
-# Settings for Vanish++ Velocity proxy integration.
-# When a VanishPP Velocity proxy is detected, all config values are pushed from
-# the proxy and cached locally. This section is only used for proxy connection
-# identity — it is NOT overwritten by the proxy.
-proxy:
-  # The name of this server as registered in velocity.toml [servers].
-  # Used to match per-server config overrides from the proxy's servers: section.
-  # Leave empty to fall back to IP:port detection (less reliable).
-  server-name: ""
-
-  # If true and a VanishPP proxy is detected, /vanishlist shows players vanished
-  # on ALL proxy servers, not just this one.
-  # Vanilla and other plugins are never affected — only Vanish++ commands.
-  cross-server-list: true

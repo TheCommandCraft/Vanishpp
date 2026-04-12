@@ -42,4 +42,8 @@ public class LanguageManager {
         }
         return msg;
     }
+
+    public java.util.List<String> getStringList(String path) {
+        return langConfig.getStringList(path);
+    }
 }
