@@ -62,6 +62,63 @@ public class ConfigManager {
     public List<String> updateCheckerList;
     public Map<String, Boolean> defaultRules = new HashMap<>();
 
+    // ── New feature flags ────────────────────────────────────────────────────
+
+    // Anti-combat vanish
+    public boolean antiCombatVanishEnabled;
+    public int antiCombatPvpSeconds;
+    public int antiCombatPveSeconds;
+
+    // Vanish rate-limit
+    public boolean rateLimitEnabled;
+    public int rateLimitSeconds;
+
+    // Timed vanish
+    public boolean timedVanishEnabled;
+
+    // Staff sounds
+    public boolean staffSoundsEnabled;
+    public String staffSoundVanish;
+    public float staffSoundVanishVolume;
+    public float staffSoundVanishPitch;
+    public String staffSoundUnvanish;
+    public float staffSoundUnvanishVolume;
+    public float staffSoundUnvanishPitch;
+
+    // Bossbar
+    public boolean bossbarEnabled;
+    public String bossbarTitle;
+    public String bossbarColor;
+    public String bossbarStyle;
+
+    // Vanish history
+    public boolean historyEnabled;
+    public int historyRetentionDays;
+
+    // Per-world rule defaults
+    public Map<String, Map<String, Boolean>> worldRules = new HashMap<>();
+
+    // Webhook
+    public boolean webhookEnabled;
+    public List<String> webhookUrls;
+    public String webhookPayloadTemplate;
+    public String webhookAuthHeader;
+
+    // WorldGuard integration
+    public boolean worldGuardEnabled;
+
+    // Auto-vanish on AFK
+    public boolean afkAutoVanishEnabled;
+    public int afkAutoVanishSeconds;
+
+    // Vanish wand
+    public boolean wandEnabled;
+    public String wandMaterial;
+    public String wandDisplayName;
+
+    // Incognito mode
+    public List<String> incognitoFakeNames;
+
     public ConfigManager(Vanishpp plugin) {
         this.plugin = plugin;
         this.languageManager = new LanguageManager(plugin);
@@ -215,6 +272,64 @@ public class ConfigManager {
             for (String key : rulesSection.getKeys(false)) {
                 defaultRules.put(key, rulesSection.getBoolean(key));
             }
+        }
+
+        // ── New features ─────────────────────────────────────────────────────
+        antiCombatVanishEnabled = config.getBoolean("anti-combat-vanish.enabled", true);
+        antiCombatPvpSeconds    = config.getInt("anti-combat-vanish.pvp-cooldown-seconds", 10);
+        antiCombatPveSeconds    = config.getInt("anti-combat-vanish.pve-cooldown-seconds", 5);
+
+        rateLimitEnabled  = config.getBoolean("vanish-rate-limit.enabled", true);
+        rateLimitSeconds  = config.getInt("vanish-rate-limit.cooldown-seconds", 2);
+
+        timedVanishEnabled = config.getBoolean("timed-vanish.enabled", true);
+
+        staffSoundsEnabled        = config.getBoolean("staff-sounds.enabled", true);
+        staffSoundVanish          = config.getString("staff-sounds.vanish.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
+        staffSoundVanishVolume    = (float) config.getDouble("staff-sounds.vanish.volume", 1.0);
+        staffSoundVanishPitch     = (float) config.getDouble("staff-sounds.vanish.pitch", 1.2f);
+        staffSoundUnvanish        = config.getString("staff-sounds.unvanish.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
+        staffSoundUnvanishVolume  = (float) config.getDouble("staff-sounds.unvanish.volume", 1.0);
+        staffSoundUnvanishPitch   = (float) config.getDouble("staff-sounds.unvanish.pitch", 0.8f);
+
+        bossbarEnabled = config.getBoolean("bossbar.enabled", false);
+        bossbarTitle   = config.getString("bossbar.title", "&bYou are VANISHED");
+        bossbarColor   = config.getString("bossbar.color", "BLUE");
+        bossbarStyle   = config.getString("bossbar.style", "SOLID");
+
+        historyEnabled       = config.getBoolean("vanish-history.enabled", true);
+        historyRetentionDays = config.getInt("vanish-history.retention-days", 30);
+
+        worldRules.clear();
+        ConfigurationSection worldSection = config.getConfigurationSection("world-rules");
+        if (worldSection != null) {
+            for (String worldName : worldSection.getKeys(false)) {
+                ConfigurationSection ws = worldSection.getConfigurationSection(worldName);
+                if (ws == null) continue;
+                Map<String, Boolean> wRules = new HashMap<>();
+                for (String ruleKey : ws.getKeys(false)) wRules.put(ruleKey, ws.getBoolean(ruleKey));
+                worldRules.put(worldName, wRules);
+            }
+        }
+
+        webhookEnabled         = config.getBoolean("webhook.enabled", false);
+        webhookUrls            = config.getStringList("webhook.urls");
+        webhookPayloadTemplate = config.getString("webhook.payload-template",
+                "{\"text\":\"{player} {action} on {server}\"}");
+        webhookAuthHeader      = config.getString("webhook.authorization", "");
+
+        worldGuardEnabled = config.getBoolean("worldguard.enabled", true);
+
+        afkAutoVanishEnabled = config.getBoolean("afk-auto-vanish.enabled", false);
+        afkAutoVanishSeconds = config.getInt("afk-auto-vanish.idle-seconds", 300);
+
+        wandEnabled     = config.getBoolean("vanish-wand.enabled", true);
+        wandMaterial    = config.getString("vanish-wand.material", "BLAZE_ROD");
+        wandDisplayName = config.getString("vanish-wand.display-name", "&6Vanish Wand");
+
+        incognitoFakeNames = config.getStringList("incognito.fake-names");
+        if (incognitoFakeNames.isEmpty()) {
+            incognitoFakeNames = List.of("Steve","Alex","Notch","Herobrine","Player");
         }
     }
 

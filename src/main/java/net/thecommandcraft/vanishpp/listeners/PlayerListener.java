@@ -828,4 +828,77 @@ public class PlayerListener implements Listener {
         }
     }
 
+    // ── Anti-Combat Vanish Tracking ───────────────────────────────────────────
+
+    /** Track PvP and PvE combat timestamps for the anti-combat-vanish feature. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCombatDamage(EntityDamageByEntityEvent event) {
+        if (!config.antiCombatVanishEnabled) return;
+        long now = System.currentTimeMillis();
+
+        // Damager tracking (both PvP and PvE)
+        if (event.getDamager() instanceof Player damager) {
+            if (event.getEntity() instanceof Player) {
+                plugin.lastPvpCombat.put(damager.getUniqueId(), now);
+            } else {
+                plugin.lastPveCombat.put(damager.getUniqueId(), now);
+            }
+        }
+
+        // Victim tracking (PvP only for victim)
+        if (event.getEntity() instanceof Player victim) {
+            if (event.getDamager() instanceof Player || event.getDamager() instanceof org.bukkit.entity.Projectile) {
+                plugin.lastPvpCombat.put(victim.getUniqueId(), now);
+            } else {
+                plugin.lastPveCombat.put(victim.getUniqueId(), now);
+            }
+        }
+    }
+
+    // ── AFK Detection + Auto-Vanish-on-Join ──────────────────────────────────
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onMove(PlayerMoveEvent event) {
+        // Only track actual block-boundary movement (reduces event overhead)
+        if (event.getFrom().getBlockX() == event.getTo().getBlockX()
+                && event.getFrom().getBlockY() == event.getTo().getBlockY()
+                && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) return;
+
+        plugin.onPlayerMove(event.getPlayer());
+    }
+
+    // ── Auto-Vanish On Join ───────────────────────────────────────────────────
+
+    /** After join processing completes, check if auto-vanish-on-join is enabled for this player. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onJoinAutoVanish(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        if (!player.hasPermission("vanishpp.vanish")) return;
+        if (plugin.isVanished(player)) return; // Already vanished via reconcile
+
+        plugin.getVanishScheduler().runAsync(() -> {
+            boolean autoVanish = plugin.getStorageProvider().getAutoVanishOnJoin(player.getUniqueId());
+            if (!autoVanish) return;
+            plugin.getVanishScheduler().runGlobal(() -> {
+                if (player.isOnline() && !plugin.isVanished(player)) {
+                    plugin.vanishPlayer(player, player, null);
+                }
+            });
+        });
+    }
+
+    // ── World Change: reapply per-world rules ─────────────────────────────────
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onWorldChangeRules(PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        if (!plugin.isVanished(player)) return;
+        // Re-apply per-world rule overrides for the new world
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
+            if (player.isOnline() && plugin.isVanished(player)) {
+                plugin.applyWorldRules(player);
+            }
+        }, 1L);
+    }
+
 }

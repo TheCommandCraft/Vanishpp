@@ -2,10 +2,15 @@ package net.thecommandcraft.vanishpp;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.thecommandcraft.vanishpp.api.events.VanishEvent;
+import net.thecommandcraft.vanishpp.api.events.UnvanishEvent;
+import net.thecommandcraft.vanishpp.api.events.VanishStateChangeEvent;
 import net.thecommandcraft.vanishpp.commands.*;
 import net.thecommandcraft.vanishpp.config.*;
 import net.thecommandcraft.vanishpp.listeners.*;
 import net.thecommandcraft.vanishpp.hooks.*;
+import net.thecommandcraft.vanishpp.scoreboard.VanishBossbar;
+import net.thecommandcraft.vanishpp.zone.VanishZoneManager;
 import net.thecommandcraft.vanishpp.utils.*;
 import net.thecommandcraft.vanishpp.storage.*;
 import net.thecommandcraft.vanishpp.scoreboard.VanishScoreboard;
@@ -50,7 +55,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private VanishScheduler vanishScheduler;
     private VoiceChatHook voiceChatHook;
     private VanishScoreboard vanishScoreboard;
+    private VanishBossbar vanishBossbar;
     private YamlConfiguration scoreboardConfig;
+    private net.thecommandcraft.vanishpp.hooks.LuckPermsHook luckPermsHook;
+    private net.thecommandcraft.vanishpp.hooks.WebhookManager webhookManager;
+    private net.thecommandcraft.vanishpp.hooks.WorldGuardHook worldGuardHook;
+    private VanishZoneManager vanishZoneManager;
 
     public final Map<UUID, String> pendingChatMessages = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, Long> actionBarPausedUntil = new java.util.concurrent.ConcurrentHashMap<>();
@@ -59,6 +69,34 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private ProtocolLibManager protocolLibManager;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
     public final Set<String> silentlyOpenedBlocks = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+
+    // ── New feature state ────────────────────────────────────────────────────
+    /** Vanish reason for the current session (cleared on unvanish). */
+    private final Map<UUID, String> vanishReasons = new ConcurrentHashMap<>();
+    /** Wall-clock ms when each player began their current vanish session. */
+    public final Map<UUID, Long> vanishStartTimes = new ConcurrentHashMap<>();
+    /** Epoch ms at which a timed vanish expires; absent = not timed. */
+    private final Map<UUID, Long> vanishExpiry = new ConcurrentHashMap<>();
+    /** Last time this player dealt or received PvP damage (ms). */
+    public final Map<UUID, Long> lastPvpCombat = new ConcurrentHashMap<>();
+    /** Last time this player dealt or received PvE damage (ms). */
+    public final Map<UUID, Long> lastPveCombat = new ConcurrentHashMap<>();
+    /** Last time this player toggled vanish (ms), for rate-limiting. */
+    private final Map<UUID, Long> lastVanishToggle = new ConcurrentHashMap<>();
+    /** Players currently following a target in spectator mode: follower → target UUID. */
+    public final Map<UUID, UUID> spectateFollowTargets = new ConcurrentHashMap<>();
+    /** Saved location before /vspec or /vfollow (to return to). */
+    public final Map<UUID, org.bukkit.Location> spectateOrigins = new ConcurrentHashMap<>();
+    /** Saved gamemode before /vspec or /vfollow. */
+    public final Map<UUID, GameMode> spectateOriginalGamemodes = new ConcurrentHashMap<>();
+    /** Players for whom vanish is visible only to a specific set; absent = normal rules apply. */
+    public final Map<UUID, Set<UUID>> partiallyVisibleTo = new ConcurrentHashMap<>();
+    /** Players currently in incognito mode: UUID → fake name. */
+    public final Map<UUID, String> incognitoNames = new ConcurrentHashMap<>();
+    /** Players auto-vanished due to AFK; used to auto-unvanish on movement. */
+    public final Set<UUID> afkAutoVanished = ConcurrentHashMap.newKeySet();
+    /** Last movement timestamp for AFK detection. */
+    public final Map<UUID, Long> lastMoveTime = new ConcurrentHashMap<>();
     @Override
     public void onEnable() {
         // 0. Folia Detection
@@ -133,6 +171,39 @@ public class Vanishpp extends JavaPlugin implements Listener {
             setupTeams();
         }
 
+        // ── Optional integrations ─────────────────────────────────────────────
+        if (Bukkit.getPluginManager().getPlugin("LuckPerms") != null) {
+            try {
+                this.luckPermsHook = new net.thecommandcraft.vanishpp.hooks.LuckPermsHook(this);
+                this.luckPermsHook.load();
+                getLogger().info("LuckPerms hooked — vanishpp:vanished context registered.");
+            } catch (Throwable e) {
+                getLogger().warning("LuckPerms found but context registration failed: " + e.getMessage());
+                this.luckPermsHook = null;
+            }
+        }
+
+        if (Bukkit.getPluginManager().getPlugin("WorldGuard") != null && configManager.worldGuardEnabled) {
+            try {
+                this.worldGuardHook = new net.thecommandcraft.vanishpp.hooks.WorldGuardHook(this);
+                this.worldGuardHook.load();
+                getLogger().info("WorldGuard hooked — deny-vanish / force-vanish flags registered.");
+            } catch (Throwable e) {
+                getLogger().warning("WorldGuard found but hook failed: " + e.getMessage());
+                this.worldGuardHook = null;
+            }
+        }
+
+        if (configManager.webhookEnabled && !configManager.webhookUrls.isEmpty()) {
+            this.webhookManager = new net.thecommandcraft.vanishpp.hooks.WebhookManager(this);
+        }
+
+        // ── Bossbar ───────────────────────────────────────────────────────────
+        this.vanishBossbar = new VanishBossbar(this);
+
+        // ── No-Vanish Zone Manager ────────────────────────────────────────────
+        this.vanishZoneManager = new VanishZoneManager(this);
+
         // 4. Register Commands
         registerCommand("vanish", new VanishCommand(this));
         registerCommand("vperms", new VpermsCommand(this));
@@ -145,6 +216,17 @@ public class Vanishpp extends JavaPlugin implements Listener {
         registerCommand("vack", new VanishAckCommand(this));
         registerCommand("vanishreload", new VanishReloadCommand(this));
         registerCommand("vanishscoreboard", new VanishScoreboardCommand(this));
+        // New feature commands
+        registerCommand("vspec", new VanishSpectateCommand(this));
+        registerCommand("vfollow", new VanishFollowCommand(this));
+        registerCommand("vhistory", new VanishHistoryCommand(this));
+        registerCommand("vautovanish", new VanishAutoCommand(this));
+        registerCommand("vstats", new VanishStatsCommand(this));
+        registerCommand("vadmin", new VanishAdminCommand(this));
+        registerCommand("vwand", new VanishWandCommand(this));
+        registerCommand("vchangelog", new VanishChangelogCommand(this));
+        registerCommand("vzone", new VanishZoneCommand(this));
+        registerCommand("vincognito", new IncognitoCommand(this));
 
         // Scoreboard
         saveResource("scoreboards.yml", false);
@@ -156,7 +238,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(this, this); // Preprocess listener
+        getServer().getPluginManager().registerEvents(new net.thecommandcraft.vanishpp.listeners.VanishWandListener(this), this);
+        getServer().getPluginManager().registerEvents(new net.thecommandcraft.vanishpp.listeners.IncognitoListener(this), this);
+        getServer().getPluginManager().registerEvents(new net.thecommandcraft.vanishpp.listeners.VanishZoneListener(this), this);
 
+        if (worldGuardHook != null) {
+            getServer().getPluginManager().registerEvents(
+                    new net.thecommandcraft.vanishpp.listeners.WorldGuardVanishListener(this), this);
+        }
 
         boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
                 || Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null;
@@ -196,6 +285,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 updateVanishVisibility(p);
             }
         }
+
+        // Prime the public API singleton
+        net.thecommandcraft.vanishpp.api.VanishAPI.init(this);
 
         getLogger().info("Vanish++ " + getDescription().getVersion() + " enabled.");
     }
@@ -549,8 +641,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
         ignoredWarningPlayers.remove(uuid);
-        if (vanishScoreboard != null)
-            vanishScoreboard.cleanup(uuid);
+        vanishReasons.remove(uuid);
+        vanishExpiry.remove(uuid);
+        vanishStartTimes.remove(uuid);
+        lastPvpCombat.remove(uuid);
+        lastPveCombat.remove(uuid);
+        lastVanishToggle.remove(uuid);
+        spectateFollowTargets.remove(uuid);
+        spectateOrigins.remove(uuid);
+        spectateOriginalGamemodes.remove(uuid);
+        partiallyVisibleTo.remove(uuid);
+        incognitoNames.remove(uuid);
+        afkAutoVanished.remove(uuid);
+        lastMoveTime.remove(uuid);
+        if (vanishScoreboard != null) vanishScoreboard.cleanup(uuid);
+        if (vanishBossbar != null)    vanishBossbar.cleanup(uuid);
     }
 
     public GameMode getPreVanishGamemodePublic(Player player) {
@@ -614,15 +719,22 @@ public class Vanishpp extends JavaPlugin implements Listener {
             long now = System.currentTimeMillis();
             for (UUID uuid : vanishedPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
-                    long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
-                    if (now > pausedUntil) {
-                        actionBarWarningComponent.remove(uuid);
-                        p.sendActionBar(messageManager.parse(configManager.actionBarText, p));
+                if (p == null || !p.isOnline()) continue;
+                long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
+                if (now > pausedUntil) {
+                    actionBarWarningComponent.remove(uuid);
+                    // If timed vanish, append remaining time to the action bar text
+                    long remaining = getTimedRemaining(uuid);
+                    if (remaining >= 0) {
+                        long secs = (remaining + 999) / 1000; // round up
+                        String timedText = configManager.actionBarText + " &7(" + secs + "s)";
+                        p.sendActionBar(messageManager.parse(timedText, p));
                     } else {
-                        Component warning = actionBarWarningComponent.get(uuid);
-                        if (warning != null) p.sendActionBar(warning);
+                        p.sendActionBar(messageManager.parse(configManager.actionBarText, p));
                     }
+                } else {
+                    Component warning = actionBarWarningComponent.get(uuid);
+                    if (warning != null) p.sendActionBar(warning);
                 }
             }
         }, 1L, 20L);
@@ -680,6 +792,40 @@ public class Vanishpp extends JavaPlugin implements Listener {
             }
         }, 10L, 10L);
 
+        // Timed vanish expiry — checked every tick (20/s). Lightweight map lookup.
+        vanishScheduler.runTimerGlobal(() -> {
+            if (vanishExpiry.isEmpty()) return;
+            long now = System.currentTimeMillis();
+            for (Map.Entry<UUID, Long> e : vanishExpiry.entrySet()) {
+                if (now >= e.getValue()) {
+                    vanishExpiry.remove(e.getKey());
+                    Player p = Bukkit.getPlayer(e.getKey());
+                    if (p != null && p.isOnline() && isVanished(p)) {
+                        unvanishPlayer(p, p);
+                        messageManager.sendMessage(p,
+                                configManager.getLanguageManager().getMessage("timed-vanish.expired"));
+                    }
+                }
+            }
+        }, 20L, 20L);
+
+        // AFK auto-vanish — checked every 10 seconds.
+        vanishScheduler.runTimerGlobal(() -> {
+            if (!configManager.afkAutoVanishEnabled) return;
+            long now = System.currentTimeMillis();
+            long threshold = configManager.afkAutoVanishSeconds * 1000L;
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (isVanished(p) || !permissionManager.hasPermission(p, "vanishpp.vanish")) continue;
+                Long last = lastMoveTime.get(p.getUniqueId());
+                if (last != null && (now - last) >= threshold) {
+                    afkAutoVanished.add(p.getUniqueId());
+                    vanishPlayer(p, p, null);
+                    messageManager.sendMessage(p,
+                            configManager.getLanguageManager().getMessage("afk.auto-vanished"));
+                }
+            }
+        }, 200L, 200L);
+
         // Periodic DB reconciliation for offline vanished players — runs every 60 seconds.
         // Catches state changes made on other servers sharing the same database (without Redis).
         // Only queries the DB when there are actually offline vanished UUIDs to check, so
@@ -708,6 +854,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void applyVanishEffects(Player player) {
+        // Apply per-world rule overrides on vanish
+        applyWorldRules(player);
         vanishedPlayers.add(player.getUniqueId());
         if (vanishTeam != null) vanishTeam.addEntry(player.getName());
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
@@ -842,19 +990,59 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
+    /** Vanish a player with no reason (backward-compatible). */
     public void vanishPlayer(Player player, CommandSender executor) {
-        // Store the gamemode from before vanish so we can restore it on unvanish.
-        // Only set on an explicit vanish — not on join restore (applyVanishEffects).
-        // Guard against overwrite if already set (e.g., re-vanish without unvanish).
+        vanishPlayer(player, executor, null);
+    }
+
+    /** Vanish a player with an optional reason string. */
+    public void vanishPlayer(Player player, CommandSender executor, String reason) {
+        // ── Rate-limit check ──────────────────────────────────────────────────
+        if (executor instanceof Player p && isRateLimited(p)) {
+            messageManager.sendMessage(executor,
+                    configManager.getLanguageManager().getMessage("rate-limit.blocked"));
+            return;
+        }
+
+        // ── Anti-combat check ─────────────────────────────────────────────────
+        String combatBlock = getCombatVanishBlock(player);
+        if (combatBlock != null) {
+            messageManager.sendMessage(executor instanceof Player ? (Player) executor : player, combatBlock);
+            return;
+        }
+
+        // ── Fire cancellable API event ────────────────────────────────────────
+        VanishEvent event = new VanishEvent(player, executor);
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
+
+        // ── Store reason ──────────────────────────────────────────────────────
+        if (reason != null && !reason.isBlank()) vanishReasons.put(player.getUniqueId(), reason);
+
+        // ── Record start time ─────────────────────────────────────────────────
+        vanishStartTimes.put(player.getUniqueId(), System.currentTimeMillis());
+
+        // ── Rate-limit timestamp ──────────────────────────────────────────────
+        if (executor instanceof Player p) updateRateLimit(p);
+
+        // ── Store pre-vanish gamemode ─────────────────────────────────────────
         if (!player.hasMetadata("vanishpp_pre_vanish_gamemode")) {
             GameMode gmToStore = player.getGameMode() == GameMode.SPECTATOR
                     ? GameMode.SURVIVAL : player.getGameMode();
             player.setMetadata("vanishpp_pre_vanish_gamemode", new FixedMetadataValue(this, gmToStore));
         }
+
         applyVanishEffects(player);
+
+        // ── Bossbar ───────────────────────────────────────────────────────────
+        if (vanishBossbar != null) vanishBossbar.show(player);
+
+        // ── Feedback message ──────────────────────────────────────────────────
         if (isValidMessage(configManager.vanishMessage)) {
             player.sendMessage(messageManager.parse(configManager.vanishMessage, player));
         }
+
+        // ── Fake quit broadcast ───────────────────────────────────────────────
         if (configManager.broadcastFakeQuit) {
             String fakeMsg = configManager.fakeQuitMessage;
             if (isValidMessage(fakeMsg)) {
@@ -866,15 +1054,46 @@ public class Vanishpp extends JavaPlugin implements Listener {
                         Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()),
                         player);
             }
-            // Send to Discord
-            if (integrationManager.getDiscordSRV() != null) {
+            if (integrationManager.getDiscordSRV() != null)
                 integrationManager.getDiscordSRV().sendFakeQuit(player);
-            }
         }
+
         notifyStaff(player, executor, true);
+        logVanishEvent(player, true);
+
+        // ── LuckPerms context ─────────────────────────────────────────────────
+        if (luckPermsHook != null) luckPermsHook.setVanished(player, true);
+
+        // ── Webhook ───────────────────────────────────────────────────────────
+        if (webhookManager != null) webhookManager.send(player, "vanish", reason);
+
+        // ── Post event ────────────────────────────────────────────────────────
+        Bukkit.getPluginManager().callEvent(new VanishStateChangeEvent(player, true));
     }
 
+    /** Unvanish a player (backward-compatible). */
     public void unvanishPlayer(Player player, CommandSender executor) {
+        // ── Rate-limit check ──────────────────────────────────────────────────
+        if (executor instanceof Player p && isRateLimited(p)) {
+            messageManager.sendMessage(executor,
+                    configManager.getLanguageManager().getMessage("rate-limit.blocked"));
+            return;
+        }
+
+        // ── Fire cancellable API event ────────────────────────────────────────
+        UnvanishEvent event = new UnvanishEvent(player, executor);
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
+
+        // ── Rate-limit timestamp ──────────────────────────────────────────────
+        if (executor instanceof Player p) updateRateLimit(p);
+
+        // ── Timed vanish cleanup ──────────────────────────────────────────────
+        cancelTimedVanish(player.getUniqueId());
+
+        // ── Bossbar ───────────────────────────────────────────────────────────
+        if (vanishBossbar != null) vanishBossbar.hide(player);
+
         if (configManager.broadcastFakeJoin) {
             String fakeMsg = configManager.fakeJoinMessage;
             if (isValidMessage(fakeMsg)) {
@@ -885,16 +1104,32 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW,
                         player.displayName()), player);
             }
-            // Send to Discord
-            if (integrationManager.getDiscordSRV() != null) {
+            if (integrationManager.getDiscordSRV() != null)
                 integrationManager.getDiscordSRV().sendFakeJoin(player);
-            }
         }
+
+        logVanishEvent(player, false);
         removeVanishEffects(player);
+
         if (isValidMessage(configManager.unvanishMessage)) {
             player.sendMessage(messageManager.parse(configManager.unvanishMessage, player));
         }
+
         notifyStaff(player, executor, false);
+
+        // ── Reason / start-time cleanup ───────────────────────────────────────
+        vanishReasons.remove(player.getUniqueId());
+        vanishStartTimes.remove(player.getUniqueId());
+        afkAutoVanished.remove(player.getUniqueId());
+
+        // ── LuckPerms context ─────────────────────────────────────────────────
+        if (luckPermsHook != null) luckPermsHook.setVanished(player, false);
+
+        // ── Webhook ───────────────────────────────────────────────────────────
+        if (webhookManager != null) webhookManager.send(player, "unvanish", null);
+
+        // ── Post event ────────────────────────────────────────────────────────
+        Bukkit.getPluginManager().callEvent(new VanishStateChangeEvent(player, false));
     }
 
     private boolean isValidMessage(String msg) {
@@ -909,24 +1144,40 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     private void notifyStaff(Player subject, CommandSender executor, boolean isVanishing) {
-        if (!configManager.staffNotifyEnabled)
-            return;
+        if (!configManager.staffNotifyEnabled) return;
         String template = isVanishing ? configManager.staffVanishMessage : configManager.staffUnvanishMessage;
         String notification = template.replace("%player%", subject.getName()).replace("%staff%", executor.getName());
         Component comp = messageManager.parse(notification, subject);
+
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (permissionManager.hasPermission(p, "vanishpp.see"))
-                p.sendMessage(comp);
+            if (!permissionManager.hasPermission(p, "vanishpp.see")) continue;
+            p.sendMessage(comp);
+
+            // Staff sounds
+            if (configManager.staffSoundsEnabled
+                    && ruleManager.getRule(p, net.thecommandcraft.vanishpp.config.RuleManager.SHOW_NOTIFICATIONS)) {
+                try {
+                    org.bukkit.Sound sound = org.bukkit.Sound.valueOf(
+                            isVanishing ? configManager.staffSoundVanish : configManager.staffSoundUnvanish);
+                    float vol = isVanishing ? configManager.staffSoundVanishVolume : configManager.staffSoundUnvanishVolume;
+                    float pit = isVanishing ? configManager.staffSoundVanishPitch  : configManager.staffSoundUnvanishPitch;
+                    p.playSound(p.getLocation(), sound, vol, pit);
+                } catch (IllegalArgumentException ignored) {
+                    // Unknown sound name — skip
+                }
+            }
         }
         Bukkit.getConsoleSender().sendMessage(comp);
     }
 
     public void updateVanishVisibility(Player subject) {
         boolean isVanished = isVanished(subject);
+        Set<UUID> partialSet = partiallyVisibleTo.get(subject.getUniqueId());
         for (Player observer : Bukkit.getOnlinePlayers()) {
-            if (observer.equals(subject))
-                continue;
+            if (observer.equals(subject)) continue;
             boolean canSee = permissionManager.canSee(observer, subject);
+            // Partial visibility: if a set is defined, also show to those in the set
+            if (!canSee && partialSet != null && partialSet.contains(observer.getUniqueId())) canSee = true;
             if (isVanished && !canSee) {
                 observer.hidePlayer(this, subject);
             } else {
@@ -1039,6 +1290,16 @@ public class Vanishpp extends JavaPlugin implements Listener {
         refreshVisibilityWithGlow(player);
     }
 
+    /** Apply per-world rule overrides for the player's current world. */
+    public void applyWorldRules(Player player) {
+        String world = player.getWorld().getName();
+        Map<String, Boolean> worldOverrides = configManager.worldRules.get(world);
+        if (worldOverrides == null) return;
+        for (Map.Entry<String, Boolean> entry : worldOverrides.entrySet()) {
+            ruleManager.setRule(player, entry.getKey(), entry.getValue());
+        }
+    }
+
     public void scheduleRuleRevert(Player player, String rule, boolean originalValue, int seconds) {
         vanishScheduler.runLaterGlobal(() -> {
             ruleManager.setRule(player, rule, originalValue);
@@ -1049,6 +1310,178 @@ public class Vanishpp extends JavaPlugin implements Listener {
             }
         }, seconds * 20L);
     }
+
+    // ── Vanish Reason ─────────────────────────────────────────────────────────
+
+    public void setVanishReason(UUID uuid, String reason) {
+        if (reason == null || reason.isBlank()) vanishReasons.remove(uuid);
+        else vanishReasons.put(uuid, reason);
+    }
+
+    public String getVanishReason(UUID uuid) {
+        return vanishReasons.get(uuid); // null if no reason set
+    }
+
+    // ── Timed Vanish ──────────────────────────────────────────────────────────
+
+    /**
+     * Schedules an automatic unvanish after {@code durationMs} milliseconds.
+     * Any previous timer for this player is overwritten.
+     */
+    public void setTimedVanish(Player player, long durationMs) {
+        long expiry = System.currentTimeMillis() + durationMs;
+        vanishExpiry.put(player.getUniqueId(), expiry);
+    }
+
+    public void cancelTimedVanish(UUID uuid) {
+        vanishExpiry.remove(uuid);
+    }
+
+    /** Remaining ms of a timed vanish, or -1 if not timed. */
+    public long getTimedRemaining(UUID uuid) {
+        Long expiry = vanishExpiry.get(uuid);
+        if (expiry == null) return -1L;
+        return Math.max(0L, expiry - System.currentTimeMillis());
+    }
+
+    // ── Anti-Combat Vanish ────────────────────────────────────────────────────
+
+    /**
+     * Returns null if the player is allowed to vanish now; otherwise returns
+     * a human-readable reason string (e.g., "PvP cooldown (8s remaining)").
+     */
+    public String getCombatVanishBlock(Player player) {
+        if (!configManager.antiCombatVanishEnabled) return null;
+        if (permissionManager.hasPermission(player, "vanishpp.combat.bypass")) return null;
+        long now = System.currentTimeMillis();
+        UUID uuid = player.getUniqueId();
+
+        Long pvp = lastPvpCombat.get(uuid);
+        if (pvp != null) {
+            long remaining = (pvp + configManager.antiCombatPvpSeconds * 1000L) - now;
+            if (remaining > 0)
+                return configManager.getLanguageManager().getMessage("combat.pvp-cooldown")
+                        .replace("%seconds%", String.valueOf((int) Math.ceil(remaining / 1000.0)));
+        }
+
+        Long pve = lastPveCombat.get(uuid);
+        if (pve != null) {
+            long remaining = (pve + configManager.antiCombatPveSeconds * 1000L) - now;
+            if (remaining > 0)
+                return configManager.getLanguageManager().getMessage("combat.pve-cooldown")
+                        .replace("%seconds%", String.valueOf((int) Math.ceil(remaining / 1000.0)));
+        }
+        return null;
+    }
+
+    // ── Rate Limit ────────────────────────────────────────────────────────────
+
+    /**
+     * Returns true if the toggle should be denied due to rate limiting.
+     * Always returns false for senders with {@code vanishpp.ratelimit.bypass}.
+     */
+    public boolean isRateLimited(Player player) {
+        if (!configManager.rateLimitEnabled) return false;
+        if (permissionManager.hasPermission(player, "vanishpp.ratelimit.bypass")) return false;
+        Long last = lastVanishToggle.get(player.getUniqueId());
+        if (last == null) return false;
+        return (System.currentTimeMillis() - last) < configManager.rateLimitSeconds * 1000L;
+    }
+
+    private void updateRateLimit(Player player) {
+        lastVanishToggle.put(player.getUniqueId(), System.currentTimeMillis());
+    }
+
+    // ── History & Stats helpers ───────────────────────────────────────────────
+
+    private void logVanishEvent(Player player, boolean vanishing) {
+        if (!configManager.historyEnabled) return;
+        UUID uuid = player.getUniqueId();
+        String server = configManager.getConfig().getString("proxy.server-name", "server");
+        String reason = vanishReasons.get(uuid);
+        vanishScheduler.runAsync(() -> {
+            if (vanishing) {
+                storageProvider.addHistoryEntry(
+                        VanishHistoryEntry.vanish(uuid, player.getName(), server, reason));
+            } else {
+                long start = vanishStartTimes.getOrDefault(uuid, System.currentTimeMillis());
+                long dur   = System.currentTimeMillis() - start;
+                storageProvider.addHistoryEntry(
+                        VanishHistoryEntry.unvanish(uuid, player.getName(), server, reason, dur));
+                storageProvider.recordVanishSession(uuid, dur);
+            }
+        });
+    }
+
+    // ── Partial Visibility ────────────────────────────────────────────────────
+
+    /** Make {@code subject} visible only to the given set of observers while vanished. */
+    public void setPartialVisibility(Player subject, Set<UUID> visibleTo) {
+        if (visibleTo == null || visibleTo.isEmpty()) {
+            partiallyVisibleTo.remove(subject.getUniqueId());
+        } else {
+            partiallyVisibleTo.put(subject.getUniqueId(), ConcurrentHashMap.newKeySet());
+            partiallyVisibleTo.get(subject.getUniqueId()).addAll(visibleTo);
+        }
+        updateVanishVisibility(subject);
+    }
+
+    public boolean isPartiallyVisibleTo(UUID subject, UUID observer) {
+        Set<UUID> set = partiallyVisibleTo.get(subject);
+        if (set == null) return false;
+        return set.contains(observer);
+    }
+
+    // ── Incognito ─────────────────────────────────────────────────────────────
+
+    public boolean isIncognito(Player player) {
+        return incognitoNames.containsKey(player.getUniqueId());
+    }
+
+    public String getIncognitoName(UUID uuid) {
+        return incognitoNames.get(uuid);
+    }
+
+    public void enableIncognito(Player player, String fakeName) {
+        incognitoNames.put(player.getUniqueId(), fakeName);
+        player.playerListName(messageManager.parse(fakeName, player));
+        // Update display name so chat/death messages show the fake name
+        player.setDisplayName(fakeName);
+    }
+
+    public void disableIncognito(Player player) {
+        incognitoNames.remove(player.getUniqueId());
+        player.playerListName(null);
+        player.setDisplayName(player.getName());
+    }
+
+    // ── AFK follow-up ─────────────────────────────────────────────────────────
+
+    public void onPlayerMove(Player player) {
+        lastMoveTime.put(player.getUniqueId(), System.currentTimeMillis());
+        // If auto-vanished due to AFK, unvanish on first movement
+        if (afkAutoVanished.remove(player.getUniqueId()) && isVanished(player)) {
+            vanishScheduler.runGlobal(() -> {
+                if (isVanished(player)) {
+                    unvanishPlayer(player, player);
+                    messageManager.sendMessage(player,
+                            configManager.getLanguageManager().getMessage("afk.unvanished-on-return"));
+                }
+            });
+        }
+    }
+
+    // ── Bossbar & new hook accessors ──────────────────────────────────────────
+
+    public VanishBossbar getVanishBossbar() { return vanishBossbar; }
+
+    public net.thecommandcraft.vanishpp.hooks.LuckPermsHook getLuckPermsHook() { return luckPermsHook; }
+
+    public net.thecommandcraft.vanishpp.hooks.WebhookManager getWebhookManager() { return webhookManager; }
+
+    public net.thecommandcraft.vanishpp.hooks.WorldGuardHook getWorldGuardHook() { return worldGuardHook; }
+
+    public VanishZoneManager getVanishZoneManager() { return vanishZoneManager; }
 
     @EventHandler
     public void onCommandPreprocess(PlayerCommandPreprocessEvent event) {
