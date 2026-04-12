@@ -13,7 +13,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 public class VanishRulesCommand implements CommandExecutor, TabCompleter {
 
@@ -35,6 +39,11 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("rules.usage"));
             return true;
+        }
+
+        // ── Preset subcommand ────────────────────────────────────────────────
+        if (args[0].equalsIgnoreCase("preset")) {
+            return handlePreset(sender, args);
         }
 
         Player target;
@@ -197,6 +206,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             completions.addAll(rules.getAvailableRules());
             completions.add("all");
             completions.add("none");
+            completions.add("preset");
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }
 
@@ -245,6 +255,124 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             }
         }
 
+        // Preset tab completions
+        if (args.length >= 1 && args[0].equalsIgnoreCase("preset")) {
+            if (args.length == 2) {
+                return StringUtil.copyPartialMatches(args[1],
+                        List.of("save", "load", "list", "delete"), new ArrayList<>());
+            }
+            if (args.length == 3) {
+                String sub = args[1].toLowerCase();
+                if (sub.equals("load") || sub.equals("delete")) {
+                    if (sender instanceof Player p) {
+                        Set<String> presets = plugin.getStorageProvider().listRulePresets(p.getUniqueId());
+                        return StringUtil.copyPartialMatches(args[2], new ArrayList<>(presets), new ArrayList<>());
+                    }
+                }
+            }
+            return new ArrayList<>();
+        }
+
         return new ArrayList<>();
+    }
+
+    // ── Rule Presets ─────────────────────────────────────────────────────────
+
+    private boolean handlePreset(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.getMessageManager().sendMessage(sender,
+                    plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
+            return true;
+        }
+        if (!player.hasPermission("vanishpp.rules")) {
+            plugin.getMessageManager().sendMessage(player,
+                    plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
+            return true;
+        }
+
+        var lm = plugin.getConfigManager().getLanguageManager();
+        UUID uuid = player.getUniqueId();
+
+        if (args.length < 2) {
+            plugin.getMessageManager().sendMessage(player,
+                    lm.getMessage("rules.preset.usage"));
+            return true;
+        }
+
+        String sub = args[1].toLowerCase();
+
+        switch (sub) {
+            case "save" -> {
+                if (args.length < 3) {
+                    plugin.getMessageManager().sendMessage(player, lm.getMessage("rules.preset.usage"));
+                    return true;
+                }
+                String name = args[2];
+                // Collect current rules
+                RuleManager rules = plugin.getRuleManager();
+                Map<String, Boolean> snapshot = new HashMap<>();
+                for (String rule : rules.getAvailableRules()) {
+                    snapshot.put(rule, rules.getRule(player, rule));
+                }
+                plugin.getVanishScheduler().runAsync(() -> {
+                    plugin.getStorageProvider().saveRulePreset(uuid, name, snapshot);
+                    plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
+                            lm.getMessage("rules.preset.saved").replace("%name%", name)));
+                });
+            }
+            case "load" -> {
+                if (args.length < 3) {
+                    plugin.getMessageManager().sendMessage(player, lm.getMessage("rules.preset.usage"));
+                    return true;
+                }
+                String name = args[2];
+                plugin.getVanishScheduler().runAsync(() -> {
+                    Map<String, Boolean> preset = plugin.getStorageProvider().loadRulePreset(uuid, name);
+                    if (preset == null || preset.isEmpty()) {
+                        plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
+                                lm.getMessage("rules.preset.not-found").replace("%name%", name)));
+                        return;
+                    }
+                    RuleManager rules = plugin.getRuleManager();
+                    preset.forEach((rule, val) -> rules.setRule(player, rule, val));
+                    plugin.getVanishScheduler().runGlobal(() -> {
+                        if (plugin.isVanished(player)) plugin.resyncVanishEffects(player);
+                        plugin.getMessageManager().sendMessage(player,
+                                lm.getMessage("rules.preset.loaded").replace("%name%", name));
+                    });
+                });
+            }
+            case "list" -> {
+                plugin.getVanishScheduler().runAsync(() -> {
+                    Set<String> presets = plugin.getStorageProvider().listRulePresets(uuid);
+                    plugin.getVanishScheduler().runGlobal(() -> {
+                        if (presets.isEmpty()) {
+                            plugin.getMessageManager().sendMessage(player, lm.getMessage("rules.preset.none"));
+                        } else {
+                            plugin.getMessageManager().sendMessage(player,
+                                    lm.getMessage("rules.preset.list-header"));
+                            for (String p : presets) {
+                                plugin.getMessageManager().sendMessage(player,
+                                        lm.getMessage("rules.preset.list-entry").replace("%name%", p));
+                            }
+                        }
+                    });
+                });
+            }
+            case "delete" -> {
+                if (args.length < 3) {
+                    plugin.getMessageManager().sendMessage(player, lm.getMessage("rules.preset.usage"));
+                    return true;
+                }
+                String name = args[2];
+                plugin.getVanishScheduler().runAsync(() -> {
+                    plugin.getStorageProvider().deleteRulePreset(uuid, name);
+                    plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
+                            lm.getMessage("rules.preset.deleted").replace("%name%", name)));
+                });
+            }
+            default -> plugin.getMessageManager().sendMessage(player, lm.getMessage("rules.preset.usage"));
+        }
+        return true;
     }
 }

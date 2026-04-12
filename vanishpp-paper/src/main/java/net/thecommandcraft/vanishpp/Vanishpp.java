@@ -92,6 +92,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private LuckPermsHook luckPermsHook;
     private WebhookManager webhookManager;
     private WorldGuardHook worldGuardHook;
+    private net.thecommandcraft.vanishpp.scoreboard.VanishBossbar vanishBossbar;
 
     @Override
     public void onEnable() {
@@ -198,6 +199,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         this.webhookManager = new WebhookManager(this);
         this.vanishZoneManager = new VanishZoneManager(this);
         this.vanishZoneManager.load();
+        this.vanishBossbar = new net.thecommandcraft.vanishpp.scoreboard.VanishBossbar(this);
+
+        // Init public API singleton
+        net.thecommandcraft.vanishpp.api.VanishAPI.init(this);
 
         // 4. Register Commands
         registerCommand("vanish", new VanishCommand(this));
@@ -713,6 +718,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         if (vanishScoreboard != null)
             vanishScoreboard.cleanup(uuid);
+        if (vanishBossbar != null)
+            vanishBossbar.cleanup(uuid);
     }
 
     public GameMode getPreVanishGamemodePublic(Player player) {
@@ -952,6 +959,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // Track vanish start time for stats
         vanishStartTimes.put(player.getUniqueId(), System.currentTimeMillis());
+        // Show bossbar
+        if (vanishBossbar != null) vanishBossbar.show(player);
 
         UUID persistUuid = player.getUniqueId();
         String persistName = player.getName();
@@ -1037,6 +1046,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Instantly clear the action bar — don't leave it showing until the next scheduler tick
         player.sendActionBar(Component.empty());
 
+        // Hide bossbar
+        if (vanishBossbar != null) vanishBossbar.hide(player);
         // Record session duration
         Long vanishStart = vanishStartTimes.remove(player.getUniqueId());
         long sessionDuration = (vanishStart != null) ? (System.currentTimeMillis() - vanishStart) : 0L;

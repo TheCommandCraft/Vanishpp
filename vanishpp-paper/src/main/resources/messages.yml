@@ -234,3 +234,45 @@ help:
   cmd-vignore: "Stop ProtocolLib warnings."
   cmd-vchat: "Confirm sending chat while vanished."
   cmd-vreload: "Reload plugin configuration."
+
+# --- [ RULE PRESETS ] ---
+rules:
+  preset:
+    usage: "&cUsage: /vrules preset <save|load|list|delete> [name]"
+    saved: "&aRule preset &e%name% &asaved."
+    loaded: "&aRule preset &e%name% &aloaded."
+    deleted: "&aRule preset &e%name% &adeleted."
+    not-found: "&cNo preset named &e%name% &cfound."
+    none: "&7You have no saved rule presets."
+    list-header: "&6Your Rule Presets:"
+    list-entry: " &8• &e%name%"
+
+# --- [ BULK VANISH ] ---
+bulk:
+  vanished-all: "&aVanished &e%count% &aplayer(s)."
+  vanished-world: "&aVanished &e%count% &aplayer(s) in world &f%world%&a."
+
+# --- [ CHANGELOG ] ---
+changelog:
+  header: "\n&6&l  Vanish++ 1.1.7 Changelog  "
+  entries:
+    - " &8• &eNew&7: /vspec quick-spectate command"
+    - " &8• &eNew&7: /vfollow player tracking with HUD"
+    - " &8• &eNew&7: /vhistory audit log"
+    - " &8• &eNew&7: /vautovanish per-player auto-join preference"
+    - " &8• &eNew&7: /vstats vanish time statistics"
+    - " &8• &eNew&7: /vadmin dashboard GUI"
+    - " &8• &eNew&7: /vwand toggle item (blaze rod)"
+    - " &8• &eNew&7: /vzone no-vanish zones"
+    - " &8• &eNew&7: /vincognito fake name mode"
+    - " &8• &eNew&7: LuckPerms context integration"
+    - " &8• &eNew&7: WorldGuard force/deny vanish flags"
+    - " &8• &eNew&7: Webhook support for external integrations"
+    - " &8• &eNew&7: Vanish reason tracking & display"
+    - " &8• &eNew&7: Bulk vanish (/vanish all, /vanish world)"
+    - " &8• &eNew&7: Rule presets (save/load/delete)"
+    - " &8• &eNew&7: Bossbar vanish status indicator"
+    - " &8• &eNew&7: Public VanishAPI for developers"
+    - " &8• &eNew&7: Vanish history stored in DB"
+    - " &8• &eNew&7: Auto-vanish on join per player"
+  footer: "&7-------------------------------"
