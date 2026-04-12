@@ -21,6 +21,7 @@ public class ProxyUpdateChecker {
     private final PaperChannelDispatcher dispatcher;
 
     private static final String API_URL_TEMPLATE = "https://api.modrinth.com/v2/project/%s/version";
+    private static final String LOADER = "velocity";
     private static final String DOWNLOAD_URL_TEMPLATE = "https://modrinth.com/plugin/%s/version/%s";
 
     private volatile String latestVersion = null;
@@ -78,7 +79,7 @@ public class ProxyUpdateChecker {
     private void fetchAndBroadcast() {
         if (!checking.compareAndSet(false, true)) return; // already running
         try {
-            String url = String.format(API_URL_TEMPLATE, modrinthId);
+            String url = String.format(API_URL_TEMPLATE, modrinthId) + "?loaders=%5B%22" + LOADER + "%22%5D";
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(10_000);

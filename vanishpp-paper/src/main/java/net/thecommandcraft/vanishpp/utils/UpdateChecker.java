@@ -21,7 +21,7 @@ public class UpdateChecker {
     private final Vanishpp plugin;
     private static final String PROJECT_SLUG = "vanish%2B%2B";
     private static final String MODRINTH_URL = "https://modrinth.com/plugin/vanish++";
-    private static final String API_URL = "https://api.modrinth.com/v2/project/" + PROJECT_SLUG + "/version";
+    private static final String API_BASE_URL = "https://api.modrinth.com/v2/project/" + PROJECT_SLUG + "/version";
 
     private static final String TEST_VERSION = null;
 
@@ -46,7 +46,7 @@ public class UpdateChecker {
 
     private void fetchAndCompare() {
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(API_URL).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) new URL(buildApiUrl()).openConnection();
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
@@ -90,6 +90,20 @@ public class UpdateChecker {
         } catch (Exception e) {
             plugin.getLogger().warning("[UpdateChecker] Check failed: " + e.getMessage());
         }
+    }
+
+    private String buildApiUrl() {
+        return API_BASE_URL + "?loaders=%5B%22" + detectLoader() + "%22%5D";
+    }
+
+    /** Maps the running server's name to its Modrinth loader slug. */
+    private String detectLoader() {
+        String name = org.bukkit.Bukkit.getName().toLowerCase();
+        if (name.contains("folia"))  return "folia";
+        if (name.contains("purpur")) return "purpur";
+        if (name.contains("paper"))  return "paper";
+        if (name.contains("spigot")) return "spigot";
+        return "bukkit";
     }
 
     /** Returns true if remoteVersion is newer than currentVersion. */
