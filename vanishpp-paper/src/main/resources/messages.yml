@@ -98,6 +98,10 @@ config:
   current-value: "&6%path% &7is currently: &f%value%"
   usage: "&cUsage: /vconfig <key> [value]"
   sensitive-warning: "&c⚠ Warning: &e%path% &cis a sensitive setting. Changing it may affect server stability. Run the command again with &b--confirm &cto apply."
+  proxy-mismatch-title: "Proxy Config Mismatch Detected"
+  proxy-mismatch-line1: "Your Paper config differs from the Velocity proxy config."
+  proxy-mismatch-line2: "The following settings are out of sync:"
+  proxy-mismatch-line3: "Apply them to the proxy or dismiss this warning."
 
 # --- [ PLUGIN LIST ] ---
 plugins:

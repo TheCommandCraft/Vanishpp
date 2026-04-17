@@ -920,9 +920,12 @@ public class PlayerListener implements Listener {
 
     // ── Invsee: shift-right-click a player to view their inventory ─────────────
     //
-    // Opens target.getInventory() directly — the viewer's container IS the
-    // target's live PlayerInventory object. No copy, no sync, no dupe window.
-    // PlayerInventory exposes 41 slots (0-35 main+hotbar, 36-39 armor, 40 offhand).
+    // Delegates to OpenInv or InvSee++ (soft-dep) for full inventory access
+    // (armor, offhand, crafting). Falls back to opening target.getInventory()
+    // directly (main 36 slots only) when neither is installed.
+    //
+    // Delegation uses a temporary PermissionAttachment so the viewer needs no
+    // OpenInv/InvSee++ permissions of their own — only vanishpp.invsee.
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onInvsee(PlayerInteractEntityEvent event) {
@@ -932,9 +935,31 @@ public class PlayerListener implements Listener {
         if (!viewer.hasPermission("vanishpp.invsee")) return;
 
         event.setCancelled(true);
+        boolean canModify = viewer.hasPermission("vanishpp.invsee.modify");
+
+        // ── OpenInv ──────────────────────────────────────────────────────────
+        if (Bukkit.getPluginManager().isPluginEnabled("OpenInv")) {
+            org.bukkit.permissions.PermissionAttachment att = viewer.addAttachment(plugin);
+            att.setPermission("openinv.openinv", true);
+            att.setPermission("openinv.modify", canModify);
+            viewer.performCommand("openinv " + target.getName());
+            att.remove();
+            return;
+        }
+
+        // ── InvSee++ ─────────────────────────────────────────────────────────
+        if (Bukkit.getPluginManager().isPluginEnabled("InvSee++")) {
+            org.bukkit.permissions.PermissionAttachment att = viewer.addAttachment(plugin);
+            att.setPermission("invsee.inventory.see", true);
+            att.setPermission("invsee.inventory.edit", canModify);
+            viewer.performCommand("invsee " + target.getName());
+            att.remove();
+            return;
+        }
+
+        // ── Fallback: direct pointer (no armor/offhand) ───────────────────────
         plugin.invseeTargets.put(viewer.getUniqueId(), target);
-        if (!viewer.hasPermission("vanishpp.invsee.modify"))
-            plugin.invseeViewOnly.add(viewer.getUniqueId());
+        if (!canModify) plugin.invseeViewOnly.add(viewer.getUniqueId());
         viewer.openInventory(target.getInventory());
     }
 
