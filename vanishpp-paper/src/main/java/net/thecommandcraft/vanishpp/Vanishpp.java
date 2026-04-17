@@ -239,7 +239,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // 5. Register Listeners
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(this, this); // Preprocess listener
-        if (hasPaperApi()) new MobAiManager(this).register(); // Paper API (MobGoals) required
         getServer().getPluginManager().registerEvents(new VanishWandListener(this), this);
         getServer().getPluginManager().registerEvents(new IncognitoListener(this), this);
         getServer().getPluginManager().registerEvents(new VanishZoneListener(this), this);
