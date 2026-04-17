@@ -924,78 +924,132 @@ public class PlayerListener implements Listener {
     //
     // Layout (54-slot double chest, 6 rows × 9 cols):
     //
-    //  Col:  0    1    2    3    4    5    6    7    8
-    //  Row0: [C1 ][C2 ][gl ][gl ][gl ][Boot][Leg][Chst][Helm]
-    //  Row1: [C3 ][C4 ][gl ][gl ][gl ][Offh][gl ][gl  ][gl  ]
-    //  Row2: [m9 ][m10][m11][m12][m13][m14 ][m15][m16 ][m17 ]
-    //  Row3: [m18][m19][m20][m21][m22][m23 ][m24][m25 ][m26 ]
-    //  Row4: [m27][m28][m29][m30][m31][m32 ][m33][m34 ][m35 ]
-    //  Row5: [h0 ][h1 ][h2 ][h3 ][h4 ][h5  ][h6 ][h7  ][h8  ]
+    //  Col:  0     1     2     3     4     5     6     7     8
+    //  Row0: [Boot][Leg ][Chst][Helm][Offh][Curs][gl  ][C1  ][C2  ]
+    //  Row1: [gl  ][gl  ][gl  ][gl  ][gl  ][gl  ][gl  ][C3  ][C4  ]
+    //  Row2: [m9  ][m10 ][m11 ][m12 ][m13 ][m14 ][m15 ][m16 ][m17 ]
+    //  Row3: [m18 ][m19 ][m20 ][m21 ][m22 ][m23 ][m24 ][m25 ][m26 ]
+    //  Row4: [m27 ][m28 ][m29 ][m30 ][m31 ][m32 ][m33 ][m34 ][m35 ]
+    //  Row5: [h0  ][h1  ][h2  ][h3  ][h4  ][h5  ][h6  ][h7  ][h8  ]
     //
-    // CHEST_TO_PLAYER[chestSlot] = playerInvSlot  (-1 = gray glass filler, -2 = crafting pane)
+    // CHEST_TO_PLAYER[c] = player inventory slot, or a P_* sentinel.
+    // SLOT_TYPE[c]        = ST_* constant used to pick the section-coloured pane.
+    //
+    // Sync model: MONITOR-priority handler writes chest→player SYNCHRONOUSLY
+    // (same tick, same event chain). Target opening their own inventory while
+    // being viewed closes all viewer sessions to prevent conflicting writes.
 
-    private static final int INVSEE_SIZE = 54;
+    // ── sentinel values for CHEST_TO_PLAYER ───────────────────────────────────
+    private static final int P_FILLER   = -1; // gray spacer glass, no label
+    private static final int P_CRAFTING = -2; // purple decorative crafting pane
+    private static final int P_CURSOR   = -3; // yellow read-only cursor display
+
+    // ── slot-type constants (map to coloured pane + label) ────────────────────
+    private static final int ST_FILLER    = 0;
+    private static final int ST_ARMOR     = 1;
+    private static final int ST_OFFHAND   = 2;
+    private static final int ST_CURSOR    = 3;
+    private static final int ST_CRAFTING  = 4;
+    private static final int ST_INVENTORY = 5;
+    private static final int ST_HOTBAR    = 6;
+
+    private static final int INVSEE_SIZE        = 54;
+    private static final int CURSOR_CHEST_SLOT  = 5;
+
     private static final int[] CHEST_TO_PLAYER = new int[INVSEE_SIZE];
+    private static final int[] SLOT_TYPE        = new int[INVSEE_SIZE];
 
     static {
-        Arrays.fill(CHEST_TO_PLAYER, -1);           // default: gray glass filler
-        // Crafting 2×2 (decorative, locked light-gray pane)
-        CHEST_TO_PLAYER[0] = CHEST_TO_PLAYER[1] = -2;
-        CHEST_TO_PLAYER[9] = CHEST_TO_PLAYER[10] = -2;
-        // Armor horizontal (row 0, cols 5–8)
-        CHEST_TO_PLAYER[5] = 36;  // boots
-        CHEST_TO_PLAYER[6] = 37;  // leggings
-        CHEST_TO_PLAYER[7] = 38;  // chestplate
-        CHEST_TO_PLAYER[8] = 39;  // helmet
-        // Offhand (row 1, col 5)
-        CHEST_TO_PLAYER[14] = 40;
-        // Main inventory rows 2–4 (player slots 9–35)
-        for (int i = 0; i < 27; i++) CHEST_TO_PLAYER[18 + i] = 9 + i;
-        // Hotbar row 5 (player slots 0–8)
-        for (int i = 0; i < 9; i++) CHEST_TO_PLAYER[45 + i] = i;
+        Arrays.fill(CHEST_TO_PLAYER, P_FILLER);
+        Arrays.fill(SLOT_TYPE, ST_FILLER);
+
+        // Row 0: armor horizontal (cols 0–3), offhand (4), cursor (5), filler (6), crafting (7–8)
+        CHEST_TO_PLAYER[0] = 36; SLOT_TYPE[0] = ST_ARMOR;    // boots
+        CHEST_TO_PLAYER[1] = 37; SLOT_TYPE[1] = ST_ARMOR;    // leggings
+        CHEST_TO_PLAYER[2] = 38; SLOT_TYPE[2] = ST_ARMOR;    // chestplate
+        CHEST_TO_PLAYER[3] = 39; SLOT_TYPE[3] = ST_ARMOR;    // helmet
+        CHEST_TO_PLAYER[4] = 40; SLOT_TYPE[4] = ST_OFFHAND;  // offhand
+        CHEST_TO_PLAYER[5] = P_CURSOR;  SLOT_TYPE[5] = ST_CURSOR;
+        // slot 6: filler (default)
+        CHEST_TO_PLAYER[7] = P_CRAFTING; SLOT_TYPE[7] = ST_CRAFTING;
+        CHEST_TO_PLAYER[8] = P_CRAFTING; SLOT_TYPE[8] = ST_CRAFTING;
+
+        // Row 1: filler (0–6), crafting (7–8)
+        CHEST_TO_PLAYER[16] = P_CRAFTING; SLOT_TYPE[16] = ST_CRAFTING;
+        CHEST_TO_PLAYER[17] = P_CRAFTING; SLOT_TYPE[17] = ST_CRAFTING;
+
+        // Rows 2–4: main inventory (player slots 9–35)
+        for (int i = 0; i < 27; i++) {
+            CHEST_TO_PLAYER[18 + i] = 9 + i;
+            SLOT_TYPE[18 + i] = ST_INVENTORY;
+        }
+
+        // Row 5: hotbar (player slots 0–8)
+        for (int i = 0; i < 9; i++) {
+            CHEST_TO_PLAYER[45 + i] = i;
+            SLOT_TYPE[45 + i] = ST_HOTBAR;
+        }
     }
 
-    private ItemStack makeFillerPane() {
-        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+    /** Returns the section-coloured glass pane for an empty slot of the given type. */
+    private ItemStack makeSectionPane(int slotType) {
+        Material mat; String label;
+        switch (slotType) {
+            case ST_ARMOR     -> { mat = Material.RED_STAINED_GLASS_PANE;    label = "Armor"; }
+            case ST_OFFHAND   -> { mat = Material.CYAN_STAINED_GLASS_PANE;   label = "Offhand"; }
+            case ST_CURSOR    -> { mat = Material.YELLOW_STAINED_GLASS_PANE; label = "Cursor"; }
+            case ST_CRAFTING  -> { mat = Material.PURPLE_STAINED_GLASS_PANE; label = "Crafting"; }
+            case ST_INVENTORY -> { mat = Material.BLUE_STAINED_GLASS_PANE;   label = "Inventory"; }
+            case ST_HOTBAR    -> { mat = Material.LIME_STAINED_GLASS_PANE;   label = "Hotbar"; }
+            default           -> { mat = Material.GRAY_STAINED_GLASS_PANE;   label = null; }
+        }
+        ItemStack pane = new ItemStack(mat);
         ItemMeta meta = pane.getItemMeta();
-        meta.displayName(Component.empty());
+        meta.displayName(label == null ? Component.empty()
+                : Component.text(label, NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false));
         pane.setItemMeta(meta);
         return pane;
     }
 
-    private ItemStack makeCraftingPane() {
-        ItemStack pane = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = pane.getItemMeta();
-        meta.displayName(Component.text("Crafting", NamedTextColor.GRAY)
-                .decoration(TextDecoration.ITALIC, false));
-        pane.setItemMeta(meta);
-        return pane;
+    /** Returns item if non-empty, otherwise the section pane for that slot. */
+    private ItemStack slotOrPane(ItemStack item, int slotType) {
+        return (item != null && item.getType() != Material.AIR) ? item : makeSectionPane(slotType);
     }
 
     private Inventory buildInvseeChest(Player target) {
-        Component title = Component.text("Inventory of " + target.getName(), NamedTextColor.DARK_GRAY);
-        Inventory chest = Bukkit.createInventory(null, INVSEE_SIZE, title);
+        Inventory chest = Bukkit.createInventory(null, INVSEE_SIZE,
+                Component.text("Inventory of " + target.getName(), NamedTextColor.DARK_GRAY));
         PlayerInventory pi = target.getInventory();
-        ItemStack filler   = makeFillerPane();
-        ItemStack crafting = makeCraftingPane();
         for (int c = 0; c < INVSEE_SIZE; c++) {
             int p = CHEST_TO_PLAYER[c];
-            if (p == -2)      chest.setItem(c, crafting);
-            else if (p == -1) chest.setItem(c, filler);
-            else              chest.setItem(c, pi.getItem(p));
+            if (p >= 0)          chest.setItem(c, slotOrPane(pi.getItem(p), SLOT_TYPE[c]));
+            else if (p == P_CURSOR) chest.setItem(c, slotOrPane(target.getItemOnCursor(), ST_CURSOR));
+            else                 chest.setItem(c, makeSectionPane(SLOT_TYPE[c]));
         }
         return chest;
     }
 
-    /** Writes all mapped slots from the chest back to the target's live PlayerInventory. */
+    /**
+     * Writes every mapped slot from the chest back to the target's live PlayerInventory.
+     * Also refreshes the cursor display slot.
+     * Called synchronously at MONITOR priority — zero intermediate state between ticks.
+     */
     private void syncChestToPlayer(Inventory chest, Player target) {
         if (!target.isOnline()) return;
         PlayerInventory pi = target.getInventory();
         for (int c = 0; c < INVSEE_SIZE; c++) {
             int p = CHEST_TO_PLAYER[c];
-            if (p >= 0) pi.setItem(p, chest.getItem(c));
+            if (p < 0) continue;
+            ItemStack item = chest.getItem(c);
+            // Treat section panes as empty (viewer may not have cleared them)
+            if (item != null && item.getType().name().endsWith("_STAINED_GLASS_PANE")) item = null;
+            pi.setItem(p, item);
         }
+        // Refresh cursor display (read-only — shows target's current cursor item)
+        chest.setItem(CURSOR_CHEST_SLOT, slotOrPane(target.getItemOnCursor(), ST_CURSOR));
     }
+
+    // ── event handlers ─────────────────────────────────────────────────────────
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onInvsee(PlayerInteractEntityEvent event) {
@@ -1007,38 +1061,75 @@ public class PlayerListener implements Listener {
         event.setCancelled(true);
         plugin.invseeTargets.put(viewer.getUniqueId(), target);
         viewer.openInventory(buildInvseeChest(target));
-
-        if (!viewer.hasPermission("vanishpp.invsee.modify")) {
+        if (!viewer.hasPermission("vanishpp.invsee.modify"))
             plugin.invseeViewOnly.add(viewer.getUniqueId());
-        }
     }
 
+    /** LOWEST: enforce locks before Bukkit processes movement. */
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onInvseeClick(InventoryClickEvent event) {
+    public void onInvseeClickLock(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player viewer)) return;
-        Player target = plugin.invseeTargets.get(viewer.getUniqueId());
-        if (target == null) return;
+        if (!plugin.invseeTargets.containsKey(viewer.getUniqueId())) return;
 
         int raw = event.getRawSlot();
         boolean inTop = raw >= 0 && raw < INVSEE_SIZE;
 
-        // Block filler and crafting slots regardless of permission
-        if (inTop && (CHEST_TO_PLAYER[raw] == -1 || CHEST_TO_PLAYER[raw] == -2)) {
-            event.setCancelled(true);
-            return;
+        if (inTop) {
+            int p = CHEST_TO_PLAYER[raw];
+            // Always lock filler, crafting and cursor slots
+            if (p == P_FILLER || p == P_CRAFTING || p == P_CURSOR) {
+                event.setCancelled(true);
+                return;
+            }
         }
 
-        // View-only: block all interaction with top inventory
+        // View-only: block top-inventory interaction and shift-moves from bottom into top
         if (plugin.invseeViewOnly.contains(viewer.getUniqueId())) {
-            if (inTop) event.setCancelled(true);
-            return;
+            if (inTop) { event.setCancelled(true); return; }
+            if (event.getAction() == org.bukkit.event.inventory.InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                event.setCancelled(true);
+            }
         }
-
-        // Modify allowed: sync on next tick after Bukkit applies the movement
-        Inventory chest = event.getView().getTopInventory();
-        plugin.getVanishScheduler().runGlobal(() -> syncChestToPlayer(chest, target));
     }
 
+    /** MONITOR: sync chest → target's live inventory SYNCHRONOUSLY (same tick, same event chain). */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInvseeClickSync(InventoryClickEvent event) {
+        if (event.isCancelled()) return;
+        if (!(event.getWhoClicked() instanceof Player viewer)) return;
+        Player target = plugin.invseeTargets.get(viewer.getUniqueId());
+        if (target == null) return;
+        syncChestToPlayer(event.getView().getTopInventory(), target);
+    }
+
+    /** MONITOR: handle drag events (spreading items across slots). */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onInvseeDragLock(org.bukkit.event.inventory.InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player viewer)) return;
+        if (!plugin.invseeTargets.containsKey(viewer.getUniqueId())) return;
+        // Cancel if any dragged slot is locked or viewer is view-only
+        boolean viewOnly = plugin.invseeViewOnly.contains(viewer.getUniqueId());
+        for (int raw : event.getRawSlots()) {
+            boolean inTop = raw >= 0 && raw < INVSEE_SIZE;
+            if (!inTop) continue;
+            int p = CHEST_TO_PLAYER[raw];
+            if (p == P_FILLER || p == P_CRAFTING || p == P_CURSOR || viewOnly) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInvseeDragSync(org.bukkit.event.inventory.InventoryDragEvent event) {
+        if (event.isCancelled()) return;
+        if (!(event.getWhoClicked() instanceof Player viewer)) return;
+        Player target = plugin.invseeTargets.get(viewer.getUniqueId());
+        if (target == null) return;
+        syncChestToPlayer(event.getInventory(), target);
+    }
+
+    /** Final sync on close. */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onInvseeClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player viewer)) return;
@@ -1047,15 +1138,37 @@ public class PlayerListener implements Listener {
         plugin.invseeViewOnly.remove(viewer.getUniqueId());
     }
 
-    /** Close invsee for any viewer who had this target's inventory open when they disconnect. */
+    /**
+     * If the target opens their own inventory while being viewed, close all
+     * viewer sessions immediately. Prevents two simultaneous writers to the
+     * same PlayerInventory (which would cause one to silently overwrite the other).
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInvseeTargetOpenOwnInventory(org.bukkit.event.inventory.InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player target)) return;
+        UUID targetId = target.getUniqueId();
+        plugin.invseeTargets.entrySet().removeIf(e -> {
+            if (!e.getValue().getUniqueId().equals(targetId)) return false;
+            Player viewer = Bukkit.getPlayer(e.getKey());
+            if (viewer != null) {
+                plugin.invseeViewOnly.remove(e.getKey());
+                viewer.closeInventory();
+            }
+            return true;
+        });
+    }
+
+    /** Close invsee for any viewer whose target disconnects. */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onInvseeTargetQuit(PlayerQuitEvent event) {
         UUID targetId = event.getPlayer().getUniqueId();
         plugin.invseeTargets.entrySet().removeIf(e -> {
             if (!e.getValue().getUniqueId().equals(targetId)) return false;
             Player viewer = Bukkit.getPlayer(e.getKey());
-            if (viewer != null) viewer.closeInventory();
-            plugin.invseeViewOnly.remove(e.getKey());
+            if (viewer != null) {
+                plugin.invseeViewOnly.remove(e.getKey());
+                viewer.closeInventory();
+            }
             return true;
         });
     }
