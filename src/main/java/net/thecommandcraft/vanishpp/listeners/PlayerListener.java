@@ -462,12 +462,10 @@ public class PlayerListener implements Listener {
             // Only cancel targeting if mob_targeting rule is OFF (false = mobs ignore vanished player)
             if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
                 event.setCancelled(true);
-                event.setTarget(null);
-                if (event.getEntity() instanceof org.bukkit.entity.Mob mob) {
-                    mob.setTarget(null);
-                    // Also stop pathfinding to prevent baby mobs from chasing after target is cleared
-                    mob.getPathfinder().stopPathfinding();
-                }
+                // Do NOT call mob.setTarget(null) or stopPathfinding() here — the event is cancelled
+                // so no path has started. Explicit target/pathfinding manipulation triggers a second
+                // EntityTargetEvent (FORGOT) and puts the mob's NearestAttackableTargetGoal into a
+                // cooldown, causing nearby non-vanished players to not be attacked.
             }
         }
     }
