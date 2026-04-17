@@ -142,6 +142,8 @@ permissions:
       vanishpp.vanish.timed: true
       vanishpp.combat.bypass: true
       vanishpp.ratelimit.bypass: true
+      vanishpp.invsee: true
+      vanishpp.invsee.modify: true
 
   vanishpp.vanish:
     description: Allows a player to vanish themselves.
