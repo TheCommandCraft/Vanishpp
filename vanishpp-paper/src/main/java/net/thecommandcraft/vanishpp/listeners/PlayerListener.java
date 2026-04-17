@@ -922,14 +922,38 @@ public class PlayerListener implements Listener {
 
     // ── Invsee: shift-right-click a player to view their inventory ─────────────
     //
-    // Layout (54-slot double chest):
-    //   Slots  0–35 → player inv slots 0–35 (hotbar 0–8, main 9–35)
-    //   Slots 36–39 → armor (boots, leggings, chestplate, helmet)
-    //   Slot  40    → offhand
-    //   Slots 41–53 → locked gray glass (no mapped slot, clearly decorative)
+    // Layout (54-slot double chest, 6 rows × 9 cols):
+    //
+    //  Col:  0    1    2    3    4    5    6    7    8
+    //  Row0: [C1 ][C2 ][gl ][gl ][gl ][Boot][Leg][Chst][Helm]
+    //  Row1: [C3 ][C4 ][gl ][gl ][gl ][Offh][gl ][gl  ][gl  ]
+    //  Row2: [m9 ][m10][m11][m12][m13][m14 ][m15][m16 ][m17 ]
+    //  Row3: [m18][m19][m20][m21][m22][m23 ][m24][m25 ][m26 ]
+    //  Row4: [m27][m28][m29][m30][m31][m32 ][m33][m34 ][m35 ]
+    //  Row5: [h0 ][h1 ][h2 ][h3 ][h4 ][h5  ][h6 ][h7  ][h8  ]
+    //
+    // CHEST_TO_PLAYER[chestSlot] = playerInvSlot  (-1 = gray glass filler, -2 = crafting pane)
 
     private static final int INVSEE_SIZE = 54;
-    private static final int INVSEE_MAPPED_MAX = 40; // last player inv slot shown
+    private static final int[] CHEST_TO_PLAYER = new int[INVSEE_SIZE];
+
+    static {
+        Arrays.fill(CHEST_TO_PLAYER, -1);           // default: gray glass filler
+        // Crafting 2×2 (decorative, locked light-gray pane)
+        CHEST_TO_PLAYER[0] = CHEST_TO_PLAYER[1] = -2;
+        CHEST_TO_PLAYER[9] = CHEST_TO_PLAYER[10] = -2;
+        // Armor horizontal (row 0, cols 5–8)
+        CHEST_TO_PLAYER[5] = 36;  // boots
+        CHEST_TO_PLAYER[6] = 37;  // leggings
+        CHEST_TO_PLAYER[7] = 38;  // chestplate
+        CHEST_TO_PLAYER[8] = 39;  // helmet
+        // Offhand (row 1, col 5)
+        CHEST_TO_PLAYER[14] = 40;
+        // Main inventory rows 2–4 (player slots 9–35)
+        for (int i = 0; i < 27; i++) CHEST_TO_PLAYER[18 + i] = 9 + i;
+        // Hotbar row 5 (player slots 0–8)
+        for (int i = 0; i < 9; i++) CHEST_TO_PLAYER[45 + i] = i;
+    }
 
     private ItemStack makeFillerPane() {
         ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
@@ -939,26 +963,37 @@ public class PlayerListener implements Listener {
         return pane;
     }
 
+    private ItemStack makeCraftingPane() {
+        ItemStack pane = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+        ItemMeta meta = pane.getItemMeta();
+        meta.displayName(Component.text("Crafting", NamedTextColor.GRAY)
+                .decoration(TextDecoration.ITALIC, false));
+        pane.setItemMeta(meta);
+        return pane;
+    }
+
     private Inventory buildInvseeChest(Player target) {
         Component title = Component.text("Inventory of " + target.getName(), NamedTextColor.DARK_GRAY);
         Inventory chest = Bukkit.createInventory(null, INVSEE_SIZE, title);
         PlayerInventory pi = target.getInventory();
-        for (int i = 0; i <= INVSEE_MAPPED_MAX; i++) {
-            chest.setItem(i, pi.getItem(i));
-        }
-        ItemStack filler = makeFillerPane();
-        for (int i = INVSEE_MAPPED_MAX + 1; i < INVSEE_SIZE; i++) {
-            chest.setItem(i, filler);
+        ItemStack filler   = makeFillerPane();
+        ItemStack crafting = makeCraftingPane();
+        for (int c = 0; c < INVSEE_SIZE; c++) {
+            int p = CHEST_TO_PLAYER[c];
+            if (p == -2)      chest.setItem(c, crafting);
+            else if (p == -1) chest.setItem(c, filler);
+            else              chest.setItem(c, pi.getItem(p));
         }
         return chest;
     }
 
-    /** Writes slots 0–40 from the chest back to the target's live PlayerInventory. */
+    /** Writes all mapped slots from the chest back to the target's live PlayerInventory. */
     private void syncChestToPlayer(Inventory chest, Player target) {
         if (!target.isOnline()) return;
         PlayerInventory pi = target.getInventory();
-        for (int i = 0; i <= INVSEE_MAPPED_MAX; i++) {
-            pi.setItem(i, chest.getItem(i));
+        for (int c = 0; c < INVSEE_SIZE; c++) {
+            int p = CHEST_TO_PLAYER[c];
+            if (p >= 0) pi.setItem(p, chest.getItem(c));
         }
     }
 
@@ -970,9 +1005,8 @@ public class PlayerListener implements Listener {
         if (!viewer.hasPermission("vanishpp.invsee")) return;
 
         event.setCancelled(true);
-        Inventory chest = buildInvseeChest(target);
         plugin.invseeTargets.put(viewer.getUniqueId(), target);
-        viewer.openInventory(chest);
+        viewer.openInventory(buildInvseeChest(target));
 
         if (!viewer.hasPermission("vanishpp.invsee.modify")) {
             plugin.invseeViewOnly.add(viewer.getUniqueId());
@@ -986,21 +1020,21 @@ public class PlayerListener implements Listener {
         if (target == null) return;
 
         int raw = event.getRawSlot();
+        boolean inTop = raw >= 0 && raw < INVSEE_SIZE;
 
-        // Always block filler slots (41–53)
-        if (raw > INVSEE_MAPPED_MAX && raw < INVSEE_SIZE) {
+        // Block filler and crafting slots regardless of permission
+        if (inTop && (CHEST_TO_PLAYER[raw] == -1 || CHEST_TO_PLAYER[raw] == -2)) {
             event.setCancelled(true);
             return;
         }
 
-        // View-only: block all interaction with the top (chest) inventory
+        // View-only: block all interaction with top inventory
         if (plugin.invseeViewOnly.contains(viewer.getUniqueId())) {
-            event.setCancelled(true);
+            if (inTop) event.setCancelled(true);
             return;
         }
 
-        // Modify allowed: sync chest → target's live inventory on the next tick
-        // (after Bukkit has applied the item movement)
+        // Modify allowed: sync on next tick after Bukkit applies the movement
         Inventory chest = event.getView().getTopInventory();
         plugin.getVanishScheduler().runGlobal(() -> syncChestToPlayer(chest, target));
     }
@@ -1011,6 +1045,19 @@ public class PlayerListener implements Listener {
         Player target = plugin.invseeTargets.remove(viewer.getUniqueId());
         if (target != null) syncChestToPlayer(event.getInventory(), target);
         plugin.invseeViewOnly.remove(viewer.getUniqueId());
+    }
+
+    /** Close invsee for any viewer who had this target's inventory open when they disconnect. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInvseeTargetQuit(PlayerQuitEvent event) {
+        UUID targetId = event.getPlayer().getUniqueId();
+        plugin.invseeTargets.entrySet().removeIf(e -> {
+            if (!e.getValue().getUniqueId().equals(targetId)) return false;
+            Player viewer = Bukkit.getPlayer(e.getKey());
+            if (viewer != null) viewer.closeInventory();
+            plugin.invseeViewOnly.remove(e.getKey());
+            return true;
+        });
     }
 
 }
