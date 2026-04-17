@@ -901,4 +901,33 @@ public class PlayerListener implements Listener {
         }, 1L);
     }
 
+    // ── Invsee: shift-right-click a player to view their inventory ─────────────
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onInvsee(PlayerInteractEntityEvent event) {
+        Player viewer = event.getPlayer();
+        if (!viewer.isSneaking()) return;
+        if (!(event.getRightClicked() instanceof Player target)) return;
+        if (!viewer.hasPermission("vanishpp.invsee")) return;
+
+        event.setCancelled(true);
+        viewer.openInventory(target.getInventory());
+
+        if (!viewer.hasPermission("vanishpp.invsee.modify")) {
+            plugin.invseeViewOnly.add(viewer.getUniqueId());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onInvseeClick(org.bukkit.event.inventory.InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player viewer)) return;
+        if (!plugin.invseeViewOnly.contains(viewer.getUniqueId())) return;
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInvseeClose(InventoryCloseEvent event) {
+        plugin.invseeViewOnly.remove(event.getPlayer().getUniqueId());
+    }
+
 }

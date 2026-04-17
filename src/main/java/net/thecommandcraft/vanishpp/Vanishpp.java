@@ -97,6 +97,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public final Set<UUID> afkAutoVanished = ConcurrentHashMap.newKeySet();
     /** Last movement timestamp for AFK detection. */
     public final Map<UUID, Long> lastMoveTime = new ConcurrentHashMap<>();
+    /** UUIDs of players currently viewing another player's inventory in read-only mode (no vanishpp.invsee.modify). */
+    public final Set<UUID> invseeViewOnly = ConcurrentHashMap.newKeySet();
     @Override
     public void onEnable() {
         // 0. Folia Detection
