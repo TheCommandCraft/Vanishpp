@@ -87,6 +87,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     private final Map<UUID, String> vanishReasons = new ConcurrentHashMap<>();
     public final Map<UUID, Long> vanishStartTimes = new ConcurrentHashMap<>();
+    /** UUIDs of players currently viewing another player's inventory in read-only mode (no vanishpp.invsee.modify). */
+    public final Set<UUID> invseeViewOnly = ConcurrentHashMap.newKeySet();
 
     private VanishZoneManager vanishZoneManager;
     private LuckPermsHook luckPermsHook;

@@ -272,3 +272,9 @@ permissions:
   vanishpp.ratelimit.bypass:
     description: Bypasses the vanish toggle rate limit.
     default: false
+  vanishpp.invsee:
+    description: Allows shift-right-clicking a player to view their inventory.
+    default: op
+  vanishpp.invsee.modify:
+    description: Allows modifying the inventory when using invsee.
+    default: op
