@@ -89,6 +89,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public final Map<UUID, Long> vanishStartTimes = new ConcurrentHashMap<>();
     /** UUIDs of players currently viewing another player's inventory in read-only mode (no vanishpp.invsee.modify). */
     public final Set<UUID> invseeViewOnly = ConcurrentHashMap.newKeySet();
+    /** Maps invsee viewer UUID → the target Player whose inventory is open. */
+    public final Map<UUID, org.bukkit.entity.Player> invseeTargets = new ConcurrentHashMap<>();
 
     private VanishZoneManager vanishZoneManager;
     private LuckPermsHook luckPermsHook;

@@ -33,6 +33,10 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.util.Vector;
 import org.bukkit.event.Event;
 
@@ -917,6 +921,46 @@ public class PlayerListener implements Listener {
     }
 
     // ── Invsee: shift-right-click a player to view their inventory ─────────────
+    //
+    // Layout (54-slot double chest):
+    //   Slots  0–35 → player inv slots 0–35 (hotbar 0–8, main 9–35)
+    //   Slots 36–39 → armor (boots, leggings, chestplate, helmet)
+    //   Slot  40    → offhand
+    //   Slots 41–53 → locked gray glass (no mapped slot, clearly decorative)
+
+    private static final int INVSEE_SIZE = 54;
+    private static final int INVSEE_MAPPED_MAX = 40; // last player inv slot shown
+
+    private ItemStack makeFillerPane() {
+        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta meta = pane.getItemMeta();
+        meta.displayName(Component.empty());
+        pane.setItemMeta(meta);
+        return pane;
+    }
+
+    private Inventory buildInvseeChest(Player target) {
+        Component title = Component.text("Inventory of " + target.getName(), NamedTextColor.DARK_GRAY);
+        Inventory chest = Bukkit.createInventory(null, INVSEE_SIZE, title);
+        PlayerInventory pi = target.getInventory();
+        for (int i = 0; i <= INVSEE_MAPPED_MAX; i++) {
+            chest.setItem(i, pi.getItem(i));
+        }
+        ItemStack filler = makeFillerPane();
+        for (int i = INVSEE_MAPPED_MAX + 1; i < INVSEE_SIZE; i++) {
+            chest.setItem(i, filler);
+        }
+        return chest;
+    }
+
+    /** Writes slots 0–40 from the chest back to the target's live PlayerInventory. */
+    private void syncChestToPlayer(Inventory chest, Player target) {
+        if (!target.isOnline()) return;
+        PlayerInventory pi = target.getInventory();
+        for (int i = 0; i <= INVSEE_MAPPED_MAX; i++) {
+            pi.setItem(i, chest.getItem(i));
+        }
+    }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onInvsee(PlayerInteractEntityEvent event) {
@@ -926,7 +970,9 @@ public class PlayerListener implements Listener {
         if (!viewer.hasPermission("vanishpp.invsee")) return;
 
         event.setCancelled(true);
-        viewer.openInventory(target.getInventory());
+        Inventory chest = buildInvseeChest(target);
+        plugin.invseeTargets.put(viewer.getUniqueId(), target);
+        viewer.openInventory(chest);
 
         if (!viewer.hasPermission("vanishpp.invsee.modify")) {
             plugin.invseeViewOnly.add(viewer.getUniqueId());
@@ -934,15 +980,37 @@ public class PlayerListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onInvseeClick(org.bukkit.event.inventory.InventoryClickEvent event) {
+    public void onInvseeClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player viewer)) return;
-        if (!plugin.invseeViewOnly.contains(viewer.getUniqueId())) return;
-        event.setCancelled(true);
+        Player target = plugin.invseeTargets.get(viewer.getUniqueId());
+        if (target == null) return;
+
+        int raw = event.getRawSlot();
+
+        // Always block filler slots (41–53)
+        if (raw > INVSEE_MAPPED_MAX && raw < INVSEE_SIZE) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // View-only: block all interaction with the top (chest) inventory
+        if (plugin.invseeViewOnly.contains(viewer.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // Modify allowed: sync chest → target's live inventory on the next tick
+        // (after Bukkit has applied the item movement)
+        Inventory chest = event.getView().getTopInventory();
+        plugin.getVanishScheduler().runGlobal(() -> syncChestToPlayer(chest, target));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onInvseeClose(InventoryCloseEvent event) {
-        plugin.invseeViewOnly.remove(event.getPlayer().getUniqueId());
+        if (!(event.getPlayer() instanceof Player viewer)) return;
+        Player target = plugin.invseeTargets.remove(viewer.getUniqueId());
+        if (target != null) syncChestToPlayer(event.getInventory(), target);
+        plugin.invseeViewOnly.remove(viewer.getUniqueId());
     }
 
 }
