@@ -19,7 +19,8 @@ public class FoliaSchedulerBridge implements VanishScheduler {
 
     @Override
     public void runLaterGlobal(Runnable runnable, long ticks) {
-        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> runnable.run(), ticks);
+        if (ticks <= 0) { runGlobal(runnable); } 
+        else { Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> runnable.run(), ticks); }
     }
 
     @Override
