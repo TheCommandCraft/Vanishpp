@@ -246,6 +246,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new VanishWandListener(this), this);
         getServer().getPluginManager().registerEvents(new IncognitoListener(this), this);
         getServer().getPluginManager().registerEvents(new VanishZoneListener(this), this);
+        new net.thecommandcraft.vanishpp.listeners.MobAiManager(this).register();
         if (worldGuardHook != null) {
             getServer().getPluginManager().registerEvents(new WorldGuardVanishListener(this), this);
         }
