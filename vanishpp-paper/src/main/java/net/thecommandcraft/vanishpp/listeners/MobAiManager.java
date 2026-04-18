@@ -49,26 +49,18 @@ public class MobAiManager implements Listener {
                 if (!(mob.getTarget() instanceof Player p)) continue;
                 if (!plugin.isVanished(p)) continue;
                 if (plugin.getRuleManager().getRule(p, RuleManager.MOB_TARGETING)) continue;
+
+                // Forcefully clear target - no mercy
                 mob.setTarget(null);
-                try { mob.getPathfinder().stopPathfinding(); } catch (Throwable ignored) {}
+                try {
+                    mob.getPathfinder().stopPathfinding();
+                } catch (Throwable ignored) {}
             }
         }
     }
 
     private void injectSafeAi(Mob mob) {
-        if (!mob.isValid())
-            return;
-
-        // Diagnostic: log all goals on this mob type
-        String mobType = mob.getType().toString();
-        boolean hasLookGoal = Bukkit.getMobGoals().hasGoal(mob, VanillaGoal.LOOK_AT_PLAYER);
-        plugin.getLogger().info("Mob: " + mobType + " HasLookAtPlayer=" + hasLookGoal);
-
-        // Replace LOOK_AT_PLAYER goal with our safe version if it exists
-        if (hasLookGoal) {
-            Bukkit.getMobGoals().removeGoal(mob, VanillaGoal.LOOK_AT_PLAYER);
-            Bukkit.getMobGoals().addGoal(mob, 2, new SafeLookAtPlayerGoal(plugin, mob));
-            plugin.getLogger().info("✓ Injected SafeLookAtPlayerGoal for " + mobType);
-        }
+        // SafeLookAtPlayerGoal injection disabled - rely on invisibility + EntityTargetEvent blocking
+        // which are more reliable than goal manipulation
     }
 }

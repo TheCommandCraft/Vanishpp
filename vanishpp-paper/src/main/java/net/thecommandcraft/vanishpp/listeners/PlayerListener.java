@@ -19,6 +19,7 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -559,16 +560,24 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onMobTarget(EntityTargetEvent event) {
         if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
-            // Only cancel targeting if mob_targeting rule is OFF (false = mobs ignore vanished player)
             if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
                 event.setCancelled(true);
-                plugin.getLogger().info("Blocked " + event.getEntity().getType() + " from targeting vanished " + p.getName() + " (reason: " + event.getReason() + ")");
-                // Do NOT call mob.setTarget(null) or stopPathfinding() here — the event is cancelled
-                // so no path has started yet. Calling these triggers a second EntityTargetEvent
-                // (FORGOT reason) which resets the mob's NearestAttackableTargetGoal cooldown,
-                // preventing nearby non-vanished players from being targeted/attacked.
-            } else {
-                plugin.getLogger().fine(event.getEntity().getType() + " targeted vanished " + p.getName() + " (mob_targeting ENABLED)");
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onMobTargetMonitor(EntityTargetEvent event) {
+        // MONITOR priority: fires AFTER all other listeners, no matter what
+        // Final failsafe to catch any targeting that somehow got through
+        if (event.isCancelled()) return;
+        if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
+            if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
+                // Even if already set by another listener, force it cancelled
+                event.setCancelled(true);
+                if (event.getEntity() instanceof Mob mob) {
+                    mob.setTarget(null);
+                }
             }
         }
     }
