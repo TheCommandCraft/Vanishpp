@@ -59,10 +59,16 @@ public class MobAiManager implements Listener {
         if (!mob.isValid())
             return;
 
-        // Replace LOOK_AT_PLAYER goal with our safe version
-        if (Bukkit.getMobGoals().hasGoal(mob, VanillaGoal.LOOK_AT_PLAYER)) {
+        // Diagnostic: log all goals on this mob type
+        String mobType = mob.getType().toString();
+        boolean hasLookGoal = Bukkit.getMobGoals().hasGoal(mob, VanillaGoal.LOOK_AT_PLAYER);
+        plugin.getLogger().info("Mob: " + mobType + " HasLookAtPlayer=" + hasLookGoal);
+
+        // Replace LOOK_AT_PLAYER goal with our safe version if it exists
+        if (hasLookGoal) {
             Bukkit.getMobGoals().removeGoal(mob, VanillaGoal.LOOK_AT_PLAYER);
             Bukkit.getMobGoals().addGoal(mob, 2, new SafeLookAtPlayerGoal(plugin, mob));
+            plugin.getLogger().info("✓ Injected SafeLookAtPlayerGoal for " + mobType);
         }
     }
 }

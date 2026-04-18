@@ -102,6 +102,7 @@ config:
   proxy-mismatch-line1: "Your Paper config differs from the Velocity proxy config."
   proxy-mismatch-line2: "The following settings are out of sync:"
   proxy-mismatch-line3: "Apply them to the proxy or dismiss this warning."
+  proxy-applied: "&aApplied %count% config setting(s) to the proxy."
 
 # --- [ PLUGIN LIST ] ---
 plugins:

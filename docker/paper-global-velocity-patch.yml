@@ -1,0 +1,5 @@
+# Velocity modern forwarding configuration
+  velocity:
+    enabled: true
+    online-mode: false
+    secret: 'test-forwarding-secret'

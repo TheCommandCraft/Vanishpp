@@ -479,10 +479,18 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void onAttack(EntityDamageByEntityEvent event) {
+        // Prevent vanished player from attacking
         if (event.getDamager() instanceof Player player && plugin.isVanished(player)
                 && !rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) {
             event.setCancelled(true);
             sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "attacking");
+        }
+
+        // Prevent mobs/entities from attacking vanished players
+        if (event.getEntity() instanceof Player p && plugin.isVanished(p)
+                && !rules.getRule(p, RuleManager.MOB_TARGETING)) {
+            event.setCancelled(true);
+            plugin.getLogger().fine("Blocked " + event.getDamager().getType() + " damage to vanished " + p.getName());
         }
     }
 
@@ -554,10 +562,13 @@ public class PlayerListener implements Listener {
             // Only cancel targeting if mob_targeting rule is OFF (false = mobs ignore vanished player)
             if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
                 event.setCancelled(true);
+                plugin.getLogger().info("Blocked " + event.getEntity().getType() + " from targeting vanished " + p.getName() + " (reason: " + event.getReason() + ")");
                 // Do NOT call mob.setTarget(null) or stopPathfinding() here — the event is cancelled
                 // so no path has started yet. Calling these triggers a second EntityTargetEvent
                 // (FORGOT reason) which resets the mob's NearestAttackableTargetGoal cooldown,
                 // preventing nearby non-vanished players from being targeted/attacked.
+            } else {
+                plugin.getLogger().fine(event.getEntity().getType() + " targeted vanished " + p.getName() + " (mob_targeting ENABLED)");
             }
         }
     }

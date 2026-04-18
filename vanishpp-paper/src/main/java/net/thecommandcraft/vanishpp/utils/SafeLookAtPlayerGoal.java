@@ -31,6 +31,7 @@ public class SafeLookAtPlayerGoal implements Goal<Mob> {
                 // Combat target is vanished: claim the LOOK slot so vanilla can't fall through,
                 // but don't set a targetPlayer (tick() will be a no-op).
                 targetPlayer = null;
+                plugin.getLogger().fine("SafeLookAt: Blocking look at vanished combat target " + p.getName());
                 return true;
             }
             targetPlayer = p;
@@ -46,7 +47,10 @@ public class SafeLookAtPlayerGoal implements Goal<Mob> {
         for (Entity e : mob.getLocation().getNearbyEntitiesByType(Player.class, 8.0)) {
             if (!(e instanceof Player p)) continue;
             anyNearby = true;
-            if (plugin.isVanished(p)) continue; // skip vanished — don't track them
+            if (plugin.isVanished(p)) {
+                plugin.getLogger().fine("SafeLookAt: Skipping vanished player " + p.getName() + " nearby " + mob.getType());
+                continue; // skip vanished — don't track them
+            }
             double d = mob.getLocation().distanceSquared(p.getLocation());
             if (d < nearestDistSq) {
                 nearestDistSq = d;
