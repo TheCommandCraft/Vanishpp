@@ -40,9 +40,9 @@ fi
 
 # ── locate JAR ─────────────────────────────────────────────────────────────────
 
-JAR=$(ls ../target/vanishpp-*.jar 2>/dev/null | grep -v 'original' | head -1)
+JAR=$(ls ../vanishpp-paper/target/vanishpp-*.jar 2>/dev/null | grep -v 'original' | sort -V | tail -1)
 if [ -z "$JAR" ]; then
-  error "No JAR found in target/. Run './start-proxy.sh --build' or 'mvn package' first."
+  error "No JAR found in vanishpp-paper/target/. Run './start-proxy.sh --build' or 'mvn package' first."
 fi
 
 mkdir -p plugins
