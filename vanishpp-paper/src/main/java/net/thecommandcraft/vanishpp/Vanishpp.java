@@ -934,16 +934,25 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.addPotionEffect(
                 new PotionEffect(PotionEffectType.INVISIBILITY, PotionEffect.INFINITE_DURATION, 0, false, false));
 
-        // setInvisible(true) sets the entity flag that mob AI checks via eyes.
-        // Bukkit JavaDoc: "will not be detected by Creatures that use their eyes to track targets"
-        // This removes the player from look and targeting scans natively — no event hacks needed.
         player.setInvisible(true);
+
+        // Spectator mode is the only vanilla mechanism that removes a player from
+        // LookAtPlayerGoal's getNearestPlayer() scan (EntitySelector.NO_SPECTATORS).
+        // setInvisible alone does NOT prevent look goals from finding the player.
+        if (ruleManager.getRule(player, RuleManager.SPECTATOR_GAMEMODE)
+                && player.getGameMode() != GameMode.SPECTATOR) {
+            if (!player.hasMetadata("vanishpp_pre_vanish_gamemode")) {
+                GameMode gm = player.getGameMode();
+                player.setMetadata("vanishpp_pre_vanish_gamemode", new FixedMetadataValue(this, gm));
+            }
+            player.setGameMode(GameMode.SPECTATOR);
+        }
 
         player.setCollidable(false);
 
         // ALWAYS clear existing mob targets when vanishing (regardless of mob_targeting rule)
         // The rule only controls whether new targets can be acquired AFTER vanishing
-        for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
+        for (Entity entity : player.getWorld().getEntities()) {
             if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
                 mob.setTarget(null);
                 mob.getPathfinder().stopPathfinding();
@@ -1289,7 +1298,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // ALWAYS clear mob targets (regardless of mob_targeting rule)
         // The rule only controls whether new targets can be acquired AFTER vanishing
-        for (Entity entity : player.getNearbyEntities(64, 64, 64)) {
+        for (Entity entity : player.getWorld().getEntities()) {
             if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
                 mob.setTarget(null);
                 mob.getPathfinder().stopPathfinding();

@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.7] - Unreleased
+## [1.1.8] - Unreleased
+
+### Fixed
+- **Mob Targeting Prevention Reliability:** Removed the duplicate `MONITOR`-priority `EntityTargetEvent` handler that called `mob.setTarget(null)` inside the event. This was triggering a secondary `EntityTargetEvent` (FORGOT reason) which reset `NearestAttackableTargetGoal` cooldowns, starving nearby non-vanished players of mob attacks. The single `HIGHEST`-priority cancel is sufficient and correct.
+- **Mob Target Clear on Vanish Missed Far Mobs:** When a player vanished, existing mob targets were cleared using a 64-block radius scan. Mobs further away that already had the player as their target were never cleared. The scan now covers the entire world the player is in.
+
+### Performance
+- **MobAiManager Sweep Scoped to Vanished Players:** The 5-tick periodic sweep previously iterated every entity in every world. It now iterates only online vanished players and checks a 100-block radius around each — zero cost when nobody is vanished.
+
+---
+
+## [1.1.7] - 2026-04-18
 
 ### Added
 - **Cross-Server Vanish State Reconciliation:** When a player joins a server that shares a MySQL/PostgreSQL database with other servers, their vanish state from any other server is immediately applied — no manual `/vanish` needed after switching. Works on BungeeCord/Velocity networks with a shared database. Stale in-memory entries for offline players are also periodically purged so no server accumulates phantom vanished UUIDs.
@@ -20,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - **Storage Backend Not Applied After `/vanishreload`:** Changing `storage.type` in `config.yml` (e.g. from `YAML` to `POSTGRESQL`) had no effect until the server was fully restarted. `/vanishreload` now shuts down the active storage provider and reinitializes it from the current config, making storage type changes take effect immediately.
 - **`/vanishscoreboard` Visible in Tab-Complete for All Players:** The command appeared in tab-complete for players who lacked `vanishpp.scoreboard`, revealing the feature's existence. The command entry in `plugin.yml` now declares `permission: vanishpp.scoreboard`, causing Bukkit to hide it from players without that node.
 - **MobAiManager Crash on Spigot/Bukkit:** `MobAiManager` called `Bukkit.getMobGoals()` — a Paper-only API — unconditionally on startup, causing `NoSuchMethodError` crashes on Spigot and Bukkit when the listener was registered. The manager is now only registered when the Paper API surface is confirmed present (Paper, Purpur, Folia). Mob AI goal injection and the 20-tick sweep remain fully operational on all Paper-family servers; on Spigot/Bukkit mob targeting prevention continues to work via `EntityTargetEvent`.
+- **Folia Startup Crash: `Delay ticks may not be <= 0`:** `FoliaSchedulerBridge.runLaterGlobal()` passed the caller-supplied tick value directly to Folia's `runDelayed`, which throws `IllegalArgumentException` for any value `<= 0`. The bridge now falls back to immediate `runGlobal` execution when `ticks <= 0`, matching the intent of the caller and preventing the plugin from failing to enable on Folia. (Thanks XChen446, PR #11)
 
 ---
 

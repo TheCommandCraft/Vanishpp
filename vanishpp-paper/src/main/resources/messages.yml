@@ -259,7 +259,7 @@ bulk:
 
 # --- [ CHANGELOG ] ---
 changelog:
-  header: "\n&6&l  Vanish++ 1.1.7 Changelog  "
+  header: "\n&6&l  Vanish++ 1.1.8 Changelog  "
   entries:
     - " &8• &eNew&7: /vspec quick-spectate command"
     - " &8• &eNew&7: /vfollow player tracking with HUD"

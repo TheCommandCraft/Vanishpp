@@ -49,7 +49,7 @@ services:
     tty: true
 
   paper1:
-    image: itzg/minecraft-server:latest  # Latest Paper 1.21.11 build (69)
+    image: itzg/minecraft-server:latest  # Latest Paper 1.21.11 build (130)
     container_name: vpp_proxy_paper1
 
     tty: true
@@ -63,7 +63,8 @@ services:
     environment:
       EULA: "TRUE"
       TYPE: PAPER
-      VERSION: "1.21.11"  # Latest: build 69
+      VERSION: "1.21.11"
+      BUILD_NUMBER: "130"
       MEMORY: "1536M"
       ONLINE_MODE: "FALSE"
       OPS: "TheCommandCraft,TCC_STUDIOS"
@@ -94,11 +95,12 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "25576:25575"
+      - "25586:25575"
     environment:
       EULA: "TRUE"
       TYPE: PAPER
-      VERSION: "1.21.11"  # Latest: build 69
+      VERSION: "1.21.11"
+      BUILD_NUMBER: "130"
       MEMORY: "1536M"
       ONLINE_MODE: "FALSE"
       OPS: "TheCommandCraft,TCC_STUDIOS"

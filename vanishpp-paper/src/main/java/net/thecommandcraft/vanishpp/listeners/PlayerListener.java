@@ -566,22 +566,6 @@ public class PlayerListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onMobTargetMonitor(EntityTargetEvent event) {
-        // MONITOR priority: fires AFTER all other listeners, no matter what
-        // Final failsafe to catch any targeting that somehow got through
-        if (event.isCancelled()) return;
-        if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
-            if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
-                // Even if already set by another listener, force it cancelled
-                event.setCancelled(true);
-                if (event.getEntity() instanceof Mob mob) {
-                    mob.setTarget(null);
-                }
-            }
-        }
-    }
-
     @EventHandler
     public void onEntityInteract(PlayerInteractEntityEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_INTERACT)) {
