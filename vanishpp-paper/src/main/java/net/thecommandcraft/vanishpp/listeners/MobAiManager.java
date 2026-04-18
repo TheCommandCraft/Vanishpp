@@ -60,7 +60,10 @@ public class MobAiManager implements Listener {
     }
 
     private void injectSafeAi(Mob mob) {
-        // SafeLookAtPlayerGoal injection disabled - rely on invisibility + EntityTargetEvent blocking
-        // which are more reliable than goal manipulation
+        if (!mob.isValid()) return;
+        if (Bukkit.getMobGoals().hasGoal(mob, VanillaGoal.LOOK_AT_PLAYER)) {
+            Bukkit.getMobGoals().removeGoal(mob, VanillaGoal.LOOK_AT_PLAYER);
+            Bukkit.getMobGoals().addGoal(mob, 2, new SafeLookAtPlayerGoal(plugin, mob));
+        }
     }
 }
