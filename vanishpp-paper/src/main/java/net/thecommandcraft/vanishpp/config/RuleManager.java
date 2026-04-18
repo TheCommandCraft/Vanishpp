@@ -33,7 +33,7 @@ public class RuleManager {
         hardDefaults.put(CAN_PICKUP_ITEMS, false);
         hardDefaults.put(CAN_DROP_ITEMS, false);
         hardDefaults.put(CAN_TRIGGER_PHYSICAL, false);
-        hardDefaults.put(CAN_INTERACT, true);
+        hardDefaults.put(CAN_INTERACT, false);
         hardDefaults.put(CAN_THROW, false);
         hardDefaults.put(CAN_CHAT, false);
         hardDefaults.put(MOB_TARGETING, false);
