@@ -29,10 +29,10 @@ public class MobAiManager implements Listener {
                 }
             }
         }
-        // Periodic sweep: every 20 ticks clear any mob targets that are pointing at a
-        // vanished player who has mob_targeting OFF. This is the last-resort safety net
-        // for mobs whose AI re-acquires targets between event firings.
-        plugin.getVanishScheduler().runTimerGlobal(this::sweepMobTargets, 1L, 20L);
+        // Periodic sweep: every 5 ticks (0.25s) clear any mob targets pointing at
+        // vanished players who have mob_targeting OFF. Aggressive safety net to ensure
+        // mobs cannot acquire/maintain targets on vanished players.
+        plugin.getVanishScheduler().runTimerGlobal(this::sweepMobTargets, 1L, 5L);
     }
 
     @EventHandler

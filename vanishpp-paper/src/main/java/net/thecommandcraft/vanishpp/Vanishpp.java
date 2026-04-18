@@ -929,6 +929,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
+        // Invisibility so mobs cannot see the player at all
+        player.addPotionEffect(
+                new PotionEffect(PotionEffectType.INVISIBILITY, PotionEffect.INFINITE_DURATION, 0, false, false));
+
         player.setCollidable(false);
 
         // ALWAYS clear existing mob targets when vanishing (regardless of mob_targeting rule)
@@ -1028,6 +1032,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION))
             player.removePotionEffect(PotionEffectType.NIGHT_VISION);
+        if (player.hasPotionEffect(PotionEffectType.INVISIBILITY))
+            player.removePotionEffect(PotionEffectType.INVISIBILITY);
         if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
                 && player.getGameMode() != GameMode.SPECTATOR) {
             // Restore exactly the fly state that existed before vanish
