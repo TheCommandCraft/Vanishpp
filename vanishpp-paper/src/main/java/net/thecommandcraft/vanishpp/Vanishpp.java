@@ -933,6 +933,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.addPotionEffect(
                 new PotionEffect(PotionEffectType.INVISIBILITY, PotionEffect.INFINITE_DURATION, 0, false, false));
 
+        // setInvisible(true) sets the entity flag that mob AI checks via eyes.
+        // Bukkit JavaDoc: "will not be detected by Creatures that use their eyes to track targets"
+        // This removes the player from look and targeting scans natively — no event hacks needed.
+        player.setInvisible(true);
+
         player.setCollidable(false);
 
         // ALWAYS clear existing mob targets when vanishing (regardless of mob_targeting rule)
@@ -1034,6 +1039,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             player.removePotionEffect(PotionEffectType.NIGHT_VISION);
         if (player.hasPotionEffect(PotionEffectType.INVISIBILITY))
             player.removePotionEffect(PotionEffectType.INVISIBILITY);
+        player.setInvisible(false);
         if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
                 && player.getGameMode() != GameMode.SPECTATOR) {
             // Restore exactly the fly state that existed before vanish
