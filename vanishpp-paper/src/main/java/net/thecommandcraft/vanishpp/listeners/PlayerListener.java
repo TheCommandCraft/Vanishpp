@@ -66,6 +66,8 @@ public class PlayerListener implements Listener {
     private static final Set<String> REPLY_COMMANDS = Set.of("r", "reply", "er", "ereply");
     // Tracks last vanished sender per non-seer recipient so /r can be blocked
     private final Map<UUID, UUID> msgReplyTargets = new ConcurrentHashMap<>();
+    // Holds permission attachments for OpenInv/InvSee++ sessions — removed on inventory close
+    private final Map<UUID, org.bukkit.permissions.PermissionAttachment> invseeAttachments = new ConcurrentHashMap<>();
 
     public PlayerListener(Vanishpp plugin) {
         this.plugin = plugin;
@@ -387,6 +389,8 @@ public class PlayerListener implements Listener {
         preFetchedVanishState.remove(uuid);
         msgReplyTargets.remove(uuid);
         msgReplyTargets.values().removeIf(v -> v.equals(uuid));
+        org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(uuid);
+        if (att != null) att.remove();
         plugin.cleanupPlayerCache(uuid);
     }
 
@@ -1026,8 +1030,8 @@ public class PlayerListener implements Listener {
             org.bukkit.permissions.PermissionAttachment att = viewer.addAttachment(plugin);
             att.setPermission("openinv.openinv", true);
             att.setPermission("openinv.modify", canModify);
+            invseeAttachments.put(viewer.getUniqueId(), att);
             viewer.performCommand("openinv " + target.getName());
-            att.remove();
             return;
         }
 
@@ -1036,8 +1040,8 @@ public class PlayerListener implements Listener {
             org.bukkit.permissions.PermissionAttachment att = viewer.addAttachment(plugin);
             att.setPermission("invsee.inventory.see", true);
             att.setPermission("invsee.inventory.edit", canModify);
+            invseeAttachments.put(viewer.getUniqueId(), att);
             viewer.performCommand("invsee " + target.getName());
-            att.remove();
             return;
         }
 
@@ -1103,6 +1107,8 @@ public class PlayerListener implements Listener {
         if (!(event.getPlayer() instanceof Player viewer)) return;
         plugin.invseeTargets.remove(viewer.getUniqueId());
         plugin.invseeViewOnly.remove(viewer.getUniqueId());
+        org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(viewer.getUniqueId());
+        if (att != null) att.remove();
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
