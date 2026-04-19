@@ -26,7 +26,7 @@ It works perfectly out of the box with zero configuration required, but offers g
 Most plugins just hide you visually. **Vanish++ removes you physically.**
 
 *   **Titan God Mode:** While vanished, you are strictly invincible. You take no damage, are immune to all potion effects, and cannot burn. You are a spectator in survival mode.
-*   **Smart Mob AI (True Sight):** We inject custom AI goals into every mob. They look right through you — no head tracking, no awkward staring. Our `SafeLookAtPlayerGoal` holds the mob's look slot whenever you are nearby so the vanilla AI never notices you exist. Mobs that had already locked on before you vanished are force-detargeted within one tick.
+*   **Smart Mob AI (True Sight):** Mobs completely ignore vanished players. Targeting is cancelled via `EntityTargetEvent` before the mob ever commits to an attack path. Mobs that had already locked on before you vanished are force-detargeted immediately.
 *   **Projectile Pass-Through:** We don't use "teleport hacks." Using native Paper events, arrows, tridents, and snowballs fly **physically through** your body. It is impossible to hit a vanished player.
 *   **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you. You are a ghost.
 *   **No Physical Triggers:** You can walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration or block update.
@@ -97,15 +97,24 @@ Most commands support an optional `[player]` argument, allowing admins to modify
 | Command | Alias | Description | Permission |
 | :--- | :--- | :--- | :--- |
 | `/vhelp [command]` | `/vanishhelp` | Interactive help menu & guide. | `no permission` |
-| `/vanish [player]` | `/v`, `/sv` | Toggle vanish state. | `vanishpp.vanish` |
-| `/vrules [player] <rule> [val]` | `/vanishrules` | Configure physics/interaction rules. | `vanishpp.rules` |
+| `/vanish [player] [reason]` | `/v`, `/sv` | Toggle vanish state. Supports `/vanish all` and `/vanish world <w>`. | `vanishpp.vanish` |
+| `/vrules [player] <rule> [val] [seconds]` | `/vanishrules` | Configure physics/interaction rules. Supports presets. | `vanishpp.rules` |
 | `/vconfig <key> [val]` | `/vanishconfig` | Edit config settings live. | `vanishpp.config` |
 | `/vperms` | - | Manage permissions without a perm plugin. | `vanishpp.manageperms` |
 | `/vlist` | `/vanishlist` | Interactive list of vanished players. Click a name to unvanish instantly. | `vanishpp.list` |
 | `/vignore [player]` | `/vanishignore` | Toggle start-up warnings. | `vanishpp.ignorewarning` |
 | `/vchat confirm` | `/vanishchat` | Confirm a chat message (if safety is on). | `vanishpp.chat` |
 | `/vreload` | `/vanishreload` | Reload config and resync all vanish effects. | `vanishpp.reload` |
-| `/vscoreboard` | - | Toggle the vanish sidebar scoreboard. | `vanishpp.scoreboard` |
+| `/vscoreboard` | `/vsb` | Toggle the vanish sidebar scoreboard. | `vanishpp.scoreboard` |
+| `/vspec <player\|stop>` | - | Quick-spectate a player. `/vspec stop` to return. | `vanishpp.spec` |
+| `/vfollow <player\|stop>` | - | Lock camera to silently follow a player. | `vanishpp.follow` |
+| `/vhistory [player]` | - | View vanish/unvanish audit log. | `vanishpp.history` |
+| `/vautovanish [player]` | - | Toggle auto-vanish on join for a player. | `vanishpp.autovanish` |
+| `/vstats [player]` | - | View vanish time statistics. | `vanishpp.stats` |
+| `/vadmin` | - | In-game dashboard GUI for vanish overview. | `vanishpp.admin` |
+| `/vwand` | - | Give the vanish wand (Blaze Rod toggle item). | `vanishpp.wand` |
+| `/vzone <create\|delete\|list\|reload>` | - | Manage no-vanish zones. | `vanishpp.zone` |
+| `/vincognito [player] [fakename]` | - | Enable/disable fake name mode. | `vanishpp.incognito` |
 
 ---
 
@@ -131,7 +140,7 @@ Customize your ghost experience. Default behavior can be tweaked per player.
 
 *   `can_break_blocks` (Default: `false` - Cannot break blocks)
 *   `can_place_blocks` (Default: `false` - Cannot place blocks)
-*   `can_interact` (Default: `true` - Chests, Buttons)
+*   `can_interact` (Default: `false` - Chests, Buttons)
 *   `can_hit_entities` (Default: `false` - Prevents hitting players/mobs)
 *   `can_pickup_items` (Default: `false` - Cannot pick up items)
 *   `can_drop_items` (Default: `false` - Cannot drop items from inventory)
