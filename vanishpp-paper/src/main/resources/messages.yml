@@ -77,6 +77,10 @@ warnings:
   throwable-blocked: "&cVanish blocked &ethrowing items&c. Use &b/vrules can_throw true &cto enable."
   ignore-tip: "&7Tip: Type &b/vrules show_notifications false &7to disable these messages."
   setup-header: "&c⚠ Vanish++ Setup Issues:"
+  invsee-hint-header: "&e&l ⚠ Invsee: Limited View"
+  invsee-hint-line: "&7 Armor, offhand and crafting slots are hidden in built-in mode."
+  invsee-hint-sub: "&e Install a supported plugin for full inventory access:"
+  invsee-hint-dismissed: "&7Invsee hint dismissed."
 
 # --- [ STAFF NOTIFICATIONS ] ---
 staff:

@@ -53,6 +53,10 @@ services:
   paper:
     <<: *common
     container_name: vpp_paper
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    dns_search: [""]
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +66,7 @@ services:
     environment:
       <<: *common-env
       TYPE: PAPER
+      PAPER_BUILD: "130"
       RCON_PORT: "25575"
       MOTD: "§aVanish++ Test §7— §fPaper §71.21.11"
     volumes:

@@ -16,7 +16,7 @@ warn()  { echo -e "${YELLOW}⚠${NC}  $*"; }
 
 # ── locate and copy JAR ────────────────────────────────────────────────────────
 
-JAR=$(ls ../target/vanishpp-*.jar 2>/dev/null | grep -v 'original' | head -1)
+JAR=$(ls -t ../vanishpp-paper/target/vanishpp-*.jar 2>/dev/null | grep -v 'original' | head -1)
 if [ -z "$JAR" ]; then
   echo -e "${RED}✖${NC}  No JAR found in target/. Run 'mvn package' first." >&2
   exit 1

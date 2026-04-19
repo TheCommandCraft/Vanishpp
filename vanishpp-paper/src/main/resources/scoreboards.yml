@@ -63,6 +63,8 @@ lines:
   - " &7Armor  &8| &f%armor%"
   - "&8&m                     "
   - " &7Time   &8| &f%time%  &7%date%"
+  - "&8&m                     "
+  - " &8/vsb &8| &7toggle"
 
 # Timer refresh rate (ticks — 20 = 1 second).
 # Refreshes TPS, time, online count and other non-position values.

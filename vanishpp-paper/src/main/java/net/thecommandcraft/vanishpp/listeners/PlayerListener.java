@@ -50,6 +50,7 @@ public class PlayerListener implements Listener {
     private final Map<UUID, GameMode> silentChestViewers = new ConcurrentHashMap<>();
     private final Map<UUID, String> silentChestBlockKeys = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Long>> ruleNotificationCooldowns = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> invseeHintCooldowns = new ConcurrentHashMap<>();
     private final Set<UUID> hasSeenDisableTip = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Long> lastSneakTime = new ConcurrentHashMap<>();
 
@@ -371,6 +372,7 @@ public class PlayerListener implements Listener {
             Bukkit.getConsoleSender().sendMessage(quitComp);
         }
         ruleNotificationCooldowns.remove(uuid);
+        invseeHintCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
         lastSneakTime.remove(uuid);
         preFetchedVanishState.remove(uuid);
@@ -965,6 +967,34 @@ public class PlayerListener implements Listener {
         plugin.invseeTargets.put(viewer.getUniqueId(), target);
         if (!canModify) plugin.invseeViewOnly.add(viewer.getUniqueId());
         viewer.openInventory(target.getInventory());
+
+        long now = System.currentTimeMillis();
+        if (!plugin.getStorageProvider().hasAcknowledged(viewer.getUniqueId(), "invsee-hint")
+                && now - invseeHintCooldowns.getOrDefault(viewer.getUniqueId(), 0L) >= 60_000L) {
+            invseeHintCooldowns.put(viewer.getUniqueId(), now);
+            LanguageManager lm = config.getLanguageManager();
+            viewer.sendMessage(Component.text(" "));
+            viewer.sendMessage(plugin.getMessageManager().parse(lm.getMessage("warnings.invsee-hint-header"), viewer));
+            viewer.sendMessage(plugin.getMessageManager().parse(lm.getMessage("warnings.invsee-hint-line"), viewer));
+            viewer.sendMessage(plugin.getMessageManager().parse(lm.getMessage("warnings.invsee-hint-sub"), viewer));
+            viewer.sendMessage(
+                    Component.text("   ").append(
+                    Component.text("[ OpenInv ]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                            .clickEvent(ClickEvent.openUrl("https://github.com/Jikoo/OpenInv/releases"))
+                            .hoverEvent(HoverEvent.showText(Component.text(
+                                    "Download OpenInv — full inventory access (GitHub)", NamedTextColor.GRAY))))
+                    .append(Component.text("  "))
+                    .append(Component.text("[ InvSee++ ]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                            .clickEvent(ClickEvent.openUrl("https://modrinth.com/plugin/invsee++"))
+                            .hoverEvent(HoverEvent.showText(Component.text(
+                                    "Download InvSee++ — full inventory access (Modrinth)", NamedTextColor.GRAY))))
+                    .append(Component.text("  "))
+                    .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                            .clickEvent(ClickEvent.runCommand("/vack invsee_hint"))
+                            .hoverEvent(HoverEvent.showText(Component.text(
+                                    "Don't show this again", NamedTextColor.GRAY)))));
+            viewer.sendMessage(Component.text(" "));
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)

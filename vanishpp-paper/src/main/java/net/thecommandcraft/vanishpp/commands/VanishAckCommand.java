@@ -81,6 +81,10 @@ public class VanishAckCommand implements TabExecutor {
                 plugin.getMessageManager().sendMessage(p,
                         lm.getMessage("config.proxy-applied").replace("%count%", String.valueOf(nonDefaults.size())));
             }
+            case "invsee_hint" -> {
+                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(), "invsee-hint");
+                plugin.getMessageManager().sendMessage(p, lm.getMessage("warnings.invsee-hint-dismissed"));
+            }
             default -> plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
         }
 
