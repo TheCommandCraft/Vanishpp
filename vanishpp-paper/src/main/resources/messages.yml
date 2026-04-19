@@ -291,6 +291,7 @@ changelog:
     - " &8• &eNew&7: Public VanishAPI for developers"
     - " &8• &eNew&7: Vanish history stored in DB"
     - " &8• &eNew&7: Auto-vanish on join per player"
+    - " &8• &eNew&7: Default scoreboard shows /vsb toggle hint"
     - " &8• &eNew&7: Shift-right-click invsee integrates OpenInv & InvSee++"
     - " &8• &eNew&7: /msg, /tell, /r, /me blocked for non-seers (detection prevention)"
     - " &8• &eNew&7: messages.yml auto-migrates new keys on upgrade"
