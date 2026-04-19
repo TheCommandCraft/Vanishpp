@@ -58,6 +58,15 @@ public class PlayerListener implements Listener {
     // PlayerJoinEvent can apply vanish instantly without an async round-trip.
     private final Map<UUID, Boolean> preFetchedVanishState = new ConcurrentHashMap<>();
 
+    // Private-message detection prevention
+    private static final Set<String> MSG_COMMANDS = Set.of(
+            "msg", "tell", "w", "whisper",
+            "emsg", "etell", "ewhisper",
+            "pm", "dm", "message");
+    private static final Set<String> REPLY_COMMANDS = Set.of("r", "reply", "er", "ereply");
+    // Tracks last vanished sender per non-seer recipient so /r can be blocked
+    private final Map<UUID, UUID> msgReplyTargets = new ConcurrentHashMap<>();
+
     public PlayerListener(Vanishpp plugin) {
         this.plugin = plugin;
         this.config = plugin.getConfigManager();
@@ -376,6 +385,8 @@ public class PlayerListener implements Listener {
         hasSeenDisableTip.remove(uuid);
         lastSneakTime.remove(uuid);
         preFetchedVanishState.remove(uuid);
+        msgReplyTargets.remove(uuid);
+        msgReplyTargets.values().removeIf(v -> v.equals(uuid));
         plugin.cleanupPlayerCache(uuid);
     }
 
@@ -414,6 +425,73 @@ public class PlayerListener implements Listener {
         event.renderer((source, displayName, message, audience) ->
             prefix.append(displayName).append(Component.text(": ")).append(message)
         );
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPrivateMessageCommand(PlayerCommandPreprocessEvent event) {
+        Player sender = event.getPlayer();
+        String raw = event.getMessage();
+        String[] parts = raw.split("\\s+", 3);
+        String cmdRaw = parts[0].substring(1).toLowerCase();
+        int colon = cmdRaw.indexOf(':');
+        String cmd = colon >= 0 ? cmdRaw.substring(colon + 1) : cmdRaw;
+
+        boolean senderVanished = plugin.isVanished(sender);
+        boolean senderCanSee = plugin.getPermissionManager().hasPermission(sender, "vanishpp.see");
+
+        // ── /me — vanished player action broadcast ───────────────────────────
+        if ("me".equals(cmd) && senderVanished) {
+            if (!rules.getRule(sender, RuleManager.CAN_CHAT)) {
+                event.setCancelled(true);
+                sendRuleDeny(sender, RuleManager.CAN_CHAT, "/me");
+                return;
+            }
+            // Relay to seers only with [Vanished] prefix
+            event.setCancelled(true);
+            String actionText = raw.length() > parts[0].length() + 1
+                    ? raw.substring(parts[0].length() + 1) : "";
+            Component prefix = plugin.getMessageManager().parse(config.vanishTabPrefix, sender);
+            Component meMsg = prefix.append(Component.text("* " + sender.getName() + " " + actionText));
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (plugin.getPermissionManager().hasPermission(p, "vanishpp.see"))
+                    p.sendMessage(meMsg);
+            }
+            return;
+        }
+
+        // ── /msg, /tell, /w, /whisper, etc. ─────────────────────────────────
+        if (MSG_COMMANDS.contains(cmd) && parts.length >= 2) {
+            String targetName = parts[1];
+            Player target = Bukkit.getPlayerExact(targetName);
+            if (target == null) return;
+
+            // Non-seer → vanished player: fake "not found" to prevent detection
+            if (!senderVanished && !senderCanSee && plugin.isVanished(target)) {
+                event.setCancelled(true);
+                plugin.getMessageManager().sendMessage(sender,
+                        config.getLanguageManager().getMessage("player-not-found"));
+                return;
+            }
+
+            // Vanished sender → non-seer: track so /r gets blocked
+            if (senderVanished && !plugin.getPermissionManager().hasPermission(target, "vanishpp.see")) {
+                msgReplyTargets.put(target.getUniqueId(), sender.getUniqueId());
+            }
+            return;
+        }
+
+        // ── /r, /reply, etc. ─────────────────────────────────────────────────
+        if (REPLY_COMMANDS.contains(cmd) && !senderCanSee) {
+            UUID replyTarget = msgReplyTargets.get(sender.getUniqueId());
+            if (replyTarget == null) return;
+            Player target = Bukkit.getPlayer(replyTarget);
+            if (target != null && plugin.isVanished(target)) {
+                event.setCancelled(true);
+                plugin.getMessageManager().sendMessage(sender,
+                        config.getLanguageManager().getMessage("player-not-found"));
+                msgReplyTargets.remove(sender.getUniqueId());
+            }
+        }
     }
 
     @EventHandler
