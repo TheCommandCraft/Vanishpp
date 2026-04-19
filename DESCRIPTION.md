@@ -130,7 +130,8 @@ Only needed if you are building custom HUDs or Scoreboards. (TAB Plugin works au
 | `%vanishpp_visible_online%` | `15` | Total players minus vanished players (Fake count). |
 | `%vanishpp_prefix%` | `[VANISHED]` | Configured prefix (empty if visible). |
 | `%vanishpp_pickup%` | `Enabled` | Current item pickup status. |
-| `%vanishpp_vanished_list%` | `Notch, Herobrine` | List of online vanished names. |
+| `%vanishpp_vanished_list%` | `Notch, Herobrine` | Comma-separated list of online vanished player names. |
+| `%vanishpp_visible_player_list%` | `Steve, Alex` | Comma-separated list of online non-vanished (visible) player names. |
 
 ---
 

@@ -175,6 +175,12 @@ public class IntegrationManager {
                         .map(Player::getName)
                         .collect(Collectors.joining(", "));
             }
+            if (identifier.equalsIgnoreCase("visible_player_list")) {
+                return Bukkit.getOnlinePlayers().stream()
+                        .filter(p -> !plugin.isVanished(p))
+                        .map(Player::getName)
+                        .collect(Collectors.joining(", "));
+            }
             return null;
         }
     }
