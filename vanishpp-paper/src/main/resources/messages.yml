@@ -297,4 +297,5 @@ changelog:
     - " &8• &eNew&7: messages.yml auto-migrates new keys on upgrade"
     - " &8• &cFixed&7: Mob AI targeting vanished players (cross-version regression)"
     - " &8• &cFixed&7: Folia scheduler illegal delay crash (reported in #11)"
+    - " &8• &cFixed&7: Mass disconnect on unvanish (glow packet race + packet burst)"
   footer: "&7-------------------------------"

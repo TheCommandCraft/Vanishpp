@@ -818,7 +818,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Catches permission changes, op/deop, and any external plugins overriding visibility.
         vanishScheduler.runTimerGlobal(() -> {
             Set<UUID> vanishedCopy = Set.copyOf(vanishedPlayers);
-            Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
+            List<Player> onlinePlayers = new ArrayList<>(Bukkit.getOnlinePlayers());
 
             for (UUID uuid : vanishedCopy) {
                 Player vanished = Bukkit.getPlayer(uuid);
@@ -1203,7 +1203,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void updateVanishVisibility(Player subject) {
         boolean isVanished = isVanished(subject);
-        for (Player observer : Bukkit.getOnlinePlayers()) {
+        for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             if (observer.equals(subject))
                 continue;
             boolean canSee = permissionManager.canSee(observer, subject);
@@ -1242,14 +1242,19 @@ public class Vanishpp extends JavaPlugin implements Listener {
      */
     public void refreshVisibilityWithGlow(Player subject) {
         boolean subjectVanished = isVanished(subject);
-        for (Player observer : Bukkit.getOnlinePlayers()) {
+        for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             if (observer.equals(subject))
                 continue;
             boolean canSee = permissionManager.canSee(observer, subject);
             if (subjectVanished && !canSee) {
                 observer.hidePlayer(this, subject);
-            } else {
+            } else if (canSee) {
+                // Force entity respawn only for seers — needed to apply/clear glow metadata.
+                // Non-seers get a plain showPlayer below without the extra destroy packet.
                 observer.hidePlayer(this, subject);
+                observer.showPlayer(this, subject);
+            } else {
+                // Non-seer, subject not vanished: just show (hide was already a no-op)
                 observer.showPlayer(this, subject);
             }
         }

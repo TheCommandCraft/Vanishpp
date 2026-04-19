@@ -357,7 +357,7 @@ public class ProtocolLibManager {
     public void sendGlowMetadata(Player vanished) {
         if (!plugin.getConfigManager().staffGlowEnabled) return;
         try {
-            for (Player observer : Bukkit.getOnlinePlayers()) {
+            for (Player observer : new java.util.ArrayList<>(Bukkit.getOnlinePlayers())) {
                 if (observer.equals(vanished)) continue;
                 if (!plugin.getPermissionManager().canSee(observer, vanished)) continue;
                 if (!observer.canSee(vanished)) continue; // not yet shown
