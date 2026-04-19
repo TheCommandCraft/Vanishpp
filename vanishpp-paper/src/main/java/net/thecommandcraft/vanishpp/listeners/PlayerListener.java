@@ -469,7 +469,7 @@ public class PlayerListener implements Listener {
             if (!senderVanished && !senderCanSee && plugin.isVanished(target)) {
                 event.setCancelled(true);
                 plugin.getMessageManager().sendMessage(sender,
-                        config.getLanguageManager().getMessage("player-not-found"));
+                        config.getLanguageManager().getMessage("commands.msg-player-not-found"));
                 return;
             }
 
@@ -488,7 +488,7 @@ public class PlayerListener implements Listener {
             if (target != null && plugin.isVanished(target)) {
                 event.setCancelled(true);
                 plugin.getMessageManager().sendMessage(sender,
-                        config.getLanguageManager().getMessage("player-not-found"));
+                        config.getLanguageManager().getMessage("commands.msg-player-not-found"));
                 msgReplyTargets.remove(sender.getUniqueId());
             }
         }

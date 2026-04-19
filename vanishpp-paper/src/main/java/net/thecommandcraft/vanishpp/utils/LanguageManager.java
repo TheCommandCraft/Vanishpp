@@ -25,12 +25,27 @@ public class LanguageManager {
 
         langConfig = YamlConfiguration.loadConfiguration(msgFile);
 
-        // Fallback to internal english resources if keys are missing
+        // Fill missing keys from bundled default and write them back to disk
         InputStream defMsgStream = plugin.getResource("messages.yml");
         if (defMsgStream != null) {
             YamlConfiguration defConfig = YamlConfiguration
                     .loadConfiguration(new InputStreamReader(defMsgStream, StandardCharsets.UTF_8));
             langConfig.setDefaults(defConfig);
+
+            boolean dirty = false;
+            for (String key : defConfig.getKeys(true)) {
+                if (!defConfig.isConfigurationSection(key) && !langConfig.isSet(key)) {
+                    langConfig.set(key, defConfig.get(key));
+                    dirty = true;
+                }
+            }
+            if (dirty) {
+                try {
+                    langConfig.save(msgFile);
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Failed to write new message keys to messages.yml: " + e.getMessage());
+                }
+            }
         }
     }
 

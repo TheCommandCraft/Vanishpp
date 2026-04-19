@@ -229,6 +229,13 @@ wand:
   given: "&aVanish wand placed in your inventory."
   disabled: "&cThe vanish wand feature is not enabled on this server."
 
+# --- [ COMMAND FAKE RESPONSES ] ---
+# Shown to non-staff when a command would reveal that a vanished player is online.
+# Default values match vanilla Minecraft/Paper output so they blend in naturally.
+commands:
+  # Shown when a non-seer tries /msg, /tell, /w, /r, etc. targeting a vanished player.
+  msg-player-not-found: "&cNo player was found"
+
 # --- [ HELP MENU ] ---
 help:
   header: "\n&6&l      Vanish++ Help Menu      "
