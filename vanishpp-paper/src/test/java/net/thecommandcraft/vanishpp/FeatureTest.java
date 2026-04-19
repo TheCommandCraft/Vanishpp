@@ -204,6 +204,9 @@ class FeatureTest {
     void testFlyModePersistence() {
         player.setOp(true);
 
+        // Disable spectator mode so the player stays in SURVIVAL — needed for fly-grant logic
+        plugin.getRuleManager().setRule(player, RuleManager.SPECTATOR_GAMEMODE, false);
+
         // Case A: Fly disabled on unvanish, no fly permission
         plugin.getConfigManager().disableFlyOnUnvanish = true;
         org.bukkit.permissions.PermissionAttachment att = player.addAttachment(plugin);

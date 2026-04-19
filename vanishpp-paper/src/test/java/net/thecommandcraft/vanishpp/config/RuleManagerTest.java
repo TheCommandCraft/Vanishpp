@@ -76,9 +76,9 @@ class RuleManagerTest {
     }
 
     @Test
-    void testHardDefault_canInteract_isTrue() {
+    void testHardDefault_canInteract_isFalse() {
         plugin.getConfigManager().defaultRules.clear();
-        assertTrue(rules.getRule(player, RuleManager.CAN_INTERACT));
+        assertFalse(rules.getRule(player, RuleManager.CAN_INTERACT));
     }
 
     @Test
