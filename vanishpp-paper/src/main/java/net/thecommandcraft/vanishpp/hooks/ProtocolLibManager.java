@@ -311,13 +311,15 @@ public class ProtocolLibManager {
         });
 
         // Suppress sound effects originating at silently-opened block positions.
-        // Vanilla block sounds (barrel, chest, shulker) use SOUND_EFFECT (registered sound ID).
-        // Custom sounds use NAMED_SOUND_EFFECT. We listen to both.
+        // Vanilla block sounds use NAMED_SOUND_EFFECT; custom sounds use CUSTOM_SOUND_EFFECT.
+        // CUSTOM_SOUND_EFFECT is absent on some MC versions — only register it when supported.
         // All sound packets in 1.21+ store coordinates as fixed-point ints (actual_coord * 8).
-        // Integer field layout varies by packet type — we try multiple index offsets to be robust.
+        List<PacketType> soundPacketTypes = new java.util.ArrayList<>();
+        soundPacketTypes.add(PacketType.Play.Server.NAMED_SOUND_EFFECT);
+        if (PacketType.Play.Server.CUSTOM_SOUND_EFFECT.isSupported())
+            soundPacketTypes.add(PacketType.Play.Server.CUSTOM_SOUND_EFFECT);
         PacketAdapter soundListener = new PacketAdapter(plugin, ListenerPriority.HIGHEST,
-                PacketType.Play.Server.NAMED_SOUND_EFFECT,
-                PacketType.Play.Server.CUSTOM_SOUND_EFFECT) {
+                soundPacketTypes) {
             @Override
             public void onPacketSending(PacketEvent event) {
                 if (event.isCancelled()) return;
@@ -333,7 +335,6 @@ public class ProtocolLibManager {
             /** Try index offsets 0..3 for X/Y/Z, always treating as fixed-point (* 8). */
             private boolean matchesSilentBlock(PacketContainer packet) {
                 Set<String> silentBlocks = ProtocolLibManager.this.plugin.silentlyOpenedBlocks;
-                // Try integer-based coordinates (fixed-point) at multiple offsets
                 for (int offset = 0; offset <= 3; offset++) {
                     try {
                         int bx = packet.getIntegers().read(offset) >> 3;
