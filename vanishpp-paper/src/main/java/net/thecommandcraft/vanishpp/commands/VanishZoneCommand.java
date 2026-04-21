@@ -82,7 +82,9 @@ public class VanishZoneCommand implements CommandExecutor, TabCompleter {
                     plugin.getMessageManager().sendMessage(sender,
                             lm.getMessage("zone.created")
                                     .replace("%name%", name)
-                                    .replace("%radius%", String.valueOf((int) radius)));
+                                    .replace("%radius%", radius == Math.floor(radius)
+                            ? String.valueOf((int) radius)
+                            : String.valueOf(radius)));
                 }
             }
             case "delete" -> {

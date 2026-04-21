@@ -53,25 +53,36 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
             }
             target = player;
         } else if (args.length == 1) {
-            // Could be a player name OR a fake name / "off"
-            Player online = Bukkit.getPlayer(args[0]);
-            if (online != null && !online.equals(sender)) {
-                // Treat as targeting another player
-                if (!sender.hasPermission("vanishpp.incognito.others")) {
-                    plugin.getMessageManager().sendMessage(sender,
-                            plugin.getConfigManager().noPermissionMessage);
-                    return true;
-                }
-                target = online;
-            } else {
-                // Treat as a fake name / "off" for self
+            // "off" is always self-disable — check it before player lookup to avoid
+            // ambiguity when a player named "off" is online.
+            if (args[0].equalsIgnoreCase("off")) {
                 if (!(sender instanceof Player player)) {
                     plugin.getMessageManager().sendMessage(sender,
                             plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
                     return true;
                 }
                 target = player;
-                requestedName = args[0];
+                requestedName = "off";
+            } else {
+                Player online = Bukkit.getPlayer(args[0]);
+                if (online != null && !online.equals(sender)) {
+                    // Treat as targeting another player
+                    if (!sender.hasPermission("vanishpp.incognito.others")) {
+                        plugin.getMessageManager().sendMessage(sender,
+                                plugin.getConfigManager().noPermissionMessage);
+                        return true;
+                    }
+                    target = online;
+                } else {
+                    // Treat as a fake name for self
+                    if (!(sender instanceof Player player)) {
+                        plugin.getMessageManager().sendMessage(sender,
+                                plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
+                        return true;
+                    }
+                    target = player;
+                    requestedName = args[0];
+                }
             }
         } else {
             // /vincognito <player> <fakename|off>

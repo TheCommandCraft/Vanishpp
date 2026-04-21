@@ -81,7 +81,6 @@ public class WorldGuardHook {
         try {
             RegionContainer container = WorldGuard.getInstance().getPlatform().getRegionContainer();
             RegionQuery query = container.createQuery();
-            com.sk89q.worldedit.bukkit.BukkitAdapter adapter = null;
             com.sk89q.worldedit.util.Location loc =
                     com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(player.getLocation());
             LocalPlayer localPlayer = WorldGuardPlugin.inst().wrapPlayer(player);

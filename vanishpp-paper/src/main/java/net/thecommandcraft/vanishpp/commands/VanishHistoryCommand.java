@@ -123,7 +123,7 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
     private UUID resolveUUID(String name) {
         Player online = Bukkit.getPlayer(name);
         if (online != null) return online.getUniqueId();
-        return null; // Offline lookup not available without a names DB
+        return plugin.playerNameCache.get(name.toLowerCase());
     }
 
     @Override

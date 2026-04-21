@@ -55,6 +55,7 @@ public class ConfigManager {
 
     // Hooks & System
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
+    public boolean updateCheckerShowBeta, updateCheckerShowAlpha;
     public boolean simulateEssentialsMessages;
     public boolean staffNotifyEnabled;
     public boolean scoreboardEnabled, scoreboardAutoShow;
@@ -222,6 +223,8 @@ public class ConfigManager {
         updateCheckerId = config.getString("update-checker.modrinth-id", "vanish++");
         updateCheckerMode = config.getString("update-checker.notify-mode", "PERMISSION");
         updateCheckerList = config.getStringList("update-checker.notify-list");
+        updateCheckerShowBeta  = config.getBoolean("update-checker.show-beta",  true);
+        updateCheckerShowAlpha = config.getBoolean("update-checker.show-alpha", true);
 
         scoreboardEnabled = config.getBoolean("scoreboard.enabled", true);
         scoreboardAutoShow = config.getBoolean("scoreboard.auto-show-on-vanish", true);
@@ -353,10 +356,12 @@ public class ConfigManager {
         maxLevel             = s.maxLevel;
 
         // Update Checker
-        updateCheckerEnabled = s.updateCheckerEnabled;
-        updateCheckerMode    = s.updateCheckerMode;
-        updateCheckerId      = s.updateCheckerId;
-        updateCheckerList    = s.updateCheckerList != null ? s.updateCheckerList : new java.util.ArrayList<>();
+        updateCheckerEnabled  = s.updateCheckerEnabled;
+        updateCheckerMode     = s.updateCheckerMode;
+        updateCheckerId       = s.updateCheckerId;
+        updateCheckerList     = s.updateCheckerList != null ? s.updateCheckerList : new java.util.ArrayList<>();
+        updateCheckerShowBeta  = s.updateCheckerShowBeta;
+        updateCheckerShowAlpha = s.updateCheckerShowAlpha;
 
         // Scoreboard
         scoreboardEnabled    = s.scoreboardEnabled;

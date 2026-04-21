@@ -79,6 +79,8 @@ public class ProxyConfigSnapshot {
     public String updateCheckerMode = "PERMISSION";
     public String updateCheckerId = "vanish++";
     public List<String> updateCheckerList = new ArrayList<>();
+    public boolean updateCheckerShowBeta  = true;
+    public boolean updateCheckerShowAlpha = true;
 
     // ── Scoreboard ───────────────────────────────────────────────────────────
     public boolean scoreboardEnabled = true;
@@ -231,6 +233,8 @@ public class ProxyConfigSnapshot {
             case "update-checker.enabled"                           -> s.updateCheckerEnabled = bool(val);
             case "update-checker.notify-mode"                       -> s.updateCheckerMode = str(val);
             case "update-checker.modrinth-id"                       -> s.updateCheckerId = str(val);
+            case "update-checker.show-beta"                         -> s.updateCheckerShowBeta = bool(val);
+            case "update-checker.show-alpha"                        -> s.updateCheckerShowAlpha = bool(val);
             // Scoreboard
             case "scoreboard.enabled"                               -> s.scoreboardEnabled = bool(val);
             case "scoreboard.auto-show-on-vanish"                   -> s.scoreboardAutoShow = bool(val);

@@ -72,7 +72,7 @@ public class VanishStatsCommand implements CommandExecutor, TabCompleter {
             // Add in-progress session time if currently vanished
             long currentSessionMs = 0;
             Long startTime = plugin.vanishStartTimes.get(targetUuid);
-            if (startTime != null && plugin.isVanished(Bukkit.getPlayer(targetUuid))) {
+            if (startTime != null && plugin.isVanished(targetUuid)) {
                 currentSessionMs = System.currentTimeMillis() - startTime;
             }
             final long totalMs = stats.getTotalVanishTimeMs() + currentSessionMs;

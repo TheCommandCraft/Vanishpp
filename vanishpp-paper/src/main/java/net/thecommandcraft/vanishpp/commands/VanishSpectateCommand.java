@@ -76,7 +76,7 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
         plugin.spectateOriginalGamemodes.put(player.getUniqueId(), player.getGameMode());
 
         player.setGameMode(GameMode.SPECTATOR);
-        player.teleport(target.getLocation());
+        player.teleportAsync(target.getLocation());
         plugin.spectateFollowTargets.put(player.getUniqueId(), target.getUniqueId());
 
         plugin.getMessageManager().sendMessage(player,
@@ -98,7 +98,7 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
         }
 
         player.setGameMode(gm != null ? gm : GameMode.SURVIVAL);
-        player.teleport(origin);
+        player.teleportAsync(origin);
         plugin.getMessageManager().sendMessage(player,
                 plugin.getConfigManager().getLanguageManager().getMessage("vspec.stopped"));
     }

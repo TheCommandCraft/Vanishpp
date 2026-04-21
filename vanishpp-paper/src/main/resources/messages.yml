@@ -30,9 +30,13 @@ vperms:
 update:
   available: "&a&lVanish++ Update Available!"
   current: "&7Current: &c%version%"
-  latest: "&7Latest: &a%version%"
+  latest: "&7Latest: &a%version% &8[&e%type%&8]"
   download: "&6&l[CLICK TO DOWNLOAD]"
   hover: "&eGo to Modrinth Version %version%"
+  hide-beta: "&8[&7Don't notify me about beta builds&8]"
+  hide-beta-hover: "&7Click to stop receiving beta update notifications.\n&8Runs: /vconfig update-checker.show-beta false"
+  hide-alpha: "&8[&7Don't notify me about alpha builds&8]"
+  hide-alpha-hover: "&7Click to stop receiving alpha update notifications.\n&8Runs: /vconfig update-checker.show-alpha false"
 
 # --- [ RULES COMMAND ] ---
 rules:

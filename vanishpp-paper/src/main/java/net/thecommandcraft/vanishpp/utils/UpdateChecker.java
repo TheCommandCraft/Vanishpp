@@ -26,6 +26,7 @@ public class UpdateChecker {
     private static final String TEST_VERSION = null;
 
     private String latestVersion;
+    private String latestVersionType;
     private boolean updateAvailable;
 
     public UpdateChecker(Vanishpp plugin) {
@@ -65,23 +66,50 @@ public class UpdateChecker {
                     JsonArray versions = element.getAsJsonArray();
                     if (versions.size() == 0) return;
 
-                    JsonObject latest = versions.get(0).getAsJsonObject();
-                    String remoteVersion = latest.get("version_number").getAsString();
-                    String currentVersion = TEST_VERSION != null ? TEST_VERSION : plugin.getDescription().getVersion();
+                    boolean showBeta  = plugin.getConfigManager().updateCheckerShowBeta;
+                    boolean showAlpha = plugin.getConfigManager().updateCheckerShowAlpha;
 
-                    String cleanRemote = remoteVersion.replaceAll("[^0-9.]", "");
+                    // Find the best candidate: highest semver, tiebreak by release > beta > alpha
+                    JsonObject best = null;
+                    for (JsonElement el : versions) {
+                        JsonObject v = el.getAsJsonObject();
+                        String type = v.has("version_type")
+                                ? v.get("version_type").getAsString() : "release";
+                        if (type.equals("beta")  && !showBeta)  continue;
+                        if (type.equals("alpha") && !showAlpha) continue;
+                        if (best == null || compareVersionObjects(v, best) > 0) best = v;
+                    }
+                    if (best == null) return;
+
+                    String remoteVersion  = best.get("version_number").getAsString();
+                    String remoteType     = best.has("version_type")
+                            ? best.get("version_type").getAsString() : "release";
+                    String currentVersion = TEST_VERSION != null
+                            ? TEST_VERSION : plugin.getDescription().getVersion();
+
+                    String cleanRemote  = remoteVersion.replaceAll("[^0-9.]", "");
                     String cleanCurrent = currentVersion.replaceAll("[^0-9.]", "");
 
-                    if (isNewer(cleanCurrent, cleanRemote)) {
+                    int semverCmp = compareSemver(cleanCurrent, cleanRemote);
+                    // Newer if: higher semver, OR same semver but higher release tier
+                    // (e.g. running 1.1.8-beta and a release build of 1.1.8 is out)
+                    boolean isNewer = semverCmp < 0
+                            || (semverCmp == 0
+                                && releaseWeight(remoteType) > releaseWeight(currentReleaseType()));
+
+                    if (isNewer) {
                         this.latestVersion = remoteVersion;
+                        this.latestVersionType = remoteType;
                         this.updateAvailable = true;
                         plugin.getLogger().warning("---------------------------------------------------");
-                        plugin.getLogger().warning("A new version of Vanish++ is available: " + remoteVersion);
+                        plugin.getLogger().warning("A new version of Vanish++ is available: "
+                                + remoteVersion + " [" + remoteType + "]");
                         plugin.getLogger().warning("Download: " + MODRINTH_URL);
                         plugin.getLogger().warning("---------------------------------------------------");
                     } else {
                         this.updateAvailable = false;
-                        plugin.getLogger().info("[UpdateChecker] Vanish++ is up to date (running " + currentVersion + ").");
+                        plugin.getLogger().info("[UpdateChecker] Vanish++ is up to date (running "
+                                + currentVersion + ").");
                     }
                 }
             } finally {
@@ -90,6 +118,53 @@ public class UpdateChecker {
         } catch (Exception e) {
             plugin.getLogger().warning("[UpdateChecker] Check failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Compares two version JSON objects. Returns positive if {@code a} is "better" than {@code b}:
+     * higher semver wins; on equal semver, higher release tier wins (release > beta > alpha).
+     */
+    private int compareVersionObjects(JsonObject a, JsonObject b) {
+        String numA = a.get("version_number").getAsString().replaceAll("[^0-9.]", "");
+        String numB = b.get("version_number").getAsString().replaceAll("[^0-9.]", "");
+        int semver = compareSemver(numA, numB);
+        if (semver != 0) return semver;
+        String typeA = a.has("version_type") ? a.get("version_type").getAsString() : "release";
+        String typeB = b.has("version_type") ? b.get("version_type").getAsString() : "release";
+        return Integer.compare(releaseWeight(typeA), releaseWeight(typeB));
+    }
+
+    /** release=3, beta=2, alpha=1, unknown=0 */
+    private int releaseWeight(String type) {
+        return switch (type.toLowerCase()) {
+            case "release" -> 3;
+            case "beta"    -> 2;
+            case "alpha"   -> 1;
+            default        -> 0;
+        };
+    }
+
+    /** Infers the release type of the currently running build from its version string. */
+    private String currentReleaseType() {
+        String v = plugin.getDescription().getVersion().toLowerCase();
+        if (v.contains("alpha")) return "alpha";
+        if (v.contains("beta"))  return "beta";
+        return "release";
+    }
+
+    /** Compares two semver strings. Returns negative if a < b, 0 if equal, positive if a > b. */
+    private int compareSemver(String a, String b) {
+        try {
+            String[] pa = a.split("\\.");
+            String[] pb = b.split("\\.");
+            int len = Math.max(pa.length, pb.length);
+            for (int i = 0; i < len; i++) {
+                int va = i < pa.length ? Integer.parseInt(pa[i]) : 0;
+                int vb = i < pb.length ? Integer.parseInt(pb[i]) : 0;
+                if (va != vb) return Integer.compare(va, vb);
+            }
+        } catch (NumberFormatException ignored) {}
+        return a.compareToIgnoreCase(b);
     }
 
     private String buildApiUrl() {
@@ -104,24 +179,6 @@ public class UpdateChecker {
         if (name.contains("paper"))  return "paper";
         if (name.contains("spigot")) return "spigot";
         return "bukkit";
-    }
-
-    /** Returns true if remoteVersion is newer than currentVersion. */
-    private boolean isNewer(String current, String remote) {
-        try {
-            String[] c = current.split("\\.");
-            String[] r = remote.split("\\.");
-            int len = Math.max(c.length, r.length);
-            for (int i = 0; i < len; i++) {
-                int cv = i < c.length ? Integer.parseInt(c[i]) : 0;
-                int rv = i < r.length ? Integer.parseInt(r[i]) : 0;
-                if (rv > cv) return true;
-                if (rv < cv) return false;
-            }
-        } catch (NumberFormatException e) {
-            return !current.equalsIgnoreCase(remote);
-        }
-        return false;
     }
 
     /**
@@ -171,22 +228,42 @@ public class UpdateChecker {
         if (!shouldNotify(player)) return;
 
         LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+        String type = latestVersionType != null ? latestVersionType : "release";
+        String currentVersion = TEST_VERSION != null ? TEST_VERSION : plugin.getDescription().getVersion();
+
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 2.0f);
         player.sendMessage(Component.empty());
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.available"));
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.current")
-                .replace("%version%", TEST_VERSION != null ? TEST_VERSION : plugin.getDescription().getVersion()));
+                .replace("%version%", currentVersion));
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.latest")
-                .replace("%version%", latestVersion));
+                .replace("%version%", latestVersion)
+                .replace("%type%", type));
 
-        String downloadBtn = lm.getMessage("update.download").replace("%version%", latestVersion);
-        String hoverText  = lm.getMessage("update.hover").replace("%version%", latestVersion);
         String link = MODRINTH_URL + "/version/" + latestVersion;
-
+        String downloadBtn = lm.getMessage("update.download").replace("%version%", latestVersion);
+        String hoverText   = lm.getMessage("update.hover").replace("%version%", latestVersion);
         Component button = plugin.getMessageManager().parse(downloadBtn, player)
                 .clickEvent(ClickEvent.openUrl(link))
                 .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(hoverText, player)));
         player.sendMessage(button);
+
+        // Show hide-buttons for beta/alpha if that's what the update is
+        if (type.equals("beta") && plugin.getConfigManager().updateCheckerShowBeta) {
+            Component hideBtn = plugin.getMessageManager()
+                    .parse(lm.getMessage("update.hide-beta"), player)
+                    .clickEvent(ClickEvent.runCommand("/vconfig update-checker.show-beta false"))
+                    .hoverEvent(HoverEvent.showText(plugin.getMessageManager()
+                            .parse(lm.getMessage("update.hide-beta-hover"), player)));
+            player.sendMessage(hideBtn);
+        } else if (type.equals("alpha") && plugin.getConfigManager().updateCheckerShowAlpha) {
+            Component hideBtn = plugin.getMessageManager()
+                    .parse(lm.getMessage("update.hide-alpha"), player)
+                    .clickEvent(ClickEvent.runCommand("/vconfig update-checker.show-alpha false"))
+                    .hoverEvent(HoverEvent.showText(plugin.getMessageManager()
+                            .parse(lm.getMessage("update.hide-alpha-hover"), player)));
+            player.sendMessage(hideBtn);
+        }
         player.sendMessage(Component.empty());
     }
 }

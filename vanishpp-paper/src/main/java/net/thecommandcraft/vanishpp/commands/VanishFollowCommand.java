@@ -82,7 +82,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
         }
 
         plugin.spectateFollowTargets.put(player.getUniqueId(), target.getUniqueId());
-        player.teleport(target.getLocation());
+        player.teleportAsync(target.getLocation());
 
         plugin.getMessageManager().sendMessage(player,
                 plugin.getConfigManager().getLanguageManager().getMessage("vfollow.started")
@@ -123,7 +123,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
         }
         // Teleport follower to target (spectator camera follows)
         if (!follower.getWorld().equals(target.getWorld())) {
-            follower.teleport(target.getLocation());
+            follower.teleportAsync(target.getLocation());
         }
         // Action bar overlay
         String overlay = String.format("§7Following: §e%s §8| §7XYZ: §f%.1f, %.1f, %.1f §8| §7HP: §c%.1f §8| §7%s",
@@ -139,12 +139,15 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
     @EventHandler
     public void onTargetQuit(PlayerQuitEvent event) {
         UUID quitter = event.getPlayer().getUniqueId();
-        // Anyone following this quitter should stop
+        // Anyone following this quitter should stop and have their gamemode restored
         for (UUID followerUuid : new ArrayList<>(plugin.spectateFollowTargets.keySet())) {
             if (quitter.equals(plugin.spectateFollowTargets.get(followerUuid))) {
                 Player follower = Bukkit.getPlayer(followerUuid);
                 if (follower != null) {
                     plugin.spectateFollowTargets.remove(followerUuid);
+                    GameMode gm = plugin.spectateOriginalGamemodes.remove(followerUuid);
+                    if (gm != null) follower.setGameMode(gm);
+                    follower.sendActionBar(Component.empty());
                     plugin.getMessageManager().sendMessage(follower,
                             plugin.getConfigManager().getLanguageManager()
                                     .getMessage("vfollow.target-disconnected")

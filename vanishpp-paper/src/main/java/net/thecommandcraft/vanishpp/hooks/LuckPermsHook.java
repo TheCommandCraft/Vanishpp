@@ -22,20 +22,19 @@ public class LuckPermsHook {
 
     private final Vanishpp plugin;
     private LuckPerms luckPerms;
+    private ContextCalculator<Player> calculator;
 
     public LuckPermsHook(Vanishpp plugin) {
         this.plugin = plugin;
     }
 
     public void load() {
-        // Obtain LuckPerms via the service provider — fails fast if LP is absent
         org.bukkit.plugin.RegisteredServiceProvider<LuckPerms> provider =
                 Bukkit.getServicesManager().getRegistration(LuckPerms.class);
         if (provider == null) throw new IllegalStateException("LuckPerms service not found");
         this.luckPerms = provider.getProvider();
 
-        // Register a context calculator that sets vanishpp:vanished=true/false for online players
-        luckPerms.getContextManager().registerCalculator(new ContextCalculator<Player>() {
+        this.calculator = new ContextCalculator<Player>() {
             @Override
             public void calculate(@NotNull Player player, @NotNull ContextConsumer consumer) {
                 consumer.accept(CONTEXT_KEY, plugin.isVanished(player) ? "true" : "false");
@@ -48,7 +47,15 @@ public class LuckPermsHook {
                         .add(CONTEXT_KEY, "false")
                         .build();
             }
-        });
+        };
+        luckPerms.getContextManager().registerCalculator(this.calculator);
+    }
+
+    public void unload() {
+        if (luckPerms != null && calculator != null) {
+            try { luckPerms.getContextManager().unregisterCalculator(calculator); } catch (Throwable ignored) {}
+            calculator = null;
+        }
     }
 
     /**

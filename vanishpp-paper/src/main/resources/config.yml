@@ -313,6 +313,10 @@ update-checker:
   notify-mode: "PERMISSION"
   # If notify-mode is LIST, only these players get notifications.
   notify-list: []
+  # Notify staff about beta builds (true = yes, false = releases only).
+  show-beta: true
+  # Notify staff about alpha builds (true = yes, false = skip alphas).
+  show-alpha: true
 
 # --- [ PERMISSIONS ] ---
 permissions:

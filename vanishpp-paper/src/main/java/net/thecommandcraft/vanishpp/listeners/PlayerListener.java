@@ -91,6 +91,8 @@ public class PlayerListener implements Listener {
         Player player = event.getPlayer();
         final UUID joinUuid = player.getUniqueId();
 
+        plugin.playerNameCache.put(player.getName().toLowerCase(), joinUuid);
+
         // Apply pre-fetched DB vanish state immediately (no async round-trip needed).
         // preFetchedVanishState is populated by AsyncPlayerPreLoginEvent before this fires.
         Boolean prefetched = preFetchedVanishState.remove(joinUuid);

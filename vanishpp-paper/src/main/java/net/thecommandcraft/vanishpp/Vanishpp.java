@@ -87,6 +87,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     private final Map<UUID, String> vanishReasons = new ConcurrentHashMap<>();
     public final Map<UUID, Long> vanishStartTimes = new ConcurrentHashMap<>();
+    /** name (lowercase) → UUID cache populated on join; used for offline history lookups. */
+    public final Map<String, UUID> playerNameCache = new ConcurrentHashMap<>();
     /** UUIDs of players currently viewing another player's inventory in read-only mode (no vanishpp.invsee.modify). */
     public final Set<UUID> invseeViewOnly = ConcurrentHashMap.newKeySet();
     /** Maps invsee viewer UUID → the target Player whose inventory is open. */
@@ -358,6 +360,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Reinitialize storage if the backend type changed
         if (storageProvider != null) storageProvider.shutdown();
         if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
+        if (luckPermsHook != null) { luckPermsHook.unload(); luckPermsHook = null; }
+        if (Bukkit.getPluginManager().getPlugin("LuckPerms") != null) {
+            try {
+                this.luckPermsHook = new LuckPermsHook(this);
+                this.luckPermsHook.load();
+            } catch (Throwable ignored) { this.luckPermsHook = null; }
+        }
         initStorage();
 
         // Reload scoreboard config
@@ -403,6 +412,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         if (integrationManager != null) {
             integrationManager.unregister();
+        }
+        if (luckPermsHook != null) {
+            luckPermsHook.unload();
         }
         if (vanishScoreboard != null) {
             vanishScoreboard.shutdown();
@@ -705,6 +717,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
         ignoredWarningPlayers.remove(uuid);
+        playerNameCache.values().remove(uuid);
         spectateFollowTargets.remove(uuid);
         spectateOrigins.remove(uuid);
         spectateOriginalGamemodes.remove(uuid);
