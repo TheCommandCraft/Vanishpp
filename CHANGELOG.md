@@ -27,10 +27,14 @@ All notable changes to this project will be documented in this file.
 - **`/msg`/`/tell`/`/r`/`/me` Detection Prevention:** Non-seers can no longer `/msg`, `/tell`, or use any private-message command to reach a vanished player — they receive a vanilla-style fake error. `/r` reply is blocked when the last target was a vanished sender. `/me` from a vanished player is restricted to staff-only audience. Covers vanilla and EssentialsX aliases. Fake error text is configurable under `commands.msg-player-not-found` in `messages.yml`.
 - **`messages.yml` Auto-Migration:** Missing message keys from the default file are automatically written back to the user's `messages.yml` on load, so upgrading never leaves a key undefined.
 
+### Added
+- **`%vanishpp_visible_player_list%` PAPI Placeholder:** New PlaceholderAPI placeholder that returns a comma-separated list of all online non-vanished (visible) players. Complements the existing `%vanishpp_vanished_list%` for HUDs and scoreboards that need to display who *is* online.
+
 ### Fixed
 - **Mob AI Targeting Vanished Players:** `SafeLookAtPlayerGoal` (a custom Paper `MobGoals` injection) was causing `LookAtPlayerGoal` to leak into the LOOK goal slot on servers where the custom goal claimed the slot only conditionally. Removed entirely; mob targeting prevention now relies solely on `EntityTargetEvent` cancellation, which is reliable and cross-version.
 - **Folia Scheduler Illegal Delay Crash:** `FoliaSchedulerBridge.runLaterGlobal()` passed caller-supplied tick values directly to Folia's `runDelayed`, which throws `IllegalArgumentException` for `<= 0`. Bridge now falls back to immediate `runGlobal` execution. (PR #11, reported by XChen446)
 - **Mass Disconnect on Unvanish:** `refreshVisibilityWithGlow()` iterated the live `Bukkit.getOnlinePlayers()` collection while sending packets and forced a hide+show cycle on every observer — including non-seers. Under load this caused a packet burst that disconnected players. Fixed by snapshotting the player list before iteration and limiting the hide+show respawn cycle to seers only (who need it to flush glow metadata).
+- **ProtocolLib `CUSTOM_SOUND_EFFECT` Boot Warning:** Registering a packet listener for `CUSTOM_SOUND_EFFECT` on Minecraft versions where that packet type is absent produced a `[ProtocolLib] Plugin Vanishpp tried to register listener for unknown packet CUSTOM_SOUND_EFFECT (unregistered)` WARN on every server start. The silent-chest sound suppression listener now checks `PacketType.Play.Server.CUSTOM_SOUND_EFFECT.isSupported()` before registering and skips it on unsupported versions. Reported by a community member.
 
 ---
 

@@ -29,7 +29,7 @@ Works out of the box with zero configuration required.
 Most plugins just hide you visually. Vanish++ removes you physically.
 
 - **Invincibility:** No damage, immune to all potion effects, cannot burn.
-- **Smart Mob AI:** Custom AI goals injected into every mob — they look right through you with no head tracking or awkward staring. `SafeLookAtPlayerGoal` holds the mob's `LOOK` goal slot whenever you are nearby, preventing vanilla AI from noticing you at all. Mobs that had already locked on before you vanished are force-detargeted within one tick.
+- **Smart Mob AI:** Mobs completely ignore vanished players. Targeting is cancelled via `EntityTargetEvent` before the mob ever commits to an attack path. Mobs that had already locked on before you vanished are force-detargeted immediately.
 - **Projectile Pass-Through:** Arrows, tridents, and snowballs fly physically through your body via native Paper events — impossible to hit a vanished player.
 - **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you.
 - **No Physical Triggers:** Walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration.
@@ -95,6 +95,15 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 | `/vchat confirm` | `/vanishchat` | Confirm a chat message (if safety is on) | `vanishpp.chat` |
 | `/vreload` | `/vanishreload` | Reload config and resync all vanish effects | `vanishpp.reload` |
 | `/vscoreboard` | — | Toggle the vanish sidebar scoreboard | `vanishpp.scoreboard` |
+| `/vspec <player\|stop>` | — | Quick-spectate a player. `/vspec stop` to return. | `vanishpp.spec` |
+| `/vfollow <player\|stop>` | — | Lock camera to silently follow a player. | `vanishpp.follow` |
+| `/vhistory [player]` | — | View vanish/unvanish audit log. | `vanishpp.history` |
+| `/vautovanish [player]` | — | Toggle auto-vanish on join for a player. | `vanishpp.autovanish` |
+| `/vstats [player]` | — | View vanish time statistics. | `vanishpp.stats` |
+| `/vadmin` | — | In-game dashboard GUI for vanish overview. | `vanishpp.admin` |
+| `/vwand` | — | Give the vanish wand (Blaze Rod toggle item). | `vanishpp.wand` |
+| `/vzone <create\|delete\|list\|reload>` | — | Manage no-vanish zones. | `vanishpp.zone` |
+| `/vincognito [player] [fakename]` | — | Enable/disable fake name mode. | `vanishpp.incognito` |
 
 ---
 
@@ -109,6 +118,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 | `%vanishpp_prefix%` | `[VANISHED]` | Configured prefix (empty if visible) |
 | `%vanishpp_pickup%` | `Enabled` | Current item pickup status |
 | `%vanishpp_vanished_list%` | `Notch, Herobrine` | List of online vanished names |
+| `%vanishpp_visible_player_list%` | `Steve, Alex` | List of online non-vanished (visible) player names |
 
 ---
 
