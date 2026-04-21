@@ -11,7 +11,7 @@
 
 Are you tired of "vanish" plugins that leave traces? Players tab-completing your name? Arrows bouncing off your invisible body? Mobs looking strangely at "empty" air?
 
-**Vanish++** renders other vanish plugins obsolete. Built exclusively for modern **Paper** servers, it utilizes advanced packet interception, native physics manipulation, and deep API hooks to ensure you are **mathematically undetectable**.
+**Vanish++** renders other vanish plugins obsolete. Built for modern **Paper**, **Folia**, **Purpur**, **Spigot**, and **Bukkit** servers, it uses advanced packet interception, native physics manipulation, and deep API hooks to ensure you are **mathematically undetectable**.
 
 It works perfectly out of the box with zero configuration required, but offers granular control for those who need it.
 
@@ -55,10 +55,11 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Native Language Fake Messages:** When you vanish, the fake "Player left the game" message isn't just text—it uses the **server's native translation packet**. This means a German player sees the message in German, and a US player sees it in English. It is indistinguishable from a real disconnect.
 *   **Native TAB Plugin Support:** If you use **TAB (by NEZNAMY)**, Vanish++ hooks directly into it to display your vanish prefix automatically. No manual Placeholder configuration required.
 *   **Legacy Plugin Support:** Even without specific hooks, Vanish++ sets standard Bukkit Metadata (`"vanished"`). This means plugins like **CMI**, **TAB**, or custom skripts automatically respect your vanished status.
-*   **Silent Chests:** Open Chests, Shulker Boxes, Barrels, and Ender Chests silently. The container is opened as a snapshot inventory — no animation, no sound, full item interaction. Changes sync back on close.
+*   **Silent Chests:** Open Chests, Shulker Boxes, Barrels, and Ender Chests silently. The container opens directly against the real inventory — no animation, no sound, no item duplication.
 *   **DiscordSRV Integration:** Registers as a native vanish hook in DiscordSRV. Join, quit, advancement, and death announcements are all suppressed on Discord — even if you reconnect while already vanished. Fake join/leave messages honour DiscordSRV's full embed, colour, avatar, and webhook configuration from `messages.yml`. Staff notifications still appear in console and for players with the see permission.
 *   **Simple Voice Chat Integration:** Automatically isolates/mutes you in voice chat so you can't be heard or hear proximity chat while stalking.
 *   **Smart Item Pickup:** Toggle item pickup with `/vanishpickup`. Don't accidentally steal the diamonds you are watching a player mine.
+*   **`/msg` / `/tell` Detection Prevention:** Non-staff can no longer `/msg` or `/tell` a vanished player — they receive a vanilla-style "player not found" error. `/r` reply is blocked when the last target was a vanished sender. `/me` from a vanished player is restricted to staff-only audience. Configurable message text.
 
 </details>
 
@@ -67,10 +68,21 @@ We hook directly into the server protocol to scrub your existence from clients. 
 <br>
 
 *   **Spectator Quick-Switch:** Double-tap Shift while vanished to enter Spectator mode instantly. Double-tap again to return to your previous gamemode. Unvanishing forces you back automatically. Requires `vanishpp.spectator`. (`vanishpp.spectator.bypass` lets you stay in Spectator after unvanishing.)
+*   **`/vspec` Quick-Spectate:** Instantly enter spectator mode locked to any player with `/vspec <player>`. Use `/vspec stop` to return to your previous location and gamemode. Requires `vanishpp.spec`.
+*   **`/vfollow` Camera Tracking:** Lock your camera to silently follow any player with `/vfollow <player>`. A HUD indicator shows the active target. Stops automatically if the target disconnects. Requires `vanishpp.follow`.
+*   **`/vhistory` Audit Log:** Full vanish/unvanish history with timestamps, executor, and reason stored in the database. Requires `vanishpp.history`.
+*   **`/vstats` Vanish Time Statistics:** View total vanish time, session count, and longest session per player. Requires `vanishpp.stats`.
+*   **`/vadmin` Dashboard GUI:** In-game GUI overview of all vanished players, active rules, and quick actions. Requires `vanishpp.admin`.
+*   **`/vincognito` Fake Name Mode:** Replace your display name and tab entry with a configurable fake name while vanished. Requires `vanishpp.incognito`.
+*   **`/vwand` Toggle Wand:** Grants a Blaze Rod vanish wand — right-click to toggle vanish state. Configurable in `config.yml`. Requires `vanishpp.wand`.
+*   **`/vzone` No-Vanish Zones:** Define radius-based zones where vanishing/unvanishing is blocked or forced. Manage with `/vzone create|delete|list|reload`. Requires `vanishpp.zone`.
+*   **`/vautovanish` Auto-Join Vanish:** Players opt into automatic vanish on join. Persisted per UUID — survives restarts and server switches. Requires `vanishpp.autovanish`.
+*   **Bulk Vanish:** `/vanish all` vanishes every eligible online player at once. `/vanish world <world>` targets all players in a specific world. Vanish reason tracking: `/vanish <player> [reason]` records a reason visible to staff via `/vhistory`.
+*   **Bossbar Vanish Indicator:** Optional persistent bossbar shown to vanished players as a stealth reminder. Configurable colour, style, and text in `config.yml`.
 *   **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` (Messages, Rules, Boolean toggles) directly in-game. Changes apply instantly without reloading.
 *   **Interactive Help (`/vhelp`):** Forget the wiki. The plugin includes a clickable, interactive guide explaining every command and feature.
-*   **Smart-Merge Migration:** Updates are stress-free. The plugin automatically detects old configs and migrates your custom messages/settings to the new version structure safely.
-*   **Personal Rules System (`/vrules`):** Decide exactly what you want to do.
+*   **Smart-Merge Migration:** Updates are stress-free. The plugin automatically detects old configs and migrates your custom messages/settings to the new version structure safely. Missing message keys are auto-written to `messages.yml` on load — upgrading never leaves a key undefined.
+*   **Personal Rules System (`/vrules`):** Decide exactly what you want to do while vanished. Supports named presets — save, load, list, and delete rule configurations with `/vrules preset <save|load|list|delete> <name>`.
     *   *Want to break blocks?* Toggle it.
     *   *Want absolute peace?* Disable "Can Hit Entities".
     *   *Afraid of leaking info?* Enable "Chat Confirmation".
@@ -84,7 +96,17 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Timed rule expiry notifications are delivered to the server the player is currently on — no reconnect required. Servers auto-detect the proxy on startup and fall back to standalone mode if none is present.
 *   **Database Connection Monitoring:** When database connectivity fails, staff are notified in-game so infrastructure issues don't go unnoticed. Includes graceful error handling and connection pooling.
 
+</details>
 
+<details>
+<summary><b>🔌 Developer & Integration APIs</b></summary>
+<br>
+
+*   **Public VanishAPI:** A clean developer API (`VanishAPI`) exposes vanish state queries, vanish/unvanish calls, event hooks, and rule reads for third-party plugin integration. No internals required.
+*   **LuckPerms Context Integration:** Registers a `vanished` context node in LuckPerms so permissions can be conditionally granted or revoked while a player is vanished.
+*   **WorldGuard Region Flags:** Two new WorldGuard flags: `vanishpp-force-vanish` (auto-vanishes players entering the region) and `vanishpp-deny-vanish` (blocks toggling vanish inside the region).
+*   **Webhook Support:** Configurable HTTP webhooks fire on vanish/unvanish events for external integrations — Discord bots, dashboards, audit systems, anything.
+*   **Shift-Right-Click Invsee:** Shift-right-clicking a player while vanished opens their inventory via OpenInv or InvSee++ if installed, falling back to the built-in viewer. Permissions are granted for the duration and revoked on close.
 
 </details>
 
@@ -170,7 +192,7 @@ Vanish++ is built for modern ecosystems.
 | **Paper**           | ✅ Recommended       | Best performance. Required for full physics/projectile support.    |
 | **Purpur**          | ✅ Supported         | Fully compatible (Paper fork).                                     |
 | **Folia**           | ✅ Supported         | Multi-region scheduler bridge with automatic runtime detection. Full support for regional execution. Tested on 1.21.x. |
-| **Spigot**          | ⚠️ Compatible        | Works, but Paper-specific features (projectile passthrough, mob AI goals) degrade. |
+| **Spigot**          | ⚠️ Compatible        | Works, but Paper-specific features (projectile passthrough) degrade. |
 | **Bukkit**          | ⚠️ Compatible        | Same limitations as Spigot.                                        |
 
 **Requirements:**
@@ -185,7 +207,7 @@ Vanish++ is built for modern ecosystems.
 
 **Optional Hooks:**
 *   **TAB (NEZNAMY)** (Native Support)
-*   PlaceholderAPI, Dynmap, EssentialsX, Simple Voice Chat, DiscordSRV
+*   PlaceholderAPI, Dynmap, EssentialsX, Simple Voice Chat, DiscordSRV, LuckPerms, WorldGuard, OpenInv / InvSee++
 
 **Just drop the JAR in your plugins folder.** No complex setup required. It works securely out of the box.
 
@@ -195,7 +217,7 @@ Vanish++ is built for modern ecosystems.
 
 ### 📄 License & Support
 
-This project is closed-source.
+This project is open-source under the GNU GPL v3.
 Report bugs via the **Issues** tab.
 
 **[ Download Now ]**
