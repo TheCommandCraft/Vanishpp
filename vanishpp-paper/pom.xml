@@ -177,6 +177,14 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Floodgate (Geyser Bedrock bridge) -->
+        <dependency>
+            <groupId>org.geysermc.floodgate</groupId>
+            <artifactId>api</artifactId>
+            <version>2.2.2-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Database & Redis (Shaded) -->
         <dependency>
             <groupId>com.zaxxer</groupId>

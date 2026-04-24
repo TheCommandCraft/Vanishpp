@@ -55,9 +55,9 @@
 
 ## Cross-Server & Proxy
 
-- [ ] **Global Vanish Broadcast Channel** — notify admins on all connected servers on vanish/unvanish via proxy plugin-messaging; configurable opt-in, min vanish level, message format
-- [ ] **Proxy-Side `/vlist`** — serve `/vlist` from the Velocity plugin; shows server name alongside each entry; works even when backend servers are offline
-- [ ] **Proxy Config GUI** — in-game visual editor for velocity-config.yml; saves + pushes to all backends via `CONFIG_PUSH` message
+- [x] **Global Vanish Broadcast Channel** — notify admins on all connected servers on vanish/unvanish via proxy plugin-messaging; configurable opt-in, min vanish level, message format
+- [x] **Proxy-Side `/vlist`** — serve `/vlist` from the Velocity plugin; shows server name alongside each entry; works even when backend servers are offline
+- [x] **Proxy Config GUI** — in-game visual editor for velocity-config.yml; saves + pushes to all backends via `CONFIG_PUSH` message
 
 ---
 
@@ -65,7 +65,7 @@
 
 - [x] **Public Java API** — `VanishAPI`: `isVanished`, `vanish`, `unvanish`, `getVanishLevel`, `getRules`; cancellable `VanishEvent` / `UnvanishEvent`; `VanishStateChangeEvent`
 - [x] **Additional PlaceholderAPI Placeholders** — `%vanishpp_vanish_duration%`, `%vanishpp_vanish_reason%`, `%vanishpp_vanish_level_<player>%`, `%vanishpp_is_vanished_<player>%`, `%vanishpp_rule_<rule>%`, `%vanishpp_can_see_<player>%`
-- [ ] **Geyser / Floodgate Form UI** — native Bedrock form for `/vrules` (SimpleForm toggles) and vanish toggle (ModalForm); graceful fallback when Geyser absent
+- [x] **Geyser / Floodgate Form UI** — native Bedrock form for `/vrules` (SimpleForm toggles) and vanish toggle (ModalForm); graceful fallback when Geyser absent
 
 ---
 

@@ -93,6 +93,8 @@ staff:
   silent-quit: "&8[&7-&8] &7%player% has silently left."
   notify-vanish: "&e[Staff] %player% has vanished (by %staff%)."
   notify-unvanish: "&e[Staff] %player% has unvanished (by %staff%)."
+  proxy-broadcast-vanish: "&8[&3Network&8] &f%player% &7has vanished on &f%server%&7."
+  proxy-broadcast-unvanish: "&8[&3Network&8] &f%player% &7has unvanished on &f%server%&7."
 
 # --- [ APPEARANCE ] ---
 appearance:

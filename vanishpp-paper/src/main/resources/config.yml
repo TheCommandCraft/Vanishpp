@@ -336,3 +336,15 @@ permissions:
   default-vanish-level: 1
   default-see-level: 1
   max-level: 100
+
+# --- [ PROXY ] ---
+# Cross-server / Velocity proxy settings.
+proxy:
+  # Internal name used for proxy registration. Leave blank to auto-detect (IP:port).
+  server-name: ""
+  # If true, /vlist shows vanished players from all connected servers.
+  cross-server-list: true
+  # Notify staff (vanishpp.see) on THIS server when a player vanishes on ANOTHER server.
+  broadcast-vanish-events: true
+  # Minimum vanish level required before the cross-server broadcast is sent.
+  broadcast-min-level: 1

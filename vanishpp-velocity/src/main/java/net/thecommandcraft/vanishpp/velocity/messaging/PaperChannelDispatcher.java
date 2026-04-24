@@ -59,15 +59,17 @@ public class PaperChannelDispatcher {
     /**
      * Broadcasts a vanish state change to all servers EXCEPT the origin.
      *
-     * @param uuid       the affected player's UUID
-     * @param vanished   true = vanished, false = unvanished
+     * @param uuid         the affected player's UUID
+     * @param vanished     true = vanished, false = unvanished
      * @param originServer the server that sent the original VANISH_EVENT (do not echo back)
+     * @param playerName   display name of the affected player (for cross-server broadcast messages)
      */
-    public void broadcastVanishSync(UUID uuid, boolean vanished, String originServer) {
+    public void broadcastVanishSync(UUID uuid, boolean vanished, String originServer, String playerName) {
         JsonObject payload = new JsonObject();
         payload.addProperty("uuid", uuid.toString());
         payload.addProperty("vanished", vanished);
         payload.addProperty("serverName", originServer);
+        payload.addProperty("playerName", playerName);
         byte[] data = VppPacket.encode(VppMessage.VANISH_SYNC, payload.toString());
 
         for (RegisteredServer server : proxy.getAllServers()) {

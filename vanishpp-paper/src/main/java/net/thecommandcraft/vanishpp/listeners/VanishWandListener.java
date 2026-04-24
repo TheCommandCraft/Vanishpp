@@ -44,13 +44,30 @@ public class VanishWandListener implements Listener {
         event.setCancelled(true); // Don't interact with underlying block
 
         if (player.isSneaking()) {
-            // Shift-right-click → open Rules GUI
+            // Shift-right-click → open Rules GUI (Bedrock: SimpleForm, Java: inventory GUI)
             if (plugin.getPermissionManager().hasPermission(player, "vanishpp.rules")) {
-                new RulesGUI(plugin).open(player, player);
+                var floodgate = plugin.getFloodgateHook();
+                if (floodgate != null && floodgate.isBedrockPlayer(player.getUniqueId())) {
+                    java.util.Map<String, Boolean> rules = new java.util.LinkedHashMap<>();
+                    for (String k : plugin.getRuleManager().getAvailableRules()) {
+                        rules.put(k, plugin.getRuleManager().getRule(player.getUniqueId(), k));
+                    }
+                    floodgate.sendRulesForm(player, rules, (key, val) ->
+                            plugin.getRuleManager().setRule(player, key, val));
+                } else {
+                    new RulesGUI(plugin).open(player, player);
+                }
             }
         } else {
-            // Regular right-click → toggle vanish
-            if (plugin.isVanished(player)) {
+            // Regular right-click → toggle vanish (Bedrock: ModalForm confirmation, Java: direct)
+            var floodgate = plugin.getFloodgateHook();
+            if (floodgate != null && floodgate.isBedrockPlayer(player.getUniqueId())) {
+                boolean vanished = plugin.isVanished(player);
+                floodgate.sendVanishToggleForm(player, vanished, () -> {
+                    if (plugin.isVanished(player)) plugin.unvanishPlayer(player, player);
+                    else plugin.vanishPlayer(player, player);
+                });
+            } else if (plugin.isVanished(player)) {
                 plugin.unvanishPlayer(player, player);
             } else {
                 plugin.vanishPlayer(player, player);

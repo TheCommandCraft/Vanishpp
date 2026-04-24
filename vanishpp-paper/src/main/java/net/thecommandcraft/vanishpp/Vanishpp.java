@@ -99,6 +99,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private WebhookManager webhookManager;
     private WorldGuardHook worldGuardHook;
     private net.thecommandcraft.vanishpp.scoreboard.VanishBossbar vanishBossbar;
+    private net.thecommandcraft.vanishpp.hooks.FloodgateHook floodgateHook;
 
     // ── Rate limit ───────────────────────────────────────────────────────────
     public final Map<UUID, Long> vanishToggleCooldowns = new ConcurrentHashMap<>();
@@ -229,6 +230,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         this.webhookManager = new WebhookManager(this);
         this.vanishZoneManager = new VanishZoneManager(this);
+        if (Bukkit.getPluginManager().getPlugin("floodgate") != null) {
+            try {
+                this.floodgateHook = new net.thecommandcraft.vanishpp.hooks.FloodgateHook(this);
+            } catch (Throwable e) {
+                getLogger().warning("Floodgate found but hook failed: " + e.getMessage());
+            }
+        }
         this.vanishZoneManager.load();
         this.vanishBossbar = new net.thecommandcraft.vanishpp.scoreboard.VanishBossbar(this);
 
@@ -259,6 +267,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         registerCommand("vchangelog", new VanishChangelogCommand(this));
         registerCommand("vzone", new VanishZoneCommand(this));
         registerCommand("vincognito", new IncognitoCommand(this));
+        net.thecommandcraft.vanishpp.gui.ProxyConfigGUI proxyConfigGui =
+                new net.thecommandcraft.vanishpp.gui.ProxyConfigGUI(this);
+        registerCommand("vproxygui", new VProxyGuiCommand(this, proxyConfigGui));
 
         // Scoreboard
         saveResource("scoreboards.yml", false);
@@ -1511,6 +1522,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public WebhookManager getWebhookManager() {
         return webhookManager;
+    }
+
+    public net.thecommandcraft.vanishpp.hooks.FloodgateHook getFloodgateHook() {
+        return floodgateHook;
     }
 
     public boolean isIncognito(Player player) {

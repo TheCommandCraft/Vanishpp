@@ -5,7 +5,7 @@ api-version: '1.21'
 authors: [ tcc ]
 description: The ultimate vanish plugin with anti-detection, hooks, and ProtocolLib support.
 folia-supported: true
-softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB, DiscordSRV, LuckPerms, WorldGuard, OpenInv, InvSee++]
+softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, TAB, DiscordSRV, LuckPerms, WorldGuard, OpenInv, InvSee++, floodgate]
 
 commands:
   vanish:
@@ -94,6 +94,10 @@ commands:
     usage: /vincognito [player] [fakename|off]
     aliases: [ vincog ]
     permission: vanishpp.incognito
+  vproxygui:
+    description: Open the in-game proxy config editor GUI.
+    usage: /vproxygui
+    permission: vanishpp.config
 
 permissions:
   vanishpp.*:

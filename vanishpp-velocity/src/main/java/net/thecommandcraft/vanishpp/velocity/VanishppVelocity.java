@@ -8,6 +8,7 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import net.thecommandcraft.vanishpp.common.protocol.VppChannel;
+import net.thecommandcraft.vanishpp.velocity.commands.VanishListCommand;
 import net.thecommandcraft.vanishpp.velocity.commands.VanishReloadCommand;
 import net.thecommandcraft.vanishpp.velocity.config.VelocityConfigManager;
 import net.thecommandcraft.vanishpp.velocity.listener.VelocityPlayerListener;
@@ -69,6 +70,12 @@ public class VanishppVelocity {
                 .plugin(this)
                 .build();
         proxy.getCommandManager().register(meta, new VanishReloadCommand(this, dispatcher));
+
+        var listMeta = proxy.getCommandManager().metaBuilder("vlist")
+                .aliases("vanishlist")
+                .plugin(this)
+                .build();
+        proxy.getCommandManager().register(listMeta, new VanishListCommand(stateManager));
 
         logger.info("Vanish++ Velocity {} enabled. Channel: {}", proxy.getVersion().getVersion(), VppChannel.CHANNEL);
     }

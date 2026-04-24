@@ -115,7 +115,7 @@ public class PaperChannelListener {
         stateManager.setVanished(uuid, playerName, serverName, vanished, level);
 
         // Broadcast to all other connected Paper servers
-        dispatcher.broadcastVanishSync(uuid, vanished, serverName);
+        dispatcher.broadcastVanishSync(uuid, vanished, serverName, playerName);
 
         plugin.getLogger().debug("VanishEvent: {} {} on {}", playerName, vanished ? "vanished" : "unvanished", serverName);
     }

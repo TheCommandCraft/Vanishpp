@@ -36,6 +36,19 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (args.length == 0) {
+            // Bedrock players get a native SimpleForm toggle UI; Java players get the text list
+            if (sender instanceof Player player) {
+                var floodgate = plugin.getFloodgateHook();
+                if (floodgate != null && floodgate.isBedrockPlayer(player.getUniqueId())) {
+                    java.util.Map<String, Boolean> rules = new java.util.LinkedHashMap<>();
+                    for (String k : plugin.getRuleManager().getAvailableRules()) {
+                        rules.put(k, plugin.getRuleManager().getRule(player.getUniqueId(), k));
+                    }
+                    floodgate.sendRulesForm(player, rules, (key, val) ->
+                            plugin.getRuleManager().setRule(player, key, val));
+                    return true;
+                }
+            }
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("rules.usage"));
             return true;

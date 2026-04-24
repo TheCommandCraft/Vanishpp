@@ -149,7 +149,25 @@ public class ProxyBridge implements PluginMessageListener {
     private void handleVanishSync(JsonObject json) {
         UUID uuid = UUID.fromString(json.get("uuid").getAsString());
         boolean vanished = json.get("vanished").getAsBoolean();
-        plugin.getVanishScheduler().runGlobal(() -> plugin.handleNetworkVanishSync(uuid, vanished));
+        String playerName = json.has("playerName") ? json.get("playerName").getAsString() : "";
+        String originServer = json.has("serverName") ? json.get("serverName").getAsString() : "";
+        plugin.getVanishScheduler().runGlobal(() -> {
+            plugin.handleNetworkVanishSync(uuid, vanished);
+            if (!playerName.isEmpty() && plugin.getConfigManager().proxyBroadcastEnabled) {
+                int level = plugin.getStorageProvider().getVanishLevel(uuid);
+                if (level >= plugin.getConfigManager().proxyBroadcastMinLevel) {
+                    String msgKey = vanished ? "staff.proxy-broadcast-vanish" : "staff.proxy-broadcast-unvanish";
+                    String msg = plugin.getConfigManager().getLanguageManager().getMessage(msgKey)
+                            .replace("%player%", playerName)
+                            .replace("%server%", originServer);
+                    for (Player staff : Bukkit.getOnlinePlayers()) {
+                        if (staff.hasPermission("vanishpp.see")) {
+                            plugin.getMessageManager().sendMessage(staff, msg);
+                        }
+                    }
+                }
+            }
+        });
     }
 
     private void handleStateResponse(JsonObject json) {

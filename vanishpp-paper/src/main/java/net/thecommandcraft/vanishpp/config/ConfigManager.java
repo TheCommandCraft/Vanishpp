@@ -107,6 +107,10 @@ public class ConfigManager {
     // Per-world rule defaults
     public Map<String, Map<String, Boolean>> worldRules = new HashMap<>();
 
+    // Proxy broadcast
+    public boolean proxyBroadcastEnabled;
+    public int proxyBroadcastMinLevel;
+
     public ConfigManager(Vanishpp plugin) {
         this.plugin = plugin;
         this.languageManager = new LanguageManager(plugin);
@@ -318,6 +322,10 @@ public class ConfigManager {
         // AFK auto-vanish
         afkAutoVanishEnabled  = config.getBoolean("afk-auto-vanish.enabled", false);
         afkAutoVanishSeconds  = config.getInt("afk-auto-vanish.seconds", 300);
+
+        // Proxy broadcast
+        proxyBroadcastEnabled  = config.getBoolean("proxy.broadcast-vanish-events", true);
+        proxyBroadcastMinLevel = config.getInt("proxy.broadcast-min-level", 1);
 
         // Per-world rule defaults
         worldRules.clear();
