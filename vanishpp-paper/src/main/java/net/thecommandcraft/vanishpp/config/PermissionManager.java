@@ -164,6 +164,12 @@ public class PermissionManager {
     public boolean canSee(Player observer, Player target) {
         if (!plugin.isVanished(target))
             return true;
+
+        // Partial-vanish whitelist: players in the whitelist can always see the target
+        java.util.Set<java.util.UUID> whitelist = plugin.partialVanishWhitelist.get(target.getUniqueId());
+        if (whitelist != null && whitelist.contains(observer.getUniqueId()))
+            return true;
+
         if (!hasPermission(observer, "vanishpp.see"))
             return false;
 

@@ -100,6 +100,31 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private WorldGuardHook worldGuardHook;
     private net.thecommandcraft.vanishpp.scoreboard.VanishBossbar vanishBossbar;
 
+    // ── Rate limit ───────────────────────────────────────────────────────────
+    public final Map<UUID, Long> vanishToggleCooldowns = new ConcurrentHashMap<>();
+
+    // ── Anti-combat vanish ───────────────────────────────────────────────────
+    public final Map<UUID, Long> pvpCombatTimestamps = new ConcurrentHashMap<>();
+    public final Map<UUID, Long> pveCombatTimestamps = new ConcurrentHashMap<>();
+
+    // ── Timed vanish ─────────────────────────────────────────────────────────
+    /** UUID → expiry epoch-ms. Absent means untimed. */
+    public final Map<UUID, Long> timedVanishExpiry = new ConcurrentHashMap<>();
+
+    // ── AFK auto-vanish ──────────────────────────────────────────────────────
+    /** UUID → last-movement epoch-ms */
+    public final Map<UUID, Long> lastMovementTime = new ConcurrentHashMap<>();
+    /** Players that were auto-vanished by the AFK system */
+    public final Set<UUID> afkVanishedPlayers = ConcurrentHashMap.newKeySet();
+
+    // ── Partial visibility ───────────────────────────────────────────────────
+    /** UUID of vanished player → set of UUIDs that can still see them */
+    public final Map<UUID, Set<UUID>> partialVanishWhitelist = new ConcurrentHashMap<>();
+
+    // ── World-rule override tracking ─────────────────────────────────────────
+    /** UUID → map of rule→original-value that was saved before world-rule override */
+    public final Map<UUID, Map<String, Boolean>> worldRuleOverrides = new ConcurrentHashMap<>();
+
     @Override
     public void onEnable() {
         // 0. Folia Detection
@@ -276,6 +301,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         startActionBarTask();
         startSyncTask();
+        startAfkTask();
 
         // 7. Restore Player State
         this.vanishedPlayers = ConcurrentHashMap.newKeySet();
@@ -381,6 +407,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             vanishScheduler.cancelAllTasks();
             startActionBarTask();
             startSyncTask();
+            startAfkTask();
         }
 
         // Refresh team prefix and resync all online vanished players
@@ -723,6 +750,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
         spectateOriginalGamemodes.remove(uuid);
         incognitoNames.remove(uuid);
         vanishReasons.remove(uuid);
+        vanishToggleCooldowns.remove(uuid);
+        pvpCombatTimestamps.remove(uuid);
+        pveCombatTimestamps.remove(uuid);
+        timedVanishExpiry.remove(uuid);
+        lastMovementTime.remove(uuid);
+        afkVanishedPlayers.remove(uuid);
+        partialVanishWhitelist.remove(uuid);
+        worldRuleOverrides.remove(uuid);
         // Record session on quit if still vanished
         Long start = vanishStartTimes.remove(uuid);
         if (start != null) {
@@ -804,7 +839,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
                     if (now > pausedUntil) {
                         actionBarWarningComponent.remove(uuid);
-                        p.sendActionBar(messageManager.parse(configManager.actionBarText, p));
+                        // If a timed vanish is active, append countdown to the action bar
+                        long remaining = getTimedRemaining(uuid);
+                        Component bar = messageManager.parse(configManager.actionBarText, p);
+                        if (remaining > 0) {
+                            long secs = remaining / 1000L;
+                            bar = bar.append(messageManager.parse(
+                                    " &7(" + formatTimedRemaining(secs) + ")", p));
+                        }
+                        p.sendActionBar(bar);
                     } else {
                         Component warning = actionBarWarningComponent.get(uuid);
                         if (warning != null) p.sendActionBar(warning);
@@ -812,6 +855,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 }
             }
         }, 1L, 20L);
+    }
+
+    private static String formatTimedRemaining(long totalSeconds) {
+        long h = totalSeconds / 3600;
+        long m = (totalSeconds % 3600) / 60;
+        long s = totalSeconds % 60;
+        if (h > 0) return h + "h " + m + "m";
+        if (m > 0) return m + "m " + s + "s";
+        return s + "s";
     }
 
     public void triggerActionBarWarning(Player p, Component warning) {
@@ -921,6 +973,38 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 }
             });
         }, 1200L, 1200L); // 60 seconds
+    }
+
+    private void startAfkTask() {
+        if (!configManager.afkAutoVanishEnabled) return;
+        // Check every 10 seconds for idle players
+        vanishScheduler.runTimerGlobal(() -> {
+            if (!configManager.afkAutoVanishEnabled) return;
+            long now = System.currentTimeMillis();
+            long thresholdMs = configManager.afkAutoVanishSeconds * 1000L;
+            for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
+                if (!p.isOnline()) continue;
+                if (p.hasPermission("vanishpp.afk.bypass")) continue;
+                if (!permissionManager.hasPermission(p, "vanishpp.vanish")) continue;
+                UUID uuid = p.getUniqueId();
+                if (isVanished(p)) {
+                    // Check if we should unvanish on return (handled via PlayerMoveEvent)
+                    continue;
+                }
+                Long lastMove = lastMovementTime.get(uuid);
+                if (lastMove == null) {
+                    lastMovementTime.put(uuid, now);
+                    continue;
+                }
+                if ((now - lastMove) >= thresholdMs) {
+                    afkVanishedPlayers.add(uuid);
+                    lastMovementTime.put(uuid, now); // reset so we don't re-trigger immediately
+                    vanishPlayer(p, p);
+                    messageManager.sendMessage(p,
+                            configManager.getLanguageManager().getMessage("afk.auto-vanished"));
+                }
+            }
+        }, 200L, 200L); // every 10 seconds
     }
 
     public void applyVanishEffects(Player player) {
@@ -1208,10 +1292,29 @@ public class Vanishpp extends JavaPlugin implements Listener {
         String notification = template.replace("%player%", subject.getName()).replace("%staff%", executor.getName());
         Component comp = messageManager.parse(notification, subject);
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (permissionManager.hasPermission(p, "vanishpp.see"))
+            if (permissionManager.hasPermission(p, "vanishpp.see")) {
                 p.sendMessage(comp);
+                if (configManager.staffSoundsEnabled) {
+                    playStaffSound(p, isVanishing
+                            ? configManager.staffSoundsVanishSound
+                            : configManager.staffSoundsUnvanishSound,
+                            isVanishing ? configManager.staffSoundsVanishVolume : configManager.staffSoundsUnvanishVolume,
+                            isVanishing ? configManager.staffSoundsVanishPitch  : configManager.staffSoundsUnvanishPitch);
+                }
+            }
         }
         Bukkit.getConsoleSender().sendMessage(comp);
+    }
+
+    /** Safely plays a configurable sound to a player, ignoring invalid sound names. */
+    public void playStaffSound(Player player, String soundName, float volume, float pitch) {
+        if (soundName == null || soundName.isBlank()) return;
+        try {
+            org.bukkit.Sound sound = org.bukkit.Sound.valueOf(soundName.toUpperCase());
+            player.playSound(player.getLocation(), sound, volume, pitch);
+        } catch (IllegalArgumentException ignored) {
+            // Invalid sound name in config — silently skip
+        }
     }
 
     public void updateVanishVisibility(Player subject) {
@@ -1226,6 +1329,16 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 observer.showPlayer(this, subject);
             }
         }
+    }
+
+    /** Returns true if {@code observer} can see {@code subject} accounting for partial-vanish whitelist. */
+    public boolean canSeePartial(Player observer, Player subject) {
+        Set<UUID> whitelist = partialVanishWhitelist.get(subject.getUniqueId());
+        if (whitelist != null) {
+            return whitelist.contains(observer.getUniqueId())
+                    || permissionManager.hasPermission(observer, "vanishpp.see");
+        }
+        return permissionManager.canSee(observer, subject);
     }
 
     /**
@@ -1427,11 +1540,134 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     /**
-     * Returns ms remaining on a timed vanish, or -1 if the vanish is not timed.
-     * Timed vanish is not yet implemented — always returns -1.
+     * Returns ms remaining on a timed vanish, or -1 if the vanish is not timed or expired.
      */
     public long getTimedRemaining(UUID uuid) {
-        return -1L;
+        Long expiry = timedVanishExpiry.get(uuid);
+        if (expiry == null) return -1L;
+        long remaining = expiry - System.currentTimeMillis();
+        return remaining > 0 ? remaining : -1L;
+    }
+
+    /**
+     * Schedules an automatic unvanish after {@code seconds}. Stores the expiry time
+     * so action bars and scoreboards can show the countdown.
+     */
+    public void scheduleTimedVanish(Player player, int seconds) {
+        UUID uuid = player.getUniqueId();
+        long expiry = System.currentTimeMillis() + seconds * 1000L;
+        timedVanishExpiry.put(uuid, expiry);
+        String msg = configManager.getLanguageManager().getMessage("timed-vanish.set")
+                .replace("%seconds%", String.valueOf(seconds));
+        messageManager.sendMessage(player, msg);
+        vanishScheduler.runLaterGlobal(() -> {
+            if (!isVanished(uuid)) {
+                timedVanishExpiry.remove(uuid);
+                return;
+            }
+            timedVanishExpiry.remove(uuid);
+            Player online = Bukkit.getPlayer(uuid);
+            if (online != null && online.isOnline()) {
+                unvanishPlayer(online, online);
+                messageManager.sendMessage(online,
+                        configManager.getLanguageManager().getMessage("timed-vanish.expired"));
+            }
+        }, seconds * 20L);
+    }
+
+    /** Cancels any pending timed vanish for {@code uuid}. */
+    public void cancelTimedVanish(UUID uuid) {
+        timedVanishExpiry.remove(uuid);
+    }
+
+    // ── Rate limit helpers ───────────────────────────────────────────────────
+
+    /** Returns true if the player is rate-limited and should be denied a toggle. Sends the message if blocked. */
+    public boolean checkAndRecordToggleRateLimit(Player player) {
+        if (!configManager.rateLimitEnabled) return false;
+        if (player.hasPermission("vanishpp.ratelimit.bypass")) return false;
+        Long last = vanishToggleCooldowns.get(player.getUniqueId());
+        long now = System.currentTimeMillis();
+        if (last != null && (now - last) < configManager.rateLimitSeconds * 1000L) {
+            messageManager.sendMessage(player,
+                    configManager.getLanguageManager().getMessage("rate-limit.blocked"));
+            return true;
+        }
+        vanishToggleCooldowns.put(player.getUniqueId(), now);
+        return false;
+    }
+
+    // ── Anti-combat vanish helpers ────────────────────────────────────────────
+
+    /** Records that {@code player} was involved in PvP combat right now. */
+    public void recordPvpCombat(UUID uuid) {
+        pvpCombatTimestamps.put(uuid, System.currentTimeMillis());
+    }
+
+    /** Records that {@code player} was involved in PvE combat right now. */
+    public void recordPveCombat(UUID uuid) {
+        pveCombatTimestamps.put(uuid, System.currentTimeMillis());
+    }
+
+    /**
+     * Returns the number of seconds remaining on a combat cooldown, or 0 if none.
+     * Returns the longer of PvP and PvE remaining cooldowns.
+     */
+    public int getCombatCooldownRemaining(Player player) {
+        if (!configManager.combatVanishEnabled) return 0;
+        if (player.hasPermission("vanishpp.combat.bypass")) return 0;
+        UUID uuid = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        long pvpRemaining = 0, pveRemaining = 0;
+        Long pvp = pvpCombatTimestamps.get(uuid);
+        if (pvp != null) {
+            long elapsed = (now - pvp) / 1000L;
+            pvpRemaining = Math.max(0, configManager.combatPvpCooldown - elapsed);
+        }
+        Long pve = pveCombatTimestamps.get(uuid);
+        if (pve != null) {
+            long elapsed = (now - pve) / 1000L;
+            pveRemaining = Math.max(0, configManager.combatPveCooldown - elapsed);
+        }
+        return (int) Math.max(pvpRemaining, pveRemaining);
+    }
+
+    /** Returns "pvp", "pve", or null indicating which cooldown type is primary. */
+    public String getCombatCooldownType(Player player) {
+        UUID uuid = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        long pvpRemaining = 0, pveRemaining = 0;
+        Long pvp = pvpCombatTimestamps.get(uuid);
+        if (pvp != null) pvpRemaining = Math.max(0, configManager.combatPvpCooldown - (now - pvp) / 1000L);
+        Long pve = pveCombatTimestamps.get(uuid);
+        if (pve != null) pveRemaining = Math.max(0, configManager.combatPveCooldown - (now - pve) / 1000L);
+        if (pvpRemaining == 0 && pveRemaining == 0) return null;
+        return pvpRemaining >= pveRemaining ? "pvp" : "pve";
+    }
+
+    // ── Partial visibility helpers ────────────────────────────────────────────
+
+    public boolean isSemiVanished(UUID uuid) {
+        return partialVanishWhitelist.containsKey(uuid);
+    }
+
+    public Set<UUID> getPartialVisibilityWhitelist(UUID uuid) {
+        return partialVanishWhitelist.getOrDefault(uuid, Set.of());
+    }
+
+    /** Enter partial-vanish mode: visible to {@code whitelist}, hidden from everyone else. */
+    public void setPartialVisibility(Player player, Set<UUID> whitelist) {
+        if (whitelist.isEmpty()) {
+            partialVanishWhitelist.remove(player.getUniqueId());
+        } else {
+            partialVanishWhitelist.put(player.getUniqueId(), new java.util.HashSet<>(whitelist));
+        }
+        updateVanishVisibility(player);
+    }
+
+    /** Removes any partial-visibility whitelist for this player (returns to full vanish). */
+    public void clearPartialVisibility(UUID uuid) {
+        partialVanishWhitelist.remove(uuid);
     }
 
     public void setWarningIgnored(Player player, boolean ignored) {

@@ -77,22 +77,32 @@ public class VanishListCommand implements CommandExecutor {
             Player p = vanished.get(i);
             int level = plugin.getStorageProvider().getVanishLevel(p.getUniqueId());
 
-            Component name = Component.text(p.getName(), NamedTextColor.GRAY);
+            boolean semiVanished = plugin.isSemiVanished(p.getUniqueId());
+            Component name = semiVanished
+                    ? Component.text(p.getName(), NamedTextColor.YELLOW)
+                            .append(Component.text(" ◑", NamedTextColor.GOLD))
+                    : Component.text(p.getName(), NamedTextColor.GRAY);
 
             if (canUnvanish) {
+                int whitelistCount = semiVanished
+                        ? plugin.getPartialVisibilityWhitelist(p.getUniqueId()).size() : 0;
+                Component hoverBase = Component.text("Click to unvanish ", NamedTextColor.YELLOW)
+                        .append(Component.text(p.getName(), NamedTextColor.WHITE))
+                        .append(Component.newline())
+                        .append(Component.text("Vanish level: ", NamedTextColor.GRAY))
+                        .append(Component.text(level, NamedTextColor.AQUA))
+                        .append(Component.newline())
+                        .append(Component.text("World: ", NamedTextColor.GRAY))
+                        .append(Component.text(p.getWorld().getName(), NamedTextColor.WHITE));
+                if (semiVanished) {
+                    hoverBase = hoverBase.append(Component.newline())
+                            .append(Component.text("Partial vanish — visible to "
+                                    + whitelistCount + " player(s)", NamedTextColor.GOLD));
+                }
                 name = name
                     .decorate(TextDecoration.UNDERLINED)
                     .clickEvent(ClickEvent.runCommand("/vanish " + p.getName()))
-                    .hoverEvent(HoverEvent.showText(
-                        Component.text("Click to unvanish ", NamedTextColor.YELLOW)
-                            .append(Component.text(p.getName(), NamedTextColor.WHITE))
-                            .append(Component.newline())
-                            .append(Component.text("Vanish level: ", NamedTextColor.GRAY))
-                            .append(Component.text(level, NamedTextColor.AQUA))
-                            .append(Component.newline())
-                            .append(Component.text("World: ", NamedTextColor.GRAY))
-                            .append(Component.text(p.getWorld().getName(), NamedTextColor.WHITE))
-                    ));
+                    .hoverEvent(HoverEvent.showText(hoverBase));
             }
 
             line = line.append(name);

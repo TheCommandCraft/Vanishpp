@@ -11,6 +11,9 @@ import org.bukkit.plugin.Plugin;
 import org.dynmap.DynmapAPI;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class IntegrationManager {
@@ -181,7 +184,69 @@ public class IntegrationManager {
                         .map(Player::getName)
                         .collect(Collectors.joining(", "));
             }
+
+            // %vanishpp_vanish_duration% — how long this player has been vanished
+            if (identifier.equalsIgnoreCase("vanish_duration")) {
+                if (player == null) return "";
+                long start = plugin.getVanishStartTime(player.getUniqueId());
+                if (start < 0) return "0s";
+                long secs = (System.currentTimeMillis() - start) / 1000L;
+                return formatDuration(secs);
+            }
+
+            // %vanishpp_vanish_reason% — current vanish reason or empty string
+            if (identifier.equalsIgnoreCase("vanish_reason")) {
+                if (player == null) return "";
+                String reason = plugin.getVanishReason(player.getUniqueId());
+                return reason != null ? reason : "";
+            }
+
+            // %vanishpp_vanish_level_<player>% — vanish level of the named player
+            if (identifier.toLowerCase().startsWith("vanish_level_")) {
+                String targetName = identifier.substring("vanish_level_".length());
+                Player target = Bukkit.getPlayer(targetName);
+                if (target == null) return "0";
+                return String.valueOf(plugin.getStorageProvider().getVanishLevel(target.getUniqueId()));
+            }
+
+            // %vanishpp_is_vanished_<player>% — true/false for a named player
+            if (identifier.toLowerCase().startsWith("is_vanished_") && identifier.length() > "is_vanished_".length()) {
+                // Must not be "is_vanished" (already handled) or "is_vanished_bool"
+                String targetName = identifier.substring("is_vanished_".length());
+                if (!targetName.equalsIgnoreCase("bool")) {
+                    Player target = Bukkit.getPlayer(targetName);
+                    if (target == null) return "false";
+                    return String.valueOf(plugin.isVanished(target));
+                }
+            }
+
+            // %vanishpp_rule_<rule>% — current value of a rule for the requesting player
+            if (identifier.toLowerCase().startsWith("rule_")) {
+                if (player == null) return "";
+                String ruleName = identifier.substring("rule_".length());
+                boolean val = plugin.getRuleManager().getRule(player, ruleName);
+                return String.valueOf(val);
+            }
+
+            // %vanishpp_can_see_<player>% — whether the requesting player can see the named player
+            if (identifier.toLowerCase().startsWith("can_see_")) {
+                if (player == null) return "false";
+                String targetName = identifier.substring("can_see_".length());
+                Player target = Bukkit.getPlayer(targetName);
+                if (target == null) return "false";
+                return String.valueOf(plugin.getPermissionManager().canSee(player, target));
+            }
+
             return null;
+        }
+
+        private static String formatDuration(long totalSeconds) {
+            long h = totalSeconds / 3600;
+            long m = (totalSeconds % 3600) / 60;
+            long s = totalSeconds % 60;
+            if (h > 0) return h + "h " + m + "m " + s + "s";
+            if (m > 0) return m + "m " + s + "s";
+            return s + "s";
         }
     }
 }

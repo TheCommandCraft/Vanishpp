@@ -142,6 +142,7 @@ permissions:
       vanishpp.vanish.timed: true
       vanishpp.combat.bypass: true
       vanishpp.ratelimit.bypass: true
+      vanishpp.afk.bypass: true
       vanishpp.invsee: true
       vanishpp.invsee.modify: true
 
@@ -273,6 +274,9 @@ permissions:
     default: false
   vanishpp.ratelimit.bypass:
     description: Bypasses the vanish toggle rate limit.
+    default: false
+  vanishpp.afk.bypass:
+    description: Prevents AFK auto-vanish from applying to this player.
     default: false
   vanishpp.invsee:
     description: Allows shift-right-clicking a player to view their inventory.

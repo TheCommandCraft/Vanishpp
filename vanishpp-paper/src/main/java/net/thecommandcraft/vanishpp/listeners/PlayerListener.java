@@ -111,8 +111,13 @@ public class PlayerListener implements Listener {
                     .replace("%player%", player.getName());
             Component joinComp = plugin.getMessageManager().parse(joinMsg, player);
             for (Player staff : Bukkit.getOnlinePlayers()) {
-                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see"))
+                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see")) {
                     staff.sendMessage(joinComp);
+                    if (config.staffSoundsEnabled) {
+                        plugin.playStaffSound(staff, config.staffSoundsSilentJoinSound,
+                                config.staffSoundsSilentJoinVolume, config.staffSoundsSilentJoinPitch);
+                    }
+                }
             }
             Bukkit.getConsoleSender().sendMessage(joinComp);
 
@@ -379,8 +384,13 @@ public class PlayerListener implements Listener {
                     .replace("%player%", player.getName());
             Component quitComp = plugin.getMessageManager().parse(quitMsg, player);
             for (Player staff : Bukkit.getOnlinePlayers()) {
-                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see"))
+                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see")) {
                     staff.sendMessage(quitComp);
+                    if (config.staffSoundsEnabled) {
+                        plugin.playStaffSound(staff, config.staffSoundsSilentQuitSound,
+                                config.staffSoundsSilentQuitVolume, config.staffSoundsSilentQuitPitch);
+                    }
+                }
             }
             Bukkit.getConsoleSender().sendMessage(quitComp);
         }
@@ -771,6 +781,31 @@ public class PlayerListener implements Listener {
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
         if (!plugin.isVanished(player)) return;
+
+        // Per-world rule defaults: restore old overrides, apply new world's overrides
+        UUID uuid = player.getUniqueId();
+        String newWorld = player.getWorld().getName();
+        Map<String, Boolean> savedOverrides = plugin.worldRuleOverrides.remove(uuid);
+        if (savedOverrides != null) {
+            for (Map.Entry<String, Boolean> entry : savedOverrides.entrySet()) {
+                plugin.getStorageProvider().setRule(uuid, entry.getKey(), entry.getValue());
+            }
+        }
+        Map<String, Boolean> newWorldRules = config.worldRules.get(newWorld);
+        if (newWorldRules != null && !newWorldRules.isEmpty()) {
+            Map<String, Boolean> saveMap = new java.util.HashMap<>();
+            Map<String, Object> currentRules = plugin.getStorageProvider().getRules(uuid);
+            for (Map.Entry<String, Boolean> override : newWorldRules.entrySet()) {
+                Object current = currentRules.get(override.getKey());
+                boolean currentVal = current != null
+                        ? Boolean.parseBoolean(String.valueOf(current))
+                        : config.defaultRules.getOrDefault(override.getKey(), false);
+                saveMap.put(override.getKey(), currentVal);
+                plugin.getStorageProvider().setRule(uuid, override.getKey(), override.getValue());
+            }
+            plugin.worldRuleOverrides.put(uuid, saveMap);
+        }
+
         plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (player.isOnline() && plugin.isVanished(player))
                 plugin.resyncVanishEffects(player);
@@ -1126,5 +1161,49 @@ public class PlayerListener implements Listener {
             return true;
         });
     }
+
+    // ── Anti-combat vanish ────────────────────────────────────────────────────
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCombatDamage(EntityDamageByEntityEvent event) {
+        if (!config.combatVanishEnabled) return;
+        // PvP: track both the attacker and the victim
+        if (event.getEntity() instanceof Player victim && event.getDamager() instanceof Player attacker) {
+            plugin.recordPvpCombat(victim.getUniqueId());
+            plugin.recordPvpCombat(attacker.getUniqueId());
+            return;
+        }
+        // PvE: player was damaged by a mob
+        if (event.getEntity() instanceof Player victim) {
+            plugin.recordPveCombat(victim.getUniqueId());
+        }
+        // PvE: player dealt damage to a mob
+        if (event.getDamager() instanceof Player attacker) {
+            plugin.recordPveCombat(attacker.getUniqueId());
+        }
+    }
+
+    // ── AFK auto-vanish ───────────────────────────────────────────────────────
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerMove(PlayerMoveEvent event) {
+        if (!config.afkAutoVanishEnabled) return;
+        Player player = event.getPlayer();
+        // Only update on actual position change (not just head rotation)
+        if (event.getFrom().getBlockX() == event.getTo().getBlockX()
+                && event.getFrom().getBlockY() == event.getTo().getBlockY()
+                && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) return;
+
+        plugin.lastMovementTime.put(player.getUniqueId(), System.currentTimeMillis());
+
+        // If the player was AFK-vanished and they're now moving, unvanish them
+        UUID uuid = player.getUniqueId();
+        if (plugin.afkVanishedPlayers.remove(uuid) && plugin.isVanished(player)) {
+            plugin.unvanishPlayer(player, player);
+            plugin.getMessageManager().sendMessage(player,
+                    config.getLanguageManager().getMessage("afk.unvanished-on-return"));
+        }
+    }
+
 
 }

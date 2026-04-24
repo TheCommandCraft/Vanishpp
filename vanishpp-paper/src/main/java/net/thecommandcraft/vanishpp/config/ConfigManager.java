@@ -80,6 +80,33 @@ public class ConfigManager {
     public boolean bossbarEnabled;
     public String bossbarTitle, bossbarColor, bossbarStyle;
 
+    // Rate limit
+    public boolean rateLimitEnabled;
+    public int rateLimitSeconds;
+
+    // Anti-combat vanish
+    public boolean combatVanishEnabled;
+    public int combatPvpCooldown, combatPveCooldown;
+
+    // Timed vanish
+    public boolean timedVanishEnabled;
+
+    // Staff sounds
+    public boolean staffSoundsEnabled;
+    public String staffSoundsVanishSound, staffSoundsUnvanishSound;
+    public float staffSoundsVanishVolume, staffSoundsVanishPitch;
+    public float staffSoundsUnvanishVolume, staffSoundsUnvanishPitch;
+    public String staffSoundsSilentJoinSound, staffSoundsSilentQuitSound;
+    public float staffSoundsSilentJoinVolume, staffSoundsSilentJoinPitch;
+    public float staffSoundsSilentQuitVolume, staffSoundsSilentQuitPitch;
+
+    // AFK auto-vanish
+    public boolean afkAutoVanishEnabled;
+    public int afkAutoVanishSeconds;
+
+    // Per-world rule defaults
+    public Map<String, Map<String, Boolean>> worldRules = new HashMap<>();
+
     public ConfigManager(Vanishpp plugin) {
         this.plugin = plugin;
         this.languageManager = new LanguageManager(plugin);
@@ -260,6 +287,52 @@ public class ConfigManager {
         bossbarTitle = config.getString("bossbar.title", "<gold>✦ You are <red>Vanished</red></gold>");
         bossbarColor = config.getString("bossbar.color", "GOLD");
         bossbarStyle = config.getString("bossbar.style", "PROGRESS");
+
+        // Rate limit
+        rateLimitEnabled = config.getBoolean("vanish-rate-limit.enabled", false);
+        rateLimitSeconds = config.getInt("vanish-rate-limit.seconds", 3);
+
+        // Anti-combat vanish
+        combatVanishEnabled = config.getBoolean("anti-combat-vanish.enabled", false);
+        combatPvpCooldown = config.getInt("anti-combat-vanish.pvp-cooldown-seconds", 10);
+        combatPveCooldown = config.getInt("anti-combat-vanish.pve-cooldown-seconds", 5);
+
+        // Timed vanish
+        timedVanishEnabled = config.getBoolean("timed-vanish.enabled", true);
+
+        // Staff sounds
+        staffSoundsEnabled = config.getBoolean("staff-sounds.enabled", false);
+        staffSoundsVanishSound  = config.getString("staff-sounds.vanish.sound",  "BLOCK_NOTE_BLOCK_PLING");
+        staffSoundsVanishVolume = (float) config.getDouble("staff-sounds.vanish.volume", 1.0);
+        staffSoundsVanishPitch  = (float) config.getDouble("staff-sounds.vanish.pitch",  1.2);
+        staffSoundsUnvanishSound  = config.getString("staff-sounds.unvanish.sound",  "BLOCK_NOTE_BLOCK_PLING");
+        staffSoundsUnvanishVolume = (float) config.getDouble("staff-sounds.unvanish.volume", 1.0);
+        staffSoundsUnvanishPitch  = (float) config.getDouble("staff-sounds.unvanish.pitch",  0.8);
+        staffSoundsSilentJoinSound  = config.getString("staff-sounds.silent-join.sound",  "ENTITY_EXPERIENCE_ORB_PICKUP");
+        staffSoundsSilentJoinVolume = (float) config.getDouble("staff-sounds.silent-join.volume", 0.6);
+        staffSoundsSilentJoinPitch  = (float) config.getDouble("staff-sounds.silent-join.pitch",  1.3);
+        staffSoundsSilentQuitSound  = config.getString("staff-sounds.silent-quit.sound",  "ENTITY_EXPERIENCE_ORB_PICKUP");
+        staffSoundsSilentQuitVolume = (float) config.getDouble("staff-sounds.silent-quit.volume", 0.6);
+        staffSoundsSilentQuitPitch  = (float) config.getDouble("staff-sounds.silent-quit.pitch",  0.7);
+
+        // AFK auto-vanish
+        afkAutoVanishEnabled  = config.getBoolean("afk-auto-vanish.enabled", false);
+        afkAutoVanishSeconds  = config.getInt("afk-auto-vanish.seconds", 300);
+
+        // Per-world rule defaults
+        worldRules.clear();
+        ConfigurationSection worldRulesSection = config.getConfigurationSection("world-rules");
+        if (worldRulesSection != null) {
+            for (String worldName : worldRulesSection.getKeys(false)) {
+                ConfigurationSection ws = worldRulesSection.getConfigurationSection(worldName);
+                if (ws == null) continue;
+                Map<String, Boolean> overrides = new HashMap<>();
+                for (String rule : ws.getKeys(false)) {
+                    overrides.put(rule, ws.getBoolean(rule));
+                }
+                if (!overrides.isEmpty()) worldRules.put(worldName, overrides);
+            }
+        }
     }
 
     public int getLatestVersion() {

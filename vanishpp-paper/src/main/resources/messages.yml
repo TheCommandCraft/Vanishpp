@@ -15,6 +15,7 @@ vanish:
   others: "&6You have vanished %player%."
   unvanish-self: "&6You are no longer vanished."
   unvanish-others: "&6You have unvanished %player%."
+  reason-updated: "&aVanish reason updated: &f%reason%"
 
 # --- [ VPERMS COMMAND ] ---
 vperms:
@@ -151,6 +152,7 @@ silent-chest:
 timed-vanish:
   expired: "&eYour timed vanish has expired."
   set: "&aYou will be unvanished in &e%seconds%s&a."
+  cancelled: "&eTimed vanish cancelled for &f%player%&e."
   invalid-duration: "&cInvalid duration. Use formats like &e30s&c, &e5m&c, &e1h&c."
 
 # --- [ RATE LIMIT ] ---

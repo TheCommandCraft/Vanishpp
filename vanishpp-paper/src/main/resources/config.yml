@@ -228,17 +228,29 @@ timed-vanish:
   enabled: true
 
 # --- [ STAFF SOUNDS ] ---
-# Play sounds to staff when a player vanishes/unvanishes.
+# Play sounds to staff on vanish events.
 staff-sounds:
   enabled: false
+  # Sound played to all vanishpp.see holders when a player vanishes.
   vanish:
     sound: "BLOCK_NOTE_BLOCK_PLING"
     volume: 1.0
     pitch: 1.2
+  # Sound played to all vanishpp.see holders when a player unvanishes.
   unvanish:
     sound: "BLOCK_NOTE_BLOCK_PLING"
     volume: 1.0
     pitch: 0.8
+  # Sound played to vanishpp.see holders when a vanished player silently joins.
+  silent-join:
+    sound: "ENTITY_EXPERIENCE_ORB_PICKUP"
+    volume: 0.6
+    pitch: 1.3
+  # Sound played to vanishpp.see holders when a vanished player silently quits.
+  silent-quit:
+    sound: "ENTITY_EXPERIENCE_ORB_PICKUP"
+    volume: 0.6
+    pitch: 0.7
 
 # --- [ BOSSBAR ] ---
 # Show a bossbar to the vanished player as a status indicator.
