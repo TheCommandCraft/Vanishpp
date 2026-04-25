@@ -70,16 +70,24 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Spectator Quick-Switch:** Double-tap Shift while vanished to enter Spectator mode instantly. Double-tap again to return to your previous gamemode. Unvanishing forces you back automatically. Requires `vanishpp.spectator`. (`vanishpp.spectator.bypass` lets you stay in Spectator after unvanishing.)
 *   **`/vspec` Quick-Spectate:** Instantly enter spectator mode locked to any player with `/vspec <player>`. Use `/vspec stop` to return to your previous location and gamemode. Requires `vanishpp.spec`.
 *   **`/vfollow` Camera Tracking:** Lock your camera to silently follow any player with `/vfollow <player>`. A HUD indicator shows the active target. Stops automatically if the target disconnects. Requires `vanishpp.follow`.
-*   **`/vhistory` Audit Log:** Full vanish/unvanish history with timestamps, executor, and reason stored in the database. Requires `vanishpp.history`.
+*   **`/vhistory` Audit Log:** Full vanish/unvanish history with timestamps, executor, and reason stored in the database. Configurable retention. Requires `vanishpp.history`.
 *   **`/vstats` Vanish Time Statistics:** View total vanish time, session count, and longest session per player. Requires `vanishpp.stats`.
 *   **`/vadmin` Dashboard GUI:** In-game GUI overview of all vanished players, active rules, and quick actions. Requires `vanishpp.admin`.
 *   **`/vincognito` Fake Name Mode:** Replace your display name and tab entry with a configurable fake name while vanished. Requires `vanishpp.incognito`.
-*   **`/vwand` Toggle Wand:** Grants a Blaze Rod vanish wand — right-click to toggle vanish state. Configurable in `config.yml`. Requires `vanishpp.wand`.
+*   **`/vwand` Toggle Wand:** Grants a configurable vanish wand — right-click to toggle vanish state, shift-right-click to open the rules GUI. Requires `vanishpp.wand`.
 *   **`/vzone` No-Vanish Zones:** Define radius-based zones where vanishing/unvanishing is blocked or forced. Manage with `/vzone create|delete|list|reload`. Requires `vanishpp.zone`.
 *   **`/vautovanish` Auto-Join Vanish:** Players opt into automatic vanish on join. Persisted per UUID — survives restarts and server switches. Requires `vanishpp.autovanish`.
+*   **Timed Vanish:** `/vanish [player] <duration>` (e.g. `30s`, `5m`, `2h`) auto-unvanishes after the timer expires. Remaining time is visible in the action bar. Cancel early with `/vanish cancel [player]`.
+*   **AFK Auto-Vanish:** Automatically vanishes players after a configurable idle threshold. Players are notified via action bar; they are unvanished the moment they move again.
+*   **Anti-Combat Vanish:** Configurable cooldown that blocks `/vanish` after dealing or receiving PvP or PvE damage. Separate timers for each. `vanishpp.combat.bypass` to skip.
+*   **Vanish Rate Limit:** Prevents rapid toggle cycling. Configurable minimum seconds between toggles. `vanishpp.ratelimit.bypass` to skip.
+*   **Partial Visibility:** `/vanish --visible <player>[,...]` makes you visible only to the listed players — everyone else still can't see you. Shown as `◑` in `/vlist`. Collapse to full vanish with `/vanish --visible none`.
 *   **Bulk Vanish:** `/vanish all` vanishes every eligible online player at once. `/vanish world <world>` targets all players in a specific world. Vanish reason tracking: `/vanish <player> [reason]` records a reason visible to staff via `/vhistory`.
 *   **Bossbar Vanish Indicator:** Optional persistent bossbar shown to vanished players as a stealth reminder. Configurable colour, style, and text in `config.yml`.
+*   **Staff Sounds:** Play configurable sounds to all `vanishpp.see` holders on vanish, unvanish, silent join, and silent quit. Separate sound, volume, and pitch per event.
+*   **Per-World Rule Defaults:** Override any vanish rule for specific worlds via `world-rules:` in `config.yml`. Applied on world entry, restored on exit — ideal for staff worlds or PvP arenas.
 *   **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` (Messages, Rules, Boolean toggles) directly in-game. Changes apply instantly without reloading.
+*   **Config Validation:** Every constrained config field is validated on load and reload. Bad values fall back to defaults in-game without touching the file. Ops and `vanishpp.config` holders are notified in chat with the exact path, invalid value, valid options, and applied default.
 *   **Interactive Help (`/vhelp`):** Forget the wiki. The plugin includes a clickable, interactive guide explaining every command and feature.
 *   **Smart-Merge Migration:** Updates are stress-free. The plugin automatically detects old configs and migrates your custom messages/settings to the new version structure safely. Missing message keys are auto-written to `messages.yml` on load — upgrading never leaves a key undefined.
 *   **Personal Rules System (`/vrules`):** Decide exactly what you want to do while vanished. Supports named presets — save, load, list, and delete rule configurations with `/vrules preset <save|load|list|delete> <name>`.
@@ -93,7 +101,8 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Dependency Warnings:** The plugin intelligently warns admins if ProtocolLib is missing, but allows you to silence these warnings permanently with `/vignore`.
 *   **Accidental Chat Prevention:** If enabled, typing in chat blocks the message and asks you to confirm with `/vchat confirm`. Never leak your presence by accident again.
 *   **Async Data Persistence:** All data is saved asynchronously. Server crash? Restart? Your vanish state is saved instantly. No accidental logins.
-*   **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Timed rule expiry notifications are delivered to the server the player is currently on — no reconnect required. Servers auto-detect the proxy on startup and fall back to standalone mode if none is present.
+*   **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Staff are notified on-screen when a player vanishes or unvanishes on *any* connected server. Network-wide `/vlist` shows all vanished players with their server name. Timed rule expiry notifications are delivered to the server the player is currently on — no reconnect required. Servers auto-detect the proxy on startup and fall back to standalone mode if none is present.
+*   **Proxy Config GUI (`/vproxygui`):** In-game 54-slot inventory GUI for editing the Velocity proxy config live. Toggles update the value, save the file, and sync the change to all connected Paper backends in real time. Requires `vanishpp.config`.
 *   **Database Connection Monitoring:** When database connectivity fails, staff are notified in-game so infrastructure issues don't go unnoticed. Includes graceful error handling and connection pooling.
 
 </details>
@@ -105,8 +114,9 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Public VanishAPI:** A clean developer API (`VanishAPI`) exposes vanish state queries, vanish/unvanish calls, event hooks, and rule reads for third-party plugin integration. No internals required.
 *   **LuckPerms Context Integration:** Registers a `vanished` context node in LuckPerms so permissions can be conditionally granted or revoked while a player is vanished.
 *   **WorldGuard Region Flags:** Two new WorldGuard flags: `vanishpp-force-vanish` (auto-vanishes players entering the region) and `vanishpp-deny-vanish` (blocks toggling vanish inside the region).
-*   **Webhook Support:** Configurable HTTP webhooks fire on vanish/unvanish events for external integrations — Discord bots, dashboards, audit systems, anything.
+*   **Webhook Support:** Configurable HTTP webhooks fire on vanish/unvanish events for external integrations — Discord bots, dashboards, audit systems, anything. Optional `Authorization` header. Template variables: `{player}`, `{uuid}`, `{action}`, `{reason}`, `{server}`, `{timestamp}`.
 *   **Shift-Right-Click Invsee:** Shift-right-clicking a player while vanished opens their inventory via OpenInv or InvSee++ if installed, falling back to the built-in viewer. Permissions are granted for the duration and revoked on close.
+*   **Geyser / Floodgate Bedrock Forms:** Bedrock players using Geyser/Floodgate receive native Bedrock UI — a ModalForm for the vanish toggle and a SimpleForm button list for `/vrules`. Triggered automatically from the vanish wand and `/vrules`. Graceful fallback when Floodgate is absent.
 
 </details>
 
@@ -119,11 +129,11 @@ Most commands support an optional `[player]` argument, allowing admins to modify
 | Command | Alias | Description | Permission |
 | :--- | :--- | :--- | :--- |
 | `/vhelp [command]` | `/vanishhelp` | Interactive help menu & guide. | `no permission` |
-| `/vanish [player] [reason]` | `/v`, `/sv` | Toggle vanish state. Supports `/vanish all` and `/vanish world <w>`. | `vanishpp.vanish` |
+| `/vanish [player] [duration\|reason\|--visible]` | `/v`, `/sv` | Toggle vanish. Supports `/vanish all`, `/vanish world <w>`, `/vanish <player> 5m`, `/vanish --visible <list>`. | `vanishpp.vanish` |
 | `/vrules [player] <rule> [val] [seconds]` | `/vanishrules` | Configure physics/interaction rules. Supports presets. | `vanishpp.rules` |
 | `/vconfig <key> [val]` | `/vanishconfig` | Edit config settings live. | `vanishpp.config` |
 | `/vperms` | - | Manage permissions without a perm plugin. | `vanishpp.manageperms` |
-| `/vlist` | `/vanishlist` | Interactive list of vanished players. Click a name to unvanish instantly. | `vanishpp.list` |
+| `/vlist` | `/vanishlist` | Interactive list of vanished players (all servers on Velocity). Click to unvanish. | `vanishpp.list` |
 | `/vignore [player]` | `/vanishignore` | Toggle start-up warnings. | `vanishpp.ignorewarning` |
 | `/vchat confirm` | `/vanishchat` | Confirm a chat message (if safety is on). | `vanishpp.chat` |
 | `/vreload` | `/vanishreload` | Reload config and resync all vanish effects. | `vanishpp.reload` |
@@ -134,9 +144,10 @@ Most commands support an optional `[player]` argument, allowing admins to modify
 | `/vautovanish [player]` | - | Toggle auto-vanish on join for a player. | `vanishpp.autovanish` |
 | `/vstats [player]` | - | View vanish time statistics. | `vanishpp.stats` |
 | `/vadmin` | - | In-game dashboard GUI for vanish overview. | `vanishpp.admin` |
-| `/vwand` | - | Give the vanish wand (Blaze Rod toggle item). | `vanishpp.wand` |
+| `/vwand` | - | Give the vanish wand (right-click to toggle, shift-right-click for rules GUI). | `vanishpp.wand` |
 | `/vzone <create\|delete\|list\|reload>` | - | Manage no-vanish zones. | `vanishpp.zone` |
 | `/vincognito [player] [fakename]` | - | Enable/disable fake name mode. | `vanishpp.incognito` |
+| `/vproxygui` | - | Open the Velocity proxy config GUI (live editor). | `vanishpp.config` |
 
 ---
 
@@ -146,14 +157,21 @@ Only needed if you are building custom HUDs or Scoreboards. (TAB Plugin works au
 
 | Placeholder | Output Example | Description |
 | :--- | :--- | :--- |
-| `%vanishpp_is_vanished%` | `Yes` / `No` | Current status text. |
-| `%vanishpp_is_vanished_bool%` | `true` / `false` | Boolean status for logic/conditions. |
-| `%vanishpp_vanished_count%` | `3` | Number of **online** vanished players. |
-| `%vanishpp_visible_online%` | `15` | Total players minus vanished players (Fake count). |
-| `%vanishpp_prefix%` | `[VANISHED]` | Configured prefix (empty if visible). |
-| `%vanishpp_pickup%` | `Enabled` | Current item pickup status. |
+| `%vanishpp_is_vanished%` | `Yes` / `No` | Current player's vanish status as text. |
+| `%vanishpp_is_vanished_bool%` | `true` / `false` | Boolean vanish status for logic/conditions. |
+| `%vanishpp_is_vanished_<player>%` | `true` / `false` | Vanish status of any named online player. |
+| `%vanishpp_vanished_count%` | `3` | Number of online vanished players. |
+| `%vanishpp_visible_online%` | `15` | Total players minus vanished players (fake count for HUDs). |
+| `%vanishpp_prefix%` | `[VANISHED]` | Configured vanish prefix (empty if visible). |
+| `%vanishpp_pickup%` | `Enabled` | Current item pickup rule status. |
 | `%vanishpp_vanished_list%` | `Notch, Herobrine` | Comma-separated list of online vanished player names. |
 | `%vanishpp_visible_player_list%` | `Steve, Alex` | Comma-separated list of online non-vanished (visible) player names. |
+| `%vanishpp_vanish_duration%` | `5m 12s` | How long the current player has been vanished. |
+| `%vanishpp_vanish_reason%` | `Checking grief` | Current vanish reason, or empty string. |
+| `%vanishpp_vanish_level_<player>%` | `3` | Vanish level of any named online player. |
+| `%vanishpp_rule_<rule>%` | `true` / `false` | Current value of a vanish rule for the requesting player. |
+| `%vanishpp_can_see_<player>%` | `true` / `false` | Whether the requesting player can see the named player. |
+| `%vanishpp_time%` | `3:45 PM` / `15:45` | Current server time. Format controlled by `time-format` in `config.yml` (`12h` or `24h`). |
 
 ---
 
@@ -207,7 +225,7 @@ Vanish++ is built for modern ecosystems.
 
 **Optional Hooks:**
 *   **TAB (NEZNAMY)** (Native Support)
-*   PlaceholderAPI, Dynmap, EssentialsX, Simple Voice Chat, DiscordSRV, LuckPerms, WorldGuard, OpenInv / InvSee++
+*   PlaceholderAPI, Dynmap, EssentialsX, Simple Voice Chat, DiscordSRV, LuckPerms, WorldGuard, OpenInv / InvSee++, Geyser / Floodgate (Bedrock UI)
 
 **Just drop the JAR in your plugins folder.** No complex setup required. It works securely out of the box.
 

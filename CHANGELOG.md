@@ -2,39 +2,71 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.8] - 2026-04-19
+## [1.1.8] - 2026-04-25
 
 ### Added
+
+#### Staff Workflow
 - **`/vspec` Quick-Spectate Command:** Instantly enter spectator mode on a specific player with `/vspec <player>`. Use `/vspec stop` to return to your previous location and gamemode. Requires `vanishpp.spec`.
 - **`/vfollow` Player Tracking HUD:** Lock your camera to follow any player silently with `/vfollow <player>`. A HUD indicator shows active follow target. Stops automatically if the target disconnects. Requires `vanishpp.follow`.
-- **`/vhistory` Audit Log:** Full vanish/unvanish history with timestamps, executor, and reason. Stored in DB. Requires `vanishpp.history`.
+- **`/vhistory` Audit Log:** Full vanish/unvanish history with timestamps, executor, and reason. Stored in DB. Configurable retention. Requires `vanishpp.history`.
 - **`/vautovanish` Per-Player Auto-Join Preference:** Players can opt into automatic vanish on join. Persisted per UUID — survives restarts and server switches. Requires `vanishpp.autovanish`.
 - **`/vstats` Vanish Time Statistics:** Shows total vanish time, session count, and longest session per player. Requires `vanishpp.stats`.
 - **`/vadmin` Dashboard GUI:** In-game GUI overview of all vanished players, active rules, and quick actions. Requires `vanishpp.admin`.
-- **`/vwand` Toggle Item:** Grants a Blaze Rod vanish wand. Right-clicking toggles vanish state. Configurable in `config.yml`. Requires `vanishpp.wand`.
+- **`/vwand` Toggle Item:** Grants a configurable vanish wand. Right-clicking toggles vanish state; shift-right-click opens the rules GUI. Configurable material and name in `config.yml`. Requires `vanishpp.wand`.
 - **`/vzone` No-Vanish Zones:** Define radius-based zones where vanishing/unvanishing is blocked or forced. Managed with `/vzone create|delete|list|reload`. Requires `vanishpp.zone`.
 - **`/vincognito` Fake Name Mode:** Replace your display name and tab entry with a custom fake name while vanished. Requires `vanishpp.incognito`.
+- **Vanish Reason Tracking:** `/vanish <player> [reason]` records and displays a reason shown to staff via hover or `/vhistory`. Update mid-session with `/vanish reason <text>`.
+- **Bulk Vanish:** `/vanish all` and `/vanish world <world>` vanish all eligible online players or all players in a specific world at once.
+- **Rule Presets:** Save, load, list, and delete named rule configurations with `/vrules preset <save|load|list|delete> <name>`. Built-in presets: `stealth`, `spectator`, `builder`. Requires `vanishpp.rules`.
+- **Shift-Right-Click Invsee:** Shift-right-clicking a player while vanished opens their inventory via OpenInv or InvSee++ if installed, falling back to built-in view. Permissions are granted for the duration of the open inventory and removed on close.
+
+#### Quality of Life
+- **Timed Vanish:** `/vanish [player] <duration>` (e.g. `30s`, `5m`, `2h`) auto-unvanishes after the specified time. Remaining time shown in action bar. Cancel with `/vanish cancel [player]`. Enabled with `timed-vanish.enabled` in `config.yml`.
+- **AFK Auto-Vanish:** Automatically vanishes players after a configurable idle period (movement-based detection). Players are notified via action bar; unvanish happens the moment they move again. Configurable under `afk-auto-vanish` in `config.yml`.
+- **Anti-Combat Vanish:** Blocks `/vanish` for a configurable cooldown after PvP or PvE damage. Separate `pvp-cooldown-seconds` and `pve-cooldown-seconds`. `vanishpp.combat.bypass` permission to skip. Configurable under `anti-combat-vanish` in `config.yml`.
+- **Vanish Toggle Rate Limit:** Prevents rapid vanish/unvanish cycling. Configurable minimum seconds between toggles. `vanishpp.ratelimit.bypass` permission to skip. Configurable under `vanish-rate-limit` in `config.yml`.
+- **Bossbar Vanish Status Indicator:** Optional persistent bossbar shown to vanished players as a stealth reminder. Configurable colour, style, and title. Toggle in `config.yml` under `bossbar`.
+- **Partial Visibility (`--visible`):** `/vanish --visible <player>[,...]` puts the vanished player into a semi-vanish mode visible only to the listed players. Shown as `◑` in `/vlist`. Collapse back to full vanish with `/vanish --visible none`.
+
+#### Notifications & Sounds
+- **Staff Sounds:** Configurable sounds played to `vanishpp.see` holders on vanish, unvanish, silent join, and silent quit. Separate sound, volume, and pitch per event. `staff-sounds` section in `config.yml`.
+- **`%vanishpp_visible_player_list%` PAPI Placeholder:** Returns a comma-separated list of all online non-vanished (visible) players. Complements `%vanishpp_vanished_list%`.
+- **Additional PAPI Placeholders:**
+  - `%vanishpp_vanish_duration%` — how long the player has been vanished (e.g. `5m 12s`)
+  - `%vanishpp_vanish_reason%` — current vanish reason, or empty
+  - `%vanishpp_vanish_level_<player>%` — vanish level of the named player
+  - `%vanishpp_is_vanished_<player>%` — `true`/`false` for a named player
+  - `%vanishpp_rule_<rule>%` — current value of a rule for the requesting player
+  - `%vanishpp_can_see_<player>%` — whether the requesting player can see the named player
+  - `%vanishpp_time%` — current server time, formatted per the `time-format` config key (`12h` → `3:45 PM`, `24h` → `15:45`)
+
+#### Configuration
+- **`time-format` Config Key:** Controls whether `%vanishpp_time%` displays a 12-hour clock with AM/PM or a 24-hour clock. Valid values: `"12h"`, `"24h"`. Default: `"24h"`.
+- **Per-World Rule Defaults (`world-rules`):** Override any default vanish rule for specific worlds in `config.yml`. Applied when a vanished player enters the world, restored when they leave. Useful for staff worlds, PvP worlds, etc.
+- **Config Validation System:** Every constrained config field (bossbar colour/style, sound names, material names, numeric ranges, option-set values like `time-format`) is now validated on load and reload. Invalid values fall back to their defaults in-game without touching the file. Ops and holders of `vanishpp.config` are notified in chat on first join after a config load that produced errors, with the exact config path, the bad value, valid options, and the applied default.
+
+#### Proxy & Cross-Server
+- **Global Vanish Broadcast Channel:** Staff with `vanishpp.see` on any connected server are notified when a player vanishes or unvanishes on another server. Message includes player name and originating server. Configurable via `proxy.broadcast-vanish-events` and `proxy.broadcast-min-level`.
+- **Proxy-Side `/vlist`:** The Velocity companion plugin now serves `/vlist` directly, showing all vanished players across every connected server with their server name. Works even when backend servers are temporarily offline.
+- **Proxy Config GUI (`/vproxygui`):** In-game 54-slot inventory GUI for editing `velocity-config.yml`. Toggling a pane updates the value live, saves the file, and syncs the change to all connected Paper backends. Requires `vanishpp.config`.
+
+#### Developer & Integration
+- **Geyser / Floodgate Bedrock UI:** Bedrock players using Geyser/Floodgate get native Bedrock forms for the vanish toggle (ModalForm) and `/vrules` (SimpleForm button list). Triggered from the vanish wand and `/vrules` with zero PC-style inventory GUIs. Graceful fallback when Floodgate is absent.
 - **LuckPerms Context Integration:** Registers a `vanished` context node in LuckPerms so permissions can be conditionally granted while a player is vanished.
 - **WorldGuard Force/Deny Vanish Flags:** Two new WorldGuard region flags: `vanishpp-force-vanish` (auto-vanishes players entering) and `vanishpp-deny-vanish` (blocks toggling vanish in the region).
-- **Webhook Support:** Configurable HTTP webhook fired on vanish/unvanish events for external integrations (Discord bots, dashboards, audit systems).
-- **Vanish Reason Tracking:** `/vanish <player> [reason]` records and displays a reason shown to staff via hover or `/vhistory`.
-- **Bulk Vanish:** `/vanish all` and `/vanish world <world>` vanish all eligible online players or all players in a specific world at once.
-- **Rule Presets:** Save, load, list, and delete named rule configurations with `/vrules preset <save|load|list|delete> <name>`. Requires `vanishpp.rules`.
-- **Bossbar Vanish Status Indicator:** Optional persistent bossbar shown to vanished players as a stealth reminder. Configurable colour, style, and text. Toggle in `config.yml`.
+- **Webhook Support:** Configurable HTTP webhook fired on vanish/unvanish events for external integrations (Discord bots, dashboards, audit systems). Optional `Authorization` header. Template variables: `{player}`, `{uuid}`, `{action}`, `{reason}`, `{server}`, `{timestamp}`.
 - **Public VanishAPI:** Developer API (`VanishAPI`) exposing vanish state queries, vanish/unvanish calls, event hooks, and rule reads for third-party plugin integration.
-- **Vanish History in Database:** Vanish events (time, executor, reason, duration) are now persisted in the SQL backend for audit and statistics use.
-- **Shift-Right-Click Invsee:** Shift-right-clicking a player while vanished opens their inventory via OpenInv or InvSee++ if installed, falling back to built-in view. Permissions are granted for the duration of the open inventory and removed on close.
+- **Vanish History in Database:** Vanish events (time, executor, reason, duration) are now persisted in the SQL backend for audit and statistics use. Configurable retention period.
 - **`/msg`/`/tell`/`/r`/`/me` Detection Prevention:** Non-seers can no longer `/msg`, `/tell`, or use any private-message command to reach a vanished player — they receive a vanilla-style fake error. `/r` reply is blocked when the last target was a vanished sender. `/me` from a vanished player is restricted to staff-only audience. Covers vanilla and EssentialsX aliases. Fake error text is configurable under `commands.msg-player-not-found` in `messages.yml`.
 - **`messages.yml` Auto-Migration:** Missing message keys from the default file are automatically written back to the user's `messages.yml` on load, so upgrading never leaves a key undefined.
-
-### Added
-- **`%vanishpp_visible_player_list%` PAPI Placeholder:** New PlaceholderAPI placeholder that returns a comma-separated list of all online non-vanished (visible) players. Complements the existing `%vanishpp_vanished_list%` for HUDs and scoreboards that need to display who *is* online.
 
 ### Fixed
 - **Mob AI Targeting Vanished Players:** `SafeLookAtPlayerGoal` (a custom Paper `MobGoals` injection) was causing `LookAtPlayerGoal` to leak into the LOOK goal slot on servers where the custom goal claimed the slot only conditionally. Removed entirely; mob targeting prevention now relies solely on `EntityTargetEvent` cancellation, which is reliable and cross-version.
 - **Folia Scheduler Illegal Delay Crash:** `FoliaSchedulerBridge.runLaterGlobal()` passed caller-supplied tick values directly to Folia's `runDelayed`, which throws `IllegalArgumentException` for `<= 0`. Bridge now falls back to immediate `runGlobal` execution. (PR #11, reported by XChen446)
 - **Mass Disconnect on Unvanish:** `refreshVisibilityWithGlow()` iterated the live `Bukkit.getOnlinePlayers()` collection while sending packets and forced a hide+show cycle on every observer — including non-seers. Under load this caused a packet burst that disconnected players. Fixed by snapshotting the player list before iteration and limiting the hide+show respawn cycle to seers only (who need it to flush glow metadata).
-- **ProtocolLib `CUSTOM_SOUND_EFFECT` Boot Warning:** Registering a packet listener for `CUSTOM_SOUND_EFFECT` on Minecraft versions where that packet type is absent produced a `[ProtocolLib] Plugin Vanishpp tried to register listener for unknown packet CUSTOM_SOUND_EFFECT (unregistered)` WARN on every server start. The silent-chest sound suppression listener now checks `PacketType.Play.Server.CUSTOM_SOUND_EFFECT.isSupported()` before registering and skips it on unsupported versions. Reported by a community member.
+- **ProtocolLib `CUSTOM_SOUND_EFFECT` Boot Warning:** The silent-chest sound suppression listener now checks `PacketType.Play.Server.CUSTOM_SOUND_EFFECT.isSupported()` before registering and skips it on unsupported versions, eliminating the `[ProtocolLib] tried to register listener for unknown packet` warning on affected MC versions.
+- **Bossbar `style: "SOLID"` Not Valid:** The default `config.yml` shipped with `style: "SOLID"` which is not a valid Adventure `BossBar.Overlay`. Changed to `"PROGRESS"`. The config validator now catches this and similar mistakes at load time.
 
 ---
 
