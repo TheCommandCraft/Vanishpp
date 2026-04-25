@@ -237,6 +237,17 @@ public class IntegrationManager {
                 return String.valueOf(plugin.getPermissionManager().canSee(player, target));
             }
 
+            // %vanishpp_time% — current server time, formatted per config (12h or 24h)
+            if (identifier.equalsIgnoreCase("time")) {
+                java.time.LocalTime now = java.time.LocalTime.now();
+                String fmt = plugin.getConfigManager().timeFormat;
+                if ("12h".equalsIgnoreCase(fmt)) {
+                    return now.format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"));
+                } else {
+                    return now.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+                }
+            }
+
             return null;
         }
 

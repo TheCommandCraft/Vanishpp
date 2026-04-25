@@ -340,6 +340,29 @@ public class PlayerListener implements Listener {
                     }
                 }
             }
+
+            // 7. Config Validation Errors — shown once per config-load cycle to ops / vanishpp.config holders
+            if ((player.isOp() || player.hasPermission("vanishpp.config"))
+                    && !config.validationErrors.isEmpty()
+                    && !config.validationNotified.contains(player.getUniqueId())) {
+                config.validationNotified.add(player.getUniqueId());
+                player.sendMessage(Component.text(" "));
+                player.sendMessage(Component.text("⚠ Vanish++ Config Errors", NamedTextColor.RED, TextDecoration.BOLD));
+                player.sendMessage(Component.text(
+                        "Invalid values below are ignored — your file is unchanged and defaults are active in-game.",
+                        NamedTextColor.YELLOW));
+                for (ConfigManager.ValidationError err : config.validationErrors) {
+                    player.sendMessage(
+                            Component.text(" • ", NamedTextColor.RED)
+                                    .append(Component.text(err.configPath() + ": ", NamedTextColor.WHITE, TextDecoration.BOLD))
+                                    .append(Component.text("\"" + err.badValue() + "\"", NamedTextColor.RED))
+                                    .append(Component.text(" — valid: ", NamedTextColor.GRAY))
+                                    .append(Component.text(err.validValues(), NamedTextColor.GREEN))
+                                    .append(Component.text(" (using default: ", NamedTextColor.GRAY))
+                                    .append(Component.text(err.defaultUsed() + ")", NamedTextColor.AQUA)));
+                }
+                player.sendMessage(Component.text(" "));
+            }
         }, 5L);
     }
 

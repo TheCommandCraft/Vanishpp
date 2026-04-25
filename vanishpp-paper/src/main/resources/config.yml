@@ -258,7 +258,7 @@ bossbar:
   enabled: true
   title: "&7[Vanished]"
   color: "BLUE"
-  style: "SOLID"
+  style: "PROGRESS"
 
 # --- [ VANISH HISTORY ] ---
 # Audit log of vanish/unvanish events.
@@ -336,6 +336,13 @@ permissions:
   default-vanish-level: 1
   default-see-level: 1
   max-level: 100
+
+# --- [ DISPLAY FORMAT ] ---
+# Controls how the %vanishpp_time% PlaceholderAPI placeholder formats the current server time.
+# Valid values:
+#   "12h"  — 12-hour clock with AM/PM suffix  (e.g. 3:45 PM)
+#   "24h"  — 24-hour clock                    (e.g. 15:45)
+time-format: "24h"
 
 # --- [ PROXY ] ---
 # Cross-server / Velocity proxy settings.

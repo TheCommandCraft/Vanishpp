@@ -15,6 +15,9 @@ import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import org.bukkit.Material;
+import org.bukkit.Sound;
 
 public class ConfigManager {
     private final Vanishpp plugin;
@@ -111,6 +114,14 @@ public class ConfigManager {
     public boolean proxyBroadcastEnabled;
     public int proxyBroadcastMinLevel;
 
+    // Display format
+    public String timeFormat;
+
+    // Config validation
+    public record ValidationError(String configPath, String badValue, String validValues, String defaultUsed) {}
+    public final List<ValidationError> validationErrors = new ArrayList<>();
+    public final Set<UUID> validationNotified = ConcurrentHashMap.newKeySet();
+
     public ConfigManager(Vanishpp plugin) {
         this.plugin = plugin;
         this.languageManager = new LanguageManager(plugin);
@@ -178,6 +189,8 @@ public class ConfigManager {
     }
 
     private void loadValues() {
+        validationErrors.clear();
+        validationNotified.clear();
         languageManager.load();
 
         vanishMessage = languageManager.getMessage("vanish.self");
@@ -247,12 +260,12 @@ public class ConfigManager {
         voiceChatIsolate = config.getBoolean("hooks.simple-voice-chat.isolate-vanished-players", true);
         simulateEssentialsMessages = config.getBoolean("hooks.essentials.simulate-join-leave", false);
         layeredPermsEnabled = config.getBoolean("permissions.layered-permissions-enabled", true);
-        defaultVanishLevel = config.getInt("permissions.default-vanish-level", 1);
-        defaultSeeLevel = config.getInt("permissions.default-see-level", 1);
-        maxLevel = config.getInt("permissions.max-level", 100);
+        defaultVanishLevel = validateIntMin("permissions.default-vanish-level", 1, 1);
+        defaultSeeLevel    = validateIntMin("permissions.default-see-level", 1, 1);
+        maxLevel           = validateIntMin("permissions.max-level", 100, 1);
         updateCheckerEnabled = config.getBoolean("update-checker.enabled", true);
         updateCheckerId = config.getString("update-checker.modrinth-id", "vanish++");
-        updateCheckerMode = config.getString("update-checker.notify-mode", "PERMISSION");
+        updateCheckerMode = validateOption("update-checker.notify-mode", "PERMISSION", "PERMISSION", "LIST");
         updateCheckerList = config.getStringList("update-checker.notify-list");
         updateCheckerShowBeta  = config.getBoolean("update-checker.show-beta",  true);
         updateCheckerShowAlpha = config.getBoolean("update-checker.show-alpha", true);
@@ -270,7 +283,7 @@ public class ConfigManager {
 
         // Vanish Wand
         wandEnabled = config.getBoolean("vanish-wand.enabled", true);
-        wandMaterial = config.getString("vanish-wand.material", "BLAZE_ROD");
+        wandMaterial = validateMaterial("vanish-wand.material", "BLAZE_ROD");
         wandDisplayName = config.getString("vanish-wand.display-name", "<gold><bold>Vanish Wand</bold></gold>");
 
         // Incognito fake names
@@ -288,44 +301,49 @@ public class ConfigManager {
 
         // Bossbar
         bossbarEnabled = config.getBoolean("bossbar.enabled", false);
-        bossbarTitle = config.getString("bossbar.title", "<gold>✦ You are <red>Vanished</red></gold>");
-        bossbarColor = config.getString("bossbar.color", "GOLD");
-        bossbarStyle = config.getString("bossbar.style", "PROGRESS");
+        bossbarTitle   = config.getString("bossbar.title", "<gold>✦ You are <red>Vanished</red></gold>");
+        bossbarColor   = validateOption("bossbar.color", "BLUE",
+                "PINK", "BLUE", "RED", "GREEN", "YELLOW", "PURPLE", "WHITE");
+        bossbarStyle   = validateOption("bossbar.style", "PROGRESS",
+                "PROGRESS", "NOTCHED_6", "NOTCHED_10", "NOTCHED_12", "NOTCHED_20");
 
         // Rate limit
         rateLimitEnabled = config.getBoolean("vanish-rate-limit.enabled", false);
-        rateLimitSeconds = config.getInt("vanish-rate-limit.seconds", 3);
+        rateLimitSeconds = validateIntMin("vanish-rate-limit.seconds", 3, 1);
 
         // Anti-combat vanish
         combatVanishEnabled = config.getBoolean("anti-combat-vanish.enabled", false);
-        combatPvpCooldown = config.getInt("anti-combat-vanish.pvp-cooldown-seconds", 10);
-        combatPveCooldown = config.getInt("anti-combat-vanish.pve-cooldown-seconds", 5);
+        combatPvpCooldown = validateIntMin("anti-combat-vanish.pvp-cooldown-seconds", 10, 1);
+        combatPveCooldown = validateIntMin("anti-combat-vanish.pve-cooldown-seconds", 5, 1);
 
         // Timed vanish
         timedVanishEnabled = config.getBoolean("timed-vanish.enabled", true);
 
         // Staff sounds
         staffSoundsEnabled = config.getBoolean("staff-sounds.enabled", false);
-        staffSoundsVanishSound  = config.getString("staff-sounds.vanish.sound",  "BLOCK_NOTE_BLOCK_PLING");
-        staffSoundsVanishVolume = (float) config.getDouble("staff-sounds.vanish.volume", 1.0);
-        staffSoundsVanishPitch  = (float) config.getDouble("staff-sounds.vanish.pitch",  1.2);
-        staffSoundsUnvanishSound  = config.getString("staff-sounds.unvanish.sound",  "BLOCK_NOTE_BLOCK_PLING");
+        staffSoundsVanishSound    = validateSound("staff-sounds.vanish.sound",       "BLOCK_NOTE_BLOCK_PLING");
+        staffSoundsVanishVolume   = (float) config.getDouble("staff-sounds.vanish.volume", 1.0);
+        staffSoundsVanishPitch    = (float) config.getDouble("staff-sounds.vanish.pitch",  1.2);
+        staffSoundsUnvanishSound  = validateSound("staff-sounds.unvanish.sound",     "BLOCK_NOTE_BLOCK_PLING");
         staffSoundsUnvanishVolume = (float) config.getDouble("staff-sounds.unvanish.volume", 1.0);
         staffSoundsUnvanishPitch  = (float) config.getDouble("staff-sounds.unvanish.pitch",  0.8);
-        staffSoundsSilentJoinSound  = config.getString("staff-sounds.silent-join.sound",  "ENTITY_EXPERIENCE_ORB_PICKUP");
+        staffSoundsSilentJoinSound  = validateSound("staff-sounds.silent-join.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
         staffSoundsSilentJoinVolume = (float) config.getDouble("staff-sounds.silent-join.volume", 0.6);
         staffSoundsSilentJoinPitch  = (float) config.getDouble("staff-sounds.silent-join.pitch",  1.3);
-        staffSoundsSilentQuitSound  = config.getString("staff-sounds.silent-quit.sound",  "ENTITY_EXPERIENCE_ORB_PICKUP");
+        staffSoundsSilentQuitSound  = validateSound("staff-sounds.silent-quit.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
         staffSoundsSilentQuitVolume = (float) config.getDouble("staff-sounds.silent-quit.volume", 0.6);
         staffSoundsSilentQuitPitch  = (float) config.getDouble("staff-sounds.silent-quit.pitch",  0.7);
 
         // AFK auto-vanish
         afkAutoVanishEnabled  = config.getBoolean("afk-auto-vanish.enabled", false);
-        afkAutoVanishSeconds  = config.getInt("afk-auto-vanish.seconds", 300);
+        afkAutoVanishSeconds  = validateIntMin("afk-auto-vanish.seconds", 300, 1);
 
         // Proxy broadcast
         proxyBroadcastEnabled  = config.getBoolean("proxy.broadcast-vanish-events", true);
-        proxyBroadcastMinLevel = config.getInt("proxy.broadcast-min-level", 1);
+        proxyBroadcastMinLevel = validateIntMin("proxy.broadcast-min-level", 1, 1);
+
+        // Display format
+        timeFormat = validateOption("time-format", "24h", "12h", "24h");
 
         // Per-world rule defaults
         worldRules.clear();
@@ -340,6 +358,57 @@ public class ConfigManager {
                 }
                 if (!overrides.isEmpty()) worldRules.put(worldName, overrides);
             }
+        }
+
+        for (ValidationError err : validationErrors) {
+            plugin.getLogger().warning("[Config] Invalid value for '" + err.configPath() + "': \""
+                    + err.badValue() + "\" — valid: " + err.validValues()
+                    + ". Using default: " + err.defaultUsed());
+        }
+    }
+
+    private String validateOption(String path, String defaultVal, String... validOptions) {
+        String val = config.getString(path, defaultVal);
+        if (val == null) return defaultVal;
+        for (String opt : validOptions) {
+            if (opt.equalsIgnoreCase(val)) return opt;
+        }
+        validationErrors.add(new ValidationError(path, val,
+                String.join(", ", validOptions), defaultVal));
+        return defaultVal;
+    }
+
+    private int validateIntMin(String path, int defaultVal, int min) {
+        int val = config.getInt(path, defaultVal);
+        if (val >= min) return val;
+        validationErrors.add(new ValidationError(path, String.valueOf(val),
+                ">= " + min, String.valueOf(defaultVal)));
+        return defaultVal;
+    }
+
+    private String validateMaterial(String path, String defaultVal) {
+        String val = config.getString(path, defaultVal);
+        if (val == null) return defaultVal;
+        try {
+            Material.valueOf(val.toUpperCase());
+            return val.toUpperCase();
+        } catch (IllegalArgumentException e) {
+            validationErrors.add(new ValidationError(path, val,
+                    "a valid Bukkit Material name (e.g. BLAZE_ROD)", defaultVal));
+            return defaultVal;
+        }
+    }
+
+    private String validateSound(String path, String defaultVal) {
+        String val = config.getString(path, defaultVal);
+        if (val == null) return defaultVal;
+        try {
+            Sound.valueOf(val.toUpperCase());
+            return val.toUpperCase();
+        } catch (IllegalArgumentException e) {
+            validationErrors.add(new ValidationError(path, val,
+                    "a valid Bukkit Sound name (e.g. BLOCK_NOTE_BLOCK_PLING)", defaultVal));
+            return defaultVal;
         }
     }
 
