@@ -19,7 +19,7 @@ import java.util.*;
 public class ConfigManager {
     private final Vanishpp plugin;
     private FileConfiguration config;
-    private final int LATEST_CONFIG_VERSION = 8;
+    private final int LATEST_CONFIG_VERSION = 9;
     private final LanguageManager languageManager;
 
     private boolean migratedThisBoot = false;
@@ -52,6 +52,7 @@ public class ConfigManager {
 
     // Spectator mode
     public boolean vanishGamemodesEnabled;
+    public boolean defaultSpectatorOnVanish;
 
     // Hooks & System
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
@@ -101,11 +102,20 @@ public class ConfigManager {
         YamlConfiguration initialLoad = YamlConfiguration.loadConfiguration(configFile);
         int currentVersion = initialLoad.getInt("config-version", 1);
 
+        // 1. First, perform structural migrations if the version is old
         if (currentVersion < LATEST_CONFIG_VERSION) {
             new MigrationManager(plugin, this).runMigration(configFile, currentVersion, LATEST_CONFIG_VERSION);
             this.migratedThisBoot = true;
+            // Reload after migration
+            this.config = YamlConfiguration.loadConfiguration(configFile);
+        } else {
+            this.config = initialLoad;
         }
 
+        // 2. Then, perform a silent auto-complete of missing keys without breaking format
+        new ConfigUpdater(plugin).update(configFile, "config.yml");
+        
+        // Reload final config
         this.config = YamlConfiguration.loadConfiguration(configFile);
         loadValues();
     }
@@ -197,6 +207,7 @@ public class ConfigManager {
         hideFromPluginList = config.getBoolean("hide-announcements.hide-from-plugin-list", true);
         enableNightVision = config.getBoolean("invisibility-features.night-vision", true);
         vanishGamemodesEnabled = config.getBoolean("vanish-gamemodes.enabled", true);
+        defaultSpectatorOnVanish = config.getBoolean("vanish-gamemodes.default-spectator", true);
         enableFly = config.getBoolean("flight-control.vanish-enable-fly", true);
         disableFlyOnUnvanish = config.getBoolean("flight-control.unvanish-disable-fly", true);
         disableMobTarget = config.getBoolean("invisibility-features.disable-mob-targeting", true);
@@ -342,6 +353,7 @@ public class ConfigManager {
 
         // Gamemodes / Flight
         vanishGamemodesEnabled = s.vanishGamemodesEnabled;
+        defaultSpectatorOnVanish = s.defaultSpectatorOnVanish;
         enableFly            = s.enableFly;
         disableFlyOnUnvanish = s.disableFlyOnUnvanish;
 

@@ -100,6 +100,12 @@ public class ProtocolLibManager {
 
                     if (entity instanceof Player target
                             && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
+                        // Never block packets about the player themselves — this includes
+                        // ENTITY_STATUS (OP level updates needed for F3+F4 game mode switcher)
+                        // and other self-referencing packets that the client needs.
+                        if (observer.getEntityId() == entityId) {
+                            return;
+                        }
                         if (!canSee) {
                             event.setCancelled(true);
                             return;

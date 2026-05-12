@@ -63,6 +63,7 @@ public class ProxyConfigSnapshot {
     public boolean godMode = true;
     public boolean preventPotions = false;
     public boolean vanishGamemodesEnabled = true;
+    public boolean defaultSpectatorOnVanish = true;
 
     // ── Hooks ────────────────────────────────────────────────────────────────
     public boolean voiceChatEnabled = true;
@@ -213,6 +214,7 @@ public class ProxyConfigSnapshot {
             case "invisibility-features.prevent-potion-effects"     -> s.preventPotions = bool(val);
             // Vanish Gamemodes
             case "vanish-gamemodes.enabled"                         -> s.vanishGamemodesEnabled = bool(val);
+            case "vanish-gamemodes.default-spectator"                -> s.defaultSpectatorOnVanish = bool(val);
             // Flight Control
             case "flight-control.vanish-enable-fly"                 -> s.enableFly = bool(val);
             case "flight-control.unvanish-disable-fly"              -> s.disableFlyOnUnvanish = bool(val);

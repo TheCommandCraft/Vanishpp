@@ -166,7 +166,7 @@ public class PlayerListener implements Listener {
                 if (autoVanish) {
                     plugin.getVanishScheduler().runGlobal(() -> {
                         if (!player.isOnline() || plugin.isVanished(player)) return;
-                        plugin.vanishPlayer(player, player);
+                        plugin.vanishPlayerSilently(player);
                     });
                 }
             });
