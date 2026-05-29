@@ -939,6 +939,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             }
 
         if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
+            player.setMetadata("vanishpp_night_vision", new FixedMetadataValue(this, true));
             player.addPotionEffect(
                     new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
@@ -952,7 +953,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Spectator mode is the only vanilla mechanism that removes a player from
         // LookAtPlayerGoal's getNearestPlayer() scan (EntitySelector.NO_SPECTATORS).
         // setInvisible alone does NOT prevent look goals from finding the player.
-        if (ruleManager.getRule(player, RuleManager.SPECTATOR_GAMEMODE)
+        // Controlled by config 'vanish-gamemodes.default-spectator' (separate from the
+        // double-shift toggle which is governed by the vrules spectator_gamemode rule).
+        if (configManager.defaultSpectatorOnVanish
+                && ruleManager.getRule(player, RuleManager.SPECTATOR_GAMEMODE)
                 && player.getGameMode() != GameMode.SPECTATOR) {
             if (!player.hasMetadata("vanishpp_pre_vanish_gamemode")) {
                 GameMode gm = player.getGameMode();
@@ -973,11 +977,23 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
-            // Store pre-vanish fly state so we can restore it exactly on unvanish
-            player.setMetadata("vanishpp_pre_vanish_fly",
-                    new FixedMetadataValue(this, player.getAllowFlight()));
+            // Store original state if not already saved
+            if (!player.hasMetadata("vanishpp_pre_vanish_fly")) {
+                player.setMetadata("vanishpp_pre_vanish_fly", 
+                        new FixedMetadataValue(this, player.getAllowFlight()));
+            }
+
+            // Apply immediately for smooth manual vanish
             player.setAllowFlight(true);
-            player.setFlying(true);
+
+            // Re-enforce after 1 second to override plugins like AuthMe that reset flight on login
+            vanishScheduler.runLaterGlobal(() -> {
+                if (player.isOnline() && isVanished(player)) {
+                    if (!player.getAllowFlight()) {
+                        player.setAllowFlight(true);
+                    }
+                }
+            }, 20L);
         }
 
         if (voiceChatHook != null)
@@ -1030,6 +1046,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 getLogger().fine("Scoreboard update failed (may be test environment): " + e.getClass().getSimpleName());
             }
         }
+
     }
 
     public void removeVanishEffects(Player player) {
@@ -1058,8 +1075,44 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         player.removeMetadata("vanishpp_pre_vanish_gamemode", this);
 
-        if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION))
-            player.removePotionEffect(PotionEffectType.NIGHT_VISION);
+        // Only handle night vision if the plugin added it
+        if (player.hasMetadata("vanishpp_night_vision")) {
+            player.removeMetadata("vanishpp_night_vision", this);
+
+            // Replace INFINITE NV with a 1-tick effect that expires naturally.
+            // Do NOT use removePotionEffect() — it breaks the game engine's internal
+            // equipment-effect tracking and prevents equipment from re-applying NV.
+            player.addPotionEffect(
+                    new PotionEffect(PotionEffectType.NIGHT_VISION, 1, 0, false, false), true);
+
+            // Force equipment re-evaluation by stripping then restoring armor across two ticks.
+            // After the 1-tick NV expires, the game detects the equipment change and
+            // re-applies any equipment-provided effects (including NV if applicable).
+            vanishScheduler.runLaterGlobal(() -> {
+                if (!player.isOnline()) return;
+                org.bukkit.inventory.PlayerInventory inv = player.getInventory();
+                org.bukkit.inventory.ItemStack helmet = inv.getHelmet();
+                org.bukkit.inventory.ItemStack chest = inv.getChestplate();
+                org.bukkit.inventory.ItemStack legs = inv.getLeggings();
+                org.bukkit.inventory.ItemStack boots = inv.getBoots();
+                boolean hasArmor = (helmet != null && !helmet.getType().isAir())
+                        || (chest != null && !chest.getType().isAir())
+                        || (legs != null && !legs.getType().isAir())
+                        || (boots != null && !boots.getType().isAir());
+                if (!hasArmor) return;
+                inv.setHelmet(null);
+                inv.setChestplate(null);
+                inv.setLeggings(null);
+                inv.setBoots(null);
+                vanishScheduler.runLaterGlobal(() -> {
+                    if (!player.isOnline()) return;
+                    inv.setHelmet(helmet);
+                    inv.setChestplate(chest);
+                    inv.setLeggings(legs);
+                    inv.setBoots(boots);
+                }, 1L);
+            }, 1L);
+        }
         if (player.hasPotionEffect(PotionEffectType.INVISIBILITY))
             player.removePotionEffect(PotionEffectType.INVISIBILITY);
         player.setInvisible(false);
@@ -1125,6 +1178,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 getLogger().fine("Scoreboard update failed (may be test environment): " + e.getClass().getSimpleName());
             }
         }
+
+    }
+
+    /**
+     * Vanish a player silently — applies all vanish effects and notifies the player,
+     * but does NOT broadcast fake-quit messages or staff notifications.
+     * Used for auto-vanish on join to avoid a spurious "player left" message
+     * right after they connect.
+     */
+    public void vanishPlayerSilently(Player player) {
+        applyVanishEffects(player);
+        if (isValidMessage(configManager.vanishMessage)) {
+            player.sendMessage(messageManager.parse(configManager.vanishMessage, player));
+        }
+        // No fake-quit broadcast, no Discord fake-quit, no staff notification
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {
@@ -1301,7 +1369,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Fly
         if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
             player.setAllowFlight(true);
-            player.setFlying(true);
         }
 
         // Night vision

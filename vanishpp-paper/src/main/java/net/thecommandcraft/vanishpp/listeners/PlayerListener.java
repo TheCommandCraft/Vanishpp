@@ -166,7 +166,7 @@ public class PlayerListener implements Listener {
                 if (autoVanish) {
                     plugin.getVanishScheduler().runGlobal(() -> {
                         if (!player.isOnline() || plugin.isVanished(player)) return;
-                        plugin.vanishPlayer(player, player);
+                        plugin.vanishPlayerSilently(player);
                     });
                 }
             });
@@ -747,8 +747,12 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void onHunger(FoodLevelChangeEvent event) {
-        if (config.disableHunger && event.getEntity() instanceof Player p && plugin.isVanished(p))
-            event.setCancelled(true);
+        if (config.disableHunger && event.getEntity() instanceof Player p && plugin.isVanished(p)) {
+            // Only prevent hunger from decreasing (decay), allow it to increase (eating)
+            if (event.getFoodLevel() < p.getFoodLevel()) {
+                event.setCancelled(true);
+            }
+        }
     }
 
     @EventHandler
@@ -785,7 +789,6 @@ public class PlayerListener implements Listener {
             if (player.isOnline() && plugin.isVanished(player)) {
                 if (config.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
                     player.setAllowFlight(true);
-                    player.setFlying(true);
                 }
             }
         }, 1L);
@@ -916,7 +919,6 @@ public class PlayerListener implements Listener {
                 p.setGameMode(gm);
                 if (config.enableFly && gm != GameMode.CREATIVE && plugin.isVanished(p)) {
                     p.setAllowFlight(true);
-                    p.setFlying(true);
                 }
             }
         }

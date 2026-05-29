@@ -6,7 +6,6 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.util.Set;
-import java.util.function.Function;
 
 public class MigrationManager {
 
@@ -19,44 +18,45 @@ public class MigrationManager {
     }
 
     public void runMigration(File configFile, int oldVersion, int latestVersion) {
-        plugin.getLogger().info("Starting Smart-Merge Migration (v" + oldVersion + " -> v" + latestVersion + ")");
+        // Version 8+ is handled by ConfigUpdater (lossless)
+        if (oldVersion >= 8) {
+            plugin.getLogger().info("Version is 8+, skipping legacy migration to preserve comments.");
+            return;
+        }
+
+        plugin.getLogger().info("Starting Legacy Structural Migration (v" + oldVersion + " -> v" + latestVersion + ")");
 
         YamlConfiguration oldConfig = YamlConfiguration.loadConfiguration(configFile);
 
-        // 1. Create Safety Backup
+        // 1. Create Safety Backup (Lossless Physical Copy)
         File backup = new File(plugin.getDataFolder(), "config_backup_v" + oldVersion + ".yml");
         try {
-            oldConfig.save(backup);
+            java.nio.file.Files.copy(configFile.toPath(), backup.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (Exception e) {
-            e.printStackTrace();
+            plugin.getLogger().warning("Failed to create physical backup: " + e.getMessage());
         }
 
-        // 2. Load the fresh Template from JAR (In-Memory)
-        // We do NOT saveResource yet to avoid overwriting the user's file if saving
-        // fails.
+        // 2. Load the fresh Template from JAR
         YamlConfiguration newConfig = YamlConfiguration.loadConfiguration(
                 new java.io.InputStreamReader(plugin.getResource("config.yml"),
                         java.nio.charset.StandardCharsets.UTF_8));
 
-        // 3. STEP ONE: Recursive Deep Copy (Lossless)
-        // We copy everything from old to new, overwriting the new defaults with user
-        // values.
+        // 3. STEP ONE: Recursive Deep Copy
         deepMerge(oldConfig, newConfig, "");
 
-        // 4. STEP TWO: Refactoring Rules (Structural changes)
-        // This runs after the copy to fix key names.
+        // 4. STEP TWO: Refactoring Rules
         applyRefactorRules(oldConfig, newConfig, oldVersion);
 
-        // 5. Migrate Legacy Messages to messages.yml
+        // 5. Migrate Legacy Messages
         if (oldVersion < 6) {
             migrateLegacyMessages(oldConfig);
         }
 
-        // 6. Finalize
+        // 6. Finalize (Destructive save, only for very old versions)
         newConfig.set("config-version", latestVersion);
         try {
             newConfig.save(configFile);
-            plugin.getLogger().info("Config migration successful. No data lost.");
+            plugin.getLogger().info("Legacy migration successful.");
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -64,10 +64,7 @@ public class MigrationManager {
 
     private void migrateLegacyMessages(FileConfiguration oldC) {
         File msgFile = new File(plugin.getDataFolder(), "messages.yml");
-        if (!msgFile.exists()) {
-            plugin.getLogger().warning("messages.yml not found during migration, skipping message port.");
-            return;
-        }
+        if (!msgFile.exists()) return;
 
         YamlConfiguration msgC = YamlConfiguration.loadConfiguration(msgFile);
         boolean changed = false;
@@ -84,25 +81,19 @@ public class MigrationManager {
         changed |= migrateToMessages(oldC, msgC, "messages.chat-locked", "chat.locked");
         changed |= migrateToMessages(oldC, msgC, "messages.chat-sent", "chat.sent");
         changed |= migrateToMessages(oldC, msgC, "messages.no-chat-pending", "chat.no-pending");
-
         changed |= migrateToMessages(oldC, msgC, "messages.vperms.reload", "vperms.reload");
         changed |= migrateToMessages(oldC, msgC, "messages.vperms.invalid-usage", "vperms.invalid-usage");
         changed |= migrateToMessages(oldC, msgC, "messages.vperms.invalid-permission", "vperms.invalid-permission");
         changed |= migrateToMessages(oldC, msgC, "messages.vperms.perm-set", "vperms.perm-set");
         changed |= migrateToMessages(oldC, msgC, "messages.vperms.perm-removed", "vperms.perm-removed");
         changed |= migrateToMessages(oldC, msgC, "messages.vperms.perm-get-has", "vperms.perm-get-has");
-        changed |= migrateToMessages(oldC, msgC, "messages.vperms.perm-get-does-not-have",
-                "vperms.perm-get-does-not-have");
-
+        changed |= migrateToMessages(oldC, msgC, "messages.vperms.perm-get-does-not-have", "vperms.perm-get-does-not-have");
         changed |= migrateToMessages(oldC, msgC, "messages.silent-join", "staff.silent-join");
         changed |= migrateToMessages(oldC, msgC, "messages.silent-quit", "staff.silent-quit");
-
         changed |= migrateToMessages(oldC, msgC, "messages.staff-notify.on-vanish", "staff.notify-vanish");
         changed |= migrateToMessages(oldC, msgC, "messages.staff-notify.on-unvanish", "staff.notify-unvanish");
-
         changed |= migrateToMessages(oldC, msgC, "vanish-appearance.action-bar.text", "appearance.action-bar");
-        changed |= migrateToMessages(oldC, msgC, "chat-format.vanished-player-format",
-                "appearance.vanished-player-format");
+        changed |= migrateToMessages(oldC, msgC, "chat-format.vanished-player-format", "appearance.vanished-player-format");
 
         if (changed) {
             try {
@@ -115,23 +106,18 @@ public class MigrationManager {
     }
 
     private boolean migrateToMessages(FileConfiguration oldC, FileConfiguration msgC, String oldKey, String msgKey) {
-        if (oldC.contains(oldKey) && oldC.getString(oldKey) != null && !oldC.getString(oldKey).isEmpty()) {
-            msgC.set(msgKey, oldC.getString(oldKey));
-            oldC.set(oldKey, null); // Wipe from the main config structure so it deepmerges clean
+        if (oldC.contains(oldKey)) {
+            msgC.set(msgKey, oldC.get(oldKey));
+            oldC.set(oldKey, null);
             return true;
         }
         return false;
     }
 
-    /**
-     * Recursively copies values from old to new.
-     * Preserves custom messages and settings that haven't changed keys.
-     */
     private void deepMerge(FileConfiguration source, FileConfiguration target, String path) {
         Set<String> keys = source.getKeys(false);
         if (!path.isEmpty()) {
-            if (source.getConfigurationSection(path) == null)
-                return;
+            if (source.getConfigurationSection(path) == null) return;
             keys = source.getConfigurationSection(path).getKeys(false);
         }
 
@@ -140,11 +126,7 @@ public class MigrationManager {
             if (source.isConfigurationSection(fullPath)) {
                 deepMerge(source, target, fullPath);
             } else {
-                // Do not copy the internal version key
-                if (fullPath.equalsIgnoreCase("config-version"))
-                    continue;
-
-                // Copy the user's custom value into the new structure
+                if (fullPath.equalsIgnoreCase("config-version")) continue;
                 target.set(fullPath, source.get(fullPath));
             }
         }
@@ -154,10 +136,8 @@ public class MigrationManager {
         switch (oldVersion) {
             case 1:
                 migrateRefactor(oldC, newC, "vanish-appearance.prefix", "vanish-appearance.tab-prefix");
-                migrateRefactor(oldC, newC, "vanish-effects.fake-leave-message",
-                        "vanish-effects.hide-real-quit-messages");
-                migrateRefactor(oldC, newC, "vanish-effects.fake-join-message",
-                        "vanish-effects.hide-real-join-messages");
+                migrateRefactor(oldC, newC, "vanish-effects.fake-leave-message", "vanish-effects.hide-real-quit-messages");
+                migrateRefactor(oldC, newC, "vanish-effects.fake-join-message", "vanish-effects.hide-real-join-messages");
                 configManager.logMigrationChange("Refactored prefix and join/quit keys.");
             case 2:
                 configManager.logMigrationChange("Enabled Titan God Mode features.");
@@ -167,13 +147,9 @@ public class MigrationManager {
                 configManager.logMigrationChange("Added setting to persist flight mode after unvanishing.");
             case 5:
                 migrateRefactor(oldC, newC, "invisibility-features.allow-flight", "flight-control.vanish-enable-fly");
-                migrateRefactor(oldC, newC, "invisibility-features.disable-flight-on-unvanish",
-                        "flight-control.unvanish-disable-fly");
-                configManager
-                        .logMigrationChange("Restructured flight settings into dedicated 'flight-control' section.");
+                migrateRefactor(oldC, newC, "invisibility-features.disable-flight-on-unvanish", "flight-control.unvanish-disable-fly");
+                configManager.logMigrationChange("Restructured flight settings into dedicated 'flight-control' section.");
             case 6:
-                // New sections (update-checker, vanish-gamemodes) are injected automatically
-                // from the fresh template via deepMerge — no manual key moves needed here.
                 configManager.logMigrationChange("Added update-checker and spectator mode settings.");
             case 7:
                 configManager.logMigrationChange("Added scoreboard settings.");
@@ -184,9 +160,7 @@ public class MigrationManager {
     private void migrateRefactor(FileConfiguration oldC, FileConfiguration newC, String oldP, String newP) {
         if (oldC.contains(oldP)) {
             newC.set(newP, oldC.get(oldP));
-            // Only remove if the path has actually changed to avoid wiping a valid key
-            if (!oldP.equals(newP))
-                newC.set(oldP, null);
+            if (!oldP.equals(newP)) newC.set(oldP, null);
         }
     }
 }

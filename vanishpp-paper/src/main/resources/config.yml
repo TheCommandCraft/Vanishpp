@@ -6,7 +6,7 @@
 
 
 # Configuration Version (Internal use for migrations)
-config-version: 8
+config-version: 9
 
 # --- [ MESSAGES ] ---
 # Most messages have been moved to the language files in the 'lang' folder.
@@ -54,6 +54,10 @@ vanish-appearance:
 vanish-gamemodes:
   # Master switch. If false, the spectator quick-switch is disabled for everyone.
   enabled: true
+  # If true, players will automatically enter spectator mode when they vanish.
+  # If false, their gamemode will remain unchanged on vanish.
+  # This is independent of the double-tap shift toggle (controlled by vrules spectator_gamemode).
+  default-spectator: true
 
 # --- [ FLIGHT MANAGEMENT ] ---
 # Configuration for flight behavior relating to vanish status.
