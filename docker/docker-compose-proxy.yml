@@ -74,14 +74,12 @@ services:
       ENABLE_RCON: "TRUE"
       RCON_PORT: "25575"
       MOTD: "§aVanish++ Proxy Test §7— §fPaper1"
-      # No ProtocolLib download — plugin works without it
-      PLUGINS: " "
       # Velocity modern forwarding
       PAPER_VELOCITY_ENABLED: "true"
       PAPER_VELOCITY_SECRET: "test-forwarding-secret"
     volumes:
       - proxy_paper1_data:/data
-      - ./plugins:/plugins:ro
+      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar:ro
       - ./paper1-config/vanishpp:/data/plugins/vanishpp
 
   paper2:
@@ -110,12 +108,11 @@ services:
       ENABLE_RCON: "TRUE"
       RCON_PORT: "25576"
       MOTD: "§aVanish++ Proxy Test §7— §fPaper2"
-      PLUGINS: " "
       PAPER_VELOCITY_ENABLED: "true"
       PAPER_VELOCITY_SECRET: "test-forwarding-secret"
     volumes:
       - proxy_paper2_data:/data
-      - ./plugins:/plugins:ro
+      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar:ro
       - ./paper2-config/vanishpp:/data/plugins/vanishpp
 
 volumes:

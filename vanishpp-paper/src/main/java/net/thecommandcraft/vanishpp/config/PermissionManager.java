@@ -17,22 +17,6 @@ public class PermissionManager {
     private final File permissionsFile;
     private FileConfiguration permissionsConfig;
     private final Map<UUID, List<String>> playerPermissions = new HashMap<>();
-    
-    // Result cache for hasPermission to prevent LuckPerms spam
-    private static final long CACHE_DURATION_MS = 500;
-    private final Map<String, CachedResult> permissionCache = new java.util.concurrent.ConcurrentHashMap<>();
-
-    private static class CachedResult {
-        final boolean result;
-        final long expiry;
-        CachedResult(boolean result) {
-            this.result = result;
-            this.expiry = System.currentTimeMillis() + CACHE_DURATION_MS;
-        }
-        boolean isExpired() {
-            return System.currentTimeMillis() > expiry;
-        }
-    }
 
     // Definitions for custom permission groups
     private static final Map<String, Set<String>> CUSTOM_GROUPS = new HashMap<>();
@@ -81,7 +65,6 @@ public class PermissionManager {
         }
         this.permissionsConfig = YamlConfiguration.loadConfiguration(permissionsFile);
         playerPermissions.clear();
-        permissionCache.clear();
 
         ConfigurationSection permsSection = permissionsConfig.getConfigurationSection("permissions");
         if (permsSection != null) {
@@ -166,27 +149,16 @@ public class PermissionManager {
      * Checks permission via Bukkit (OP/Plugins) OR Custom File.
      */
     public boolean hasPermission(Player player, String permission) {
-        String cacheKey = player.getUniqueId().toString() + ":" + permission;
-        CachedResult cached = permissionCache.get(cacheKey);
-        
-        if (cached != null && !cached.isExpired()) {
-            return cached.result;
-        }
-
-        boolean result = false;
         try {
             if (player.hasPermission(permission)) {
-                result = true;
-            } else {
-                result = hasPermission(player.getUniqueId(), permission);
+                return true;
             }
         } catch (UnsupportedOperationException ignored) {
             // ProtocolLib creates temporary player stubs during Geyser/Floodgate login
             // that throw UnsupportedOperationException on hasPermission — treat as no permission.
+            return false;
         }
-
-        permissionCache.put(cacheKey, new CachedResult(result));
-        return result;
+        return hasPermission(player.getUniqueId(), permission);
     }
 
     public boolean canSee(Player observer, Player target) {

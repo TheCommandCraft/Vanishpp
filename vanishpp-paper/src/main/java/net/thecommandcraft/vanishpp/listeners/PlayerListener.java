@@ -638,6 +638,17 @@ public class PlayerListener implements Listener {
             }
 
             if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+                // Check if clicking a chest (single or double) — must be explicitly blocked
+                Block clickedBlock = event.getClickedBlock();
+                if (clickedBlock != null) {
+                    Material blockType = clickedBlock.getType();
+                    // Block all chest types (including trapped chests and double chests)
+                    if (blockType == Material.CHEST || blockType == Material.TRAPPED_CHEST) {
+                        event.setCancelled(true);
+                        event.setUseItemInHand(Event.Result.DENY);
+                        return;  // Don't process as silent chest
+                    }
+                }
                 handleSilentChest(event);
             }
         }
@@ -647,16 +658,36 @@ public class PlayerListener implements Listener {
     public void onMobTarget(EntityTargetEvent event) {
         if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
             if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
+                // Always cancel targeting for vanished players with mob_targeting rule OFF
                 event.setCancelled(true);
+
+                // Force clear the mob's target immediately to prevent residual tracking
+                if (event.getEntity() instanceof Mob mob) {
+                    try {
+                        mob.setTarget(null);
+                        mob.getPathfinder().stopPathfinding();
+                    } catch (Throwable ignored) {}
+                }
             }
         }
     }
 
     @EventHandler
     public void onEntityInteract(PlayerInteractEntityEvent event) {
-        if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_INTERACT)) {
+        Player player = event.getPlayer();
+        if (!plugin.isVanished(player)) return;
+
+        // Always block horse/donkey/mule/llama interaction (mounting, feeding, etc.)
+        if (event.getRightClicked() instanceof org.bukkit.entity.AbstractHorse) {
             event.setCancelled(true);
-            sendRuleDeny(event.getPlayer(), RuleManager.CAN_INTERACT, "entity interaction");
+            sendRuleDeny(player, RuleManager.CAN_INTERACT, "horse interaction");
+            return;
+        }
+
+        // Block other entity interactions if CAN_INTERACT rule is OFF
+        if (!rules.getRule(player, RuleManager.CAN_INTERACT)) {
+            event.setCancelled(true);
+            sendRuleDeny(player, RuleManager.CAN_INTERACT, "entity interaction");
         }
     }
 

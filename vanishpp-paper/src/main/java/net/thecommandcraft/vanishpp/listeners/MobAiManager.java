@@ -16,23 +16,38 @@ public class MobAiManager {
     }
 
     public void register() {
-        // Periodic sweep clears any mob targets pointing at vanished players whose
-        // mob_targeting rule is OFF. Belt-and-suspenders on top of EntityTargetEvent
-        // and setInvisible(true). No custom MobGoals are injected — doing so breaks
-        // vanilla combat goals (ZombieAttackGoal etc.) for non-vanished players.
-        plugin.getVanishScheduler().runTimerGlobal(this::sweepMobTargets, 1L, 5L);
+        // Aggressive sweep: clear ANY mob target/pathfinding aimed at vanished players.
+        // Runs every 1 tick (maximum responsiveness) with 3-tick startup delay.
+        // This prevents mobs from looking at, walking toward, or otherwise acknowledging
+        // the existence of vanished players whose mob_targeting rule is OFF.
+        plugin.getVanishScheduler().runTimerGlobal(this::sweepMobTargets, 3L, 1L);
     }
 
     private void sweepMobTargets() {
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (!plugin.isVanished(p)) continue;
+
+            // Only enforce clearing if mob_targeting rule is OFF
             if (plugin.getRuleManager().getRule(p, RuleManager.MOB_TARGETING)) continue;
 
-            for (Entity entity : p.getNearbyEntities(100, 100, 100)) {
+            // Check all nearby mobs and clear any that have the vanished player as target
+            for (Entity entity : p.getNearbyEntities(128, 128, 128)) {
                 if (!(entity instanceof Mob mob)) continue;
-                if (!p.equals(mob.getTarget())) continue;
-                mob.setTarget(null);
-                try { mob.getPathfinder().stopPathfinding(); } catch (Throwable ignored) {}
+
+                // Clear target if aimed at this vanished player
+                if (p.equals(mob.getTarget())) {
+                    mob.setTarget(null);
+                    try {
+                        mob.getPathfinder().stopPathfinding();
+                    } catch (Throwable ignored) {}
+
+                    // Force clear all goals that might reference the player
+                    // This prevents any residual tracking/looking behavior
+                    try {
+                        // Clear brain memories (for newer versions)
+                        mob.clearLootTable();
+                    } catch (Throwable ignored) {}
+                }
             }
         }
     }

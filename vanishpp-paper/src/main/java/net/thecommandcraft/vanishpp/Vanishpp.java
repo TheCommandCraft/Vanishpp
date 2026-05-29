@@ -950,20 +950,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         player.setInvisible(true);
 
-        // Spectator mode is the only vanilla mechanism that removes a player from
-        // LookAtPlayerGoal's getNearestPlayer() scan (EntitySelector.NO_SPECTATORS).
-        // setInvisible alone does NOT prevent look goals from finding the player.
-        // Controlled by config 'vanish-gamemodes.default-spectator' (separate from the
-        // double-shift toggle which is governed by the vrules spectator_gamemode rule).
-        if (configManager.defaultSpectatorOnVanish
-                && ruleManager.getRule(player, RuleManager.SPECTATOR_GAMEMODE)
-                && player.getGameMode() != GameMode.SPECTATOR) {
-            if (!player.hasMetadata("vanishpp_pre_vanish_gamemode")) {
-                GameMode gm = player.getGameMode();
-                player.setMetadata("vanishpp_pre_vanish_gamemode", new FixedMetadataValue(this, gm));
-            }
-            player.setGameMode(GameMode.SPECTATOR);
-        }
+        // DO NOT change gamemode — player should remain in their original mode
+        // Mob look-at prevention is handled by EntityTargetEvent cancellation
+        // and periodic mob target sweep in MobAiManager (runs every 5 ticks)
 
         player.setCollidable(false);
 
