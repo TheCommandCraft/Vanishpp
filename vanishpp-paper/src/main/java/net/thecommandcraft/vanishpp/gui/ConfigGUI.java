@@ -2,6 +2,7 @@ package net.thecommandcraft.vanishpp.gui;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -175,8 +176,10 @@ public class ConfigGUI implements Listener {
         if (current == null) current = value.defaultValue;
         boolean newValue = !(current instanceof Boolean && (Boolean) current);
 
-        saveConfig(player, value.key, newValue);
-        playSound(player, ConfigSound.SUCCESS);
+        if (saveConfig(player, value.key, newValue)) {
+            playSound(player, ConfigSound.SUCCESS);
+            sendSaveMessage(player, value.key, String.valueOf(newValue));
+        }
     }
 
     /**
@@ -198,20 +201,23 @@ public class ConfigGUI implements Listener {
             return;
         }
 
-        saveConfig(player, value.key, newValue);
-        playSound(player, ConfigSound.SUCCESS);
+        if (saveConfig(player, value.key, newValue)) {
+            playSound(player, ConfigSound.SUCCESS);
+            sendSaveMessage(player, value.key, String.valueOf(newValue));
+        }
     }
 
     /**
      * Save config change to file.
+     * Returns true if save was successful, false if failed.
      */
-    private void saveConfig(Player player, String key, Object value) {
+    private boolean saveConfig(Player player, String key, Object value) {
         try {
             plugin.getConfigManager().setAndSave(key, value);
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to save config " + key + ": " + e.getMessage());
             playSound(player, ConfigSound.ERROR);
-            return;
+            return false;
         }
 
         // Proxy sync if available (separate error handling)
@@ -223,6 +229,7 @@ public class ConfigGUI implements Listener {
                 plugin.getLogger().warning("Proxy sync failed for " + key + ": " + e.getMessage());
             }
         }
+        return true;
     }
 
     /**
@@ -235,6 +242,18 @@ public class ConfigGUI implements Listener {
         } catch (Exception ignored) {
             // Sounds are optional
         }
+    }
+
+    /**
+     * Send action bar confirmation message for saved value.
+     */
+    private void sendSaveMessage(Player player, String key, String value) {
+        Component message = Component.text("✓ ", NamedTextColor.GREEN)
+                .append(Component.text(key, NamedTextColor.AQUA))
+                .append(Component.text(" → ", NamedTextColor.GRAY))
+                .append(Component.text(value, NamedTextColor.GREEN))
+                .decoration(TextDecoration.ITALIC, false);
+        player.sendActionBar(message);
     }
 
     /**

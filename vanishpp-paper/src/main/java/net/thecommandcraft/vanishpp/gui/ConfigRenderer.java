@@ -24,6 +24,8 @@ public class ConfigRenderer {
     private static final int SPACER_ROW = 1;
     private static final int SETTINGS_START_ROW = 2;
     private static final int NAVIGATION_ROW = 5;
+    private static final int SETTINGS_CONTENT_ROWS = 3;  // Rows 2, 3, 4
+    private static final int ITEMS_PER_PAGE = (SETTINGS_CONTENT_ROWS * 9) - INDENT_WRAPPING;
 
     private static final Material CATEGORY_ACTIVE = Material.YELLOW_STAINED_GLASS;
     private static final Material CATEGORY_INACTIVE = Material.BLUE_STAINED_GLASS;
@@ -91,9 +93,8 @@ public class ConfigRenderer {
      */
     private void placeSettings(Inventory inv, List<ConfigCategory.ConfigValue> allSettings, int page,
                                Map<Integer, String> slotToKey) {
-        int itemsPerPage = (3 * 9) - 2;  // 3 rows, minus indent adjustments
-        int startIndex = page * itemsPerPage;
-        int endIndex = Math.min(startIndex + itemsPerPage, allSettings.size());
+        int startIndex = page * ITEMS_PER_PAGE;
+        int endIndex = Math.min(startIndex + ITEMS_PER_PAGE, allSettings.size());
 
         if (startIndex >= allSettings.size()) return;
 
@@ -190,8 +191,7 @@ public class ConfigRenderer {
      * Place navigation buttons in row 5.
      */
     private void placeNavigation(Inventory inv, int currentPage, int totalSettings) {
-        int itemsPerPage = (3 * 9) - 2;
-        int totalPages = (totalSettings + itemsPerPage - 1) / itemsPerPage;
+        int totalPages = (totalSettings + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
 
         // Previous button (slot 45)
         if (currentPage > 0) {
@@ -277,7 +277,6 @@ public class ConfigRenderer {
     public int getTotalPages(String categoryName) {
         ConfigCategory cat = ConfigCategory.valueOf(categoryName);
         int totalSettings = cat.getSettingCount();
-        int itemsPerPage = (3 * 9) - 2;
-        return Math.max(1, (totalSettings + itemsPerPage - 1) / itemsPerPage);
+        return Math.max(1, (totalSettings + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
     }
 }

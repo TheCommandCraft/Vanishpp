@@ -11,7 +11,9 @@ public enum ConfigCategory {
     GENERAL("General Settings", new String[]{
             "vanish-delay-ticks",
             "double-shift-window",
-            "default-hide-commands"
+            "default-hide-commands",
+            "vanish-message.enabled",
+            "action-bar-enabled"
     }),
 
     VISIBILITY("Visibility & Rendering", new String[]{
@@ -43,7 +45,9 @@ public enum ConfigCategory {
             "flight-control.enable-flight",
             "flight-control.unvanish-disable-fly",
             "prevent-sleeping",
-            "prevent-eating"
+            "prevent-eating",
+            "tab-plugin-hook-enabled",
+            "integration-hook-tab-enabled"
     });
 
     private final String displayName;
@@ -87,6 +91,14 @@ public enum ConfigCategory {
             case "default-hide-commands" -> new ConfigValue("default-hide-commands",
                     ConfigType.BOOLEAN, false, 0, 0,
                     "Hide /vanish command from tab completion");
+
+            case "vanish-message.enabled" -> new ConfigValue("vanish-message.enabled",
+                    ConfigType.BOOLEAN, true, 0, 0,
+                    "Send vanish/unvanish messages to staff");
+
+            case "action-bar-enabled" -> new ConfigValue("action-bar-enabled",
+                    ConfigType.BOOLEAN, true, 0, 0,
+                    "Show action bar status while vanished");
 
             // VISIBILITY
             case "vanish-gamemodes.scoreboard-team" -> new ConfigValue("vanish-gamemodes.scoreboard-team",
@@ -160,6 +172,14 @@ public enum ConfigCategory {
             case "prevent-eating" -> new ConfigValue("prevent-eating",
                     ConfigType.BOOLEAN, false, 0, 0,
                     "Prevent eating while vanished");
+
+            case "tab-plugin-hook-enabled" -> new ConfigValue("tab-plugin-hook-enabled",
+                    ConfigType.BOOLEAN, true, 0, 0,
+                    "Hook TAB plugin for nametag hiding");
+
+            case "integration-hook-tab-enabled" -> new ConfigValue("integration-hook-tab-enabled",
+                    ConfigType.BOOLEAN, true, 0, 0,
+                    "Enable TAB plugin integration");
 
             default -> null;
         };
