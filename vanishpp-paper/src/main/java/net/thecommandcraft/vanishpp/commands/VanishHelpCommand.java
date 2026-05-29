@@ -131,7 +131,7 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
 
         LanguageManager lm = plugin.getConfigManager().getLanguageManager();
         var cmd = plugin.getCommand(cmdName);
-        String permission = cmd != null && cmd.getPermission() != null ? cmd.getPermission() : "None";
+        String permission = cmd != null && cmd.getPermission() != null ? cmd.getPermission() : "[No permission required]";
         String aliases = cmd != null && !cmd.getAliases().isEmpty() ? String.join(", ", cmd.getAliases()) : "";
 
         plugin.getMessageManager().sendMessage(sender, "\n<gold><bold>--- " + cmdName + " ---");

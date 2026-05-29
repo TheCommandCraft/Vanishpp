@@ -12,40 +12,52 @@ commands:
     description: Toggles your or another player's vanish state.
     usage: /vanish [player]
     aliases: [ v, sv ]
+    permission: vanishpp.vanish
   vperms:
     description: Manages Vanish++ specific permissions for players.
     usage: /vperms <player> <permission> <set|remove|get>
+    aliases: []
+    permission: vanishpp.manageperms
   vanishrules:
     description: Configure personal vanish rules.
     usage: /vanishrules [player] <rule> [true|false] [seconds]
     aliases: [ vrules, vsettings ]
+    permission: vanishpp.rules
   vanishchat:
     description: Confirms sending a chat message while vanished.
     usage: /vanishchat confirm
     aliases: [ vchat ]
+    permission: vanishpp.chat
   vanishignore:
     description: Toggles the ProtocolLib missing warning on join.
     usage: /vanishignore [player]
     aliases: [ vignore ]
+    permission: vanishpp.ignorewarning
   vanishlist:
     description: Lists all currently vanished players.
     usage: /vanishlist
     aliases: [ vlist ]
+    permission: vanishpp.list
   vanishhelp:
     description: Shows the interactive help menu.
     usage: /vanishhelp [command]
     aliases: [ vhelp ]
+    permission: vanishpp.help
   vanishconfig:
     description: Edit config settings in-game.
     usage: /vanishconfig <key> [value] [--confirm]
     aliases: [ vconfig ]
+    permission: vanishpp.config
   vack:
     description: Internal command to acknowledge and hide notifications.
     usage: /vack <type>
+    aliases: []
+    permission: vanishpp.help
   vanishreload:
     description: Reloads the plugin configuration.
     usage: /vanishreload
     aliases: [ vreload ]
+    permission: vanishpp.reload
   vanishscoreboard:
     description: Toggles the vanish info scoreboard.
     usage: /vanishscoreboard
