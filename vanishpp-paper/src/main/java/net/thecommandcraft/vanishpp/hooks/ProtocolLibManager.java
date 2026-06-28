@@ -233,6 +233,15 @@ public class ProtocolLibManager {
 
                             // Actions: 0 (Create), 3 (Add Members), 4 (Remove Members)
                             if (action == 0 || action == 3 || action == 4) {
+                                // For the vanish team, non-staff clients never receive ADD packets for
+                                // vanished players, so they must also never receive REMOVE packets —
+                                // otherwise MC crashes with "Player is not on any team" when unvanishing.
+                                String teamName = packet.getStrings().read(0);
+                                if ("Vanishpp_Vanished".equals(teamName) && (action == 3 || action == 4)) {
+                                    event.setCancelled(true);
+                                    return;
+                                }
+
                                 Collection<String> players = packet.getSpecificModifier(Collection.class).read(0);
                                 if (players != null) {
                                     List<String> scrubbed = new ArrayList<>();

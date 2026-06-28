@@ -970,10 +970,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // ALWAYS clear existing mob targets when vanishing (regardless of mob_targeting rule)
         // The rule only controls whether new targets can be acquired AFTER vanishing
+        // Each mob's target access must run on its owning region's thread (Folia safety)
         for (Entity entity : player.getWorld().getEntities()) {
-            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                mob.setTarget(null);
-                mob.getPathfinder().stopPathfinding();
+            if (entity instanceof Mob mob) {
+                vanishScheduler.runEntity(mob, () -> {
+                    if (player.equals(mob.getTarget())) {
+                        mob.setTarget(null);
+                        mob.getPathfinder().stopPathfinding();
+                    }
+                }, null);
             }
         }
 

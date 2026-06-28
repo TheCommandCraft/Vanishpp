@@ -26,21 +26,21 @@ public class MobAiManager {
     private void sweepMobTargets() {
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (!plugin.isVanished(p)) continue;
-
-            // Only enforce clearing if mob_targeting rule is OFF
             if (plugin.getRuleManager().getRule(p, RuleManager.MOB_TARGETING)) continue;
 
-            // Check all nearby mobs and clear any that have the vanished player as target
-            for (Entity entity : p.getNearbyEntities(128, 128, 128)) {
-                if (!(entity instanceof Mob mob)) continue;
+            // getNearbyEntities requires the owning region thread — dispatch per entity.
+            plugin.getVanishScheduler().runEntity(p, () -> sweepForPlayer(p), null);
+        }
+    }
 
-                // Clear target if aimed at this vanished player
-                if (p.equals(mob.getTarget())) {
-                    mob.setTarget(null);
-                    try {
-                        mob.getPathfinder().stopPathfinding();
-                    } catch (Throwable ignored) {}
-                }
+    private void sweepForPlayer(Player p) {
+        for (Entity entity : p.getNearbyEntities(128, 128, 128)) {
+            if (!(entity instanceof Mob mob)) continue;
+            if (p.equals(mob.getTarget())) {
+                mob.setTarget(null);
+                try {
+                    mob.getPathfinder().stopPathfinding();
+                } catch (Throwable ignored) {}
             }
         }
     }
