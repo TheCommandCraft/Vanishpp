@@ -68,6 +68,8 @@ lines:
 
 # Timer refresh rate (ticks — 20 = 1 second).
 # Refreshes TPS, time, online count and other non-position values.
+# NOTE: The timer only runs while at least one player has the scoreboard open.
+# It stops automatically when no boards are active — zero overhead when unused.
 update-interval: 1
 
 # Update coordinates/direction instantly when the player moves.
@@ -88,3 +90,9 @@ timezone: "default"
 # Accepts decimals for half-hour zones (e.g. 5.5 for IST, -9.5 for MART).
 # Set to 0 to disable.
 timezone-offset-hours: 0
+
+# -------------------------------------------------------
+# Admin note: use /vsb (or /vanishscoreboard) to toggle
+# the scoreboard on or off for yourself at any time.
+# Requires vanishpp.scoreboard permission.
+# -------------------------------------------------------

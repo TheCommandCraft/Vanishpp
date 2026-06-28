@@ -590,6 +590,25 @@ public class SqlStorage implements StorageProvider {
         } catch (SQLException e) { handleDatabaseError(e); }
     }
 
+    @Override
+    public void setStats(UUID uuid, VanishStats stats) {
+        String q = type.equals("postgresql")
+                ? "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,?,?)"
+                  + " ON CONFLICT (uuid) DO UPDATE SET total_ms=EXCLUDED.total_ms,"
+                  + " vanish_count=EXCLUDED.vanish_count, longest_ms=EXCLUDED.longest_ms"
+                : "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,?,?)"
+                  + " ON DUPLICATE KEY UPDATE total_ms=VALUES(total_ms),"
+                  + " vanish_count=VALUES(vanish_count), longest_ms=VALUES(longest_ms)";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(q)) {
+            ps.setString(1, uuid.toString());
+            ps.setLong(2, stats.getTotalVanishTimeMs());
+            ps.setInt(3, stats.getVanishCount());
+            ps.setLong(4, stats.getLongestSessionMs());
+            ps.executeUpdate();
+        } catch (SQLException e) { handleDatabaseError(e); }
+    }
+
     // ── Existing methods ──────────────────────────────────────────────────────
 
     @Override

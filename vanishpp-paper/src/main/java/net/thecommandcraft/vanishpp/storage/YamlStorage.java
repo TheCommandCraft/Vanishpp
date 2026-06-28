@@ -304,6 +304,15 @@ public class YamlStorage implements StorageProvider {
         save();
     }
 
+    @Override
+    public void setStats(UUID uuid, VanishStats stats) {
+        String base = "stats." + uuid + ".";
+        config.set(base + "total-ms", stats.getTotalVanishTimeMs());
+        config.set(base + "count", stats.getVanishCount());
+        config.set(base + "longest-ms", stats.getLongestSessionMs());
+        save();
+    }
+
     // ── Cleanup ───────────────────────────────────────────────────────────────
 
     @Override

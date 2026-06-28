@@ -182,28 +182,6 @@ public class PlayerListener implements Listener {
                 config.sendMigrationReport(player);
             }
 
-            // 2. ProtocolLib Warning
-            if (!plugin.hasProtocolLib() && player.isOp() && !plugin.isWarningIgnored(player)) {
-                LanguageManager lm = config.getLanguageManager();
-                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.box-top"));
-                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.header"));
-                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.line"));
-                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.sub"));
-                plugin.getMessageManager().sendMessage(player, lm.getMessage("warnings.box-bottom"));
-                player.sendMessage(
-                        Component.text("  ").append(
-                        Component.text("[ Download ProtocolLib ]", NamedTextColor.AQUA, TextDecoration.BOLD)
-                                .clickEvent(ClickEvent.openUrl("https://github.com/dmulloy2/ProtocolLib/releases/"))
-                                .hoverEvent(HoverEvent.showText(Component.text(
-                                        "Opens the latest ProtocolLib release on GitHub", NamedTextColor.GRAY)))));
-
-                Title title = Title.title(
-                        plugin.getMessageManager().parse(lm.getMessage("warnings.protocollib-missing-title"), player),
-                        plugin.getMessageManager().parse(lm.getMessage("warnings.protocollib-missing-subtitle"),
-                                player));
-                player.showTitle(title);
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
-            }
 
             // 3. Flush any queued proxy packets now that we have a carrier
             if (plugin.getProxyBridge() != null) {
@@ -286,51 +264,79 @@ public class PlayerListener implements Listener {
             if (plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
                 java.util.List<StartupChecker.Warning> warnings = plugin.getStartupWarnings();
                 if (!warnings.isEmpty()) {
-                    plugin.getMessageManager().sendMessage(player,
-                            config.getLanguageManager().getMessage("warnings.setup-header"));
+                    LanguageManager lm2 = config.getLanguageManager();
+                    boolean shownSetupHeader = false;
                     for (StartupChecker.Warning w : warnings) {
-                        player.sendMessage(Component.text(" • ", NamedTextColor.GOLD)
-                                .append(Component.text(w.message, NamedTextColor.YELLOW)));
-                        // Action buttons
-                        boolean hasButtons = false;
-                        Component buttons = Component.text("   ");
-                        if (w.configPath != null) {
-                            hasButtons = true;
-                            buttons = buttons
-                                    .append(Component.text("[Set to " + w.fixValue + "]",
-                                            NamedTextColor.GREEN, TextDecoration.BOLD)
-                                            .clickEvent(ClickEvent.runCommand(
-                                                    "/vconfig " + w.configPath + " " + w.fixValue))
-                                            .hoverEvent(HoverEvent.showText(Component.text(
-                                                    "Sets " + w.configPath + " to " + w.fixValue
-                                                    + " and saves config", NamedTextColor.GRAY))))
-                                    .append(Component.text("  "))
-                                    .append(Component.text("[Reload]", NamedTextColor.AQUA, TextDecoration.BOLD)
-                                            .clickEvent(ClickEvent.runCommand("/vreload"))
-                                            .hoverEvent(HoverEvent.showText(Component.text(
-                                                    "Reload Vanish++ config after fixing", NamedTextColor.GRAY))));
-                        }
-                        if (w.installUrl != null) {
-                            hasButtons = true;
-                            buttons = buttons
-                                    .append(Component.text("[Install Plugin]",
-                                            NamedTextColor.GREEN, TextDecoration.BOLD)
+                        if (w.featureList != null) {
+                            // Critical dependency warning (ProtocolLib): box format with dismiss support
+                            if (plugin.isWarningIgnored(player)) continue;
+                            plugin.getMessageManager().sendMessage(player, lm2.getMessage("warnings.box-top"));
+                            plugin.getMessageManager().sendMessage(player, lm2.getMessage("warnings.header"));
+                            plugin.getMessageManager().sendMessage(player, lm2.getMessage("warnings.line"));
+                            plugin.getMessageManager().sendMessage(player, lm2.getMessage("warnings.sub"));
+                            plugin.getMessageManager().sendMessage(player, lm2.getMessage("warnings.box-bottom"));
+                            player.sendMessage(
+                                    Component.text("  ")
+                                    .append(Component.text("[ Download ProtocolLib ]",
+                                            NamedTextColor.AQUA, TextDecoration.BOLD)
                                             .clickEvent(ClickEvent.openUrl(w.installUrl))
                                             .hoverEvent(HoverEvent.showText(Component.text(
-                                                    "Open download page in browser", NamedTextColor.GRAY))));
-                            if (w.featureList != null) {
-                                buttons = buttons
-                                        .append(Component.text("  "))
-                                        .append(Component.text("[Disabled Features ▶]",
-                                                NamedTextColor.YELLOW, TextDecoration.BOLD)
-                                                .hoverEvent(HoverEvent.showText(
-                                                        Component.text("Features disabled without this plugin:\n",
-                                                                NamedTextColor.GOLD, TextDecoration.BOLD)
-                                                        .append(Component.text(w.featureList, NamedTextColor.WHITE)))));
+                                                    "Opens the latest ProtocolLib release on GitHub",
+                                                    NamedTextColor.GRAY))))
+                                    .append(Component.text("  "))
+                                    .append(Component.text("[Disabled Features ▶]",
+                                            NamedTextColor.YELLOW, TextDecoration.BOLD)
+                                            .hoverEvent(HoverEvent.showText(
+                                                    Component.text("Features disabled without this plugin:\n",
+                                                            NamedTextColor.GOLD, TextDecoration.BOLD)
+                                                    .append(Component.text(w.featureList, NamedTextColor.WHITE))))));
+                            Title title = Title.title(
+                                    plugin.getMessageManager().parse(
+                                            lm2.getMessage("warnings.protocollib-missing-title"), player),
+                                    plugin.getMessageManager().parse(
+                                            lm2.getMessage("warnings.protocollib-missing-subtitle"), player));
+                            player.showTitle(title);
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2.0f, 0.5f);
+                        } else {
+                            // Config/other warnings: bullet-point format under setup-header
+                            if (!shownSetupHeader) {
+                                plugin.getMessageManager().sendMessage(player,
+                                        lm2.getMessage("warnings.setup-header"));
+                                shownSetupHeader = true;
                             }
-                        }
-                        if (hasButtons) {
-                            player.sendMessage(buttons);
+                            player.sendMessage(Component.text(" • ", NamedTextColor.GOLD)
+                                    .append(Component.text(w.message, NamedTextColor.YELLOW)));
+                            boolean hasButtons = false;
+                            Component buttons = Component.text("   ");
+                            if (w.configPath != null) {
+                                hasButtons = true;
+                                buttons = buttons
+                                        .append(Component.text("[Set to " + w.fixValue + "]",
+                                                NamedTextColor.GREEN, TextDecoration.BOLD)
+                                                .clickEvent(ClickEvent.runCommand(
+                                                        "/vconfig " + w.configPath + " " + w.fixValue))
+                                                .hoverEvent(HoverEvent.showText(Component.text(
+                                                        "Sets " + w.configPath + " to " + w.fixValue
+                                                        + " and saves config", NamedTextColor.GRAY))))
+                                        .append(Component.text("  "))
+                                        .append(Component.text("[Reload]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                                                .clickEvent(ClickEvent.runCommand("/vreload"))
+                                                .hoverEvent(HoverEvent.showText(Component.text(
+                                                        "Reload Vanish++ config after fixing",
+                                                        NamedTextColor.GRAY))));
+                            }
+                            if (w.installUrl != null) {
+                                hasButtons = true;
+                                buttons = buttons
+                                        .append(Component.text("[Install Plugin]",
+                                                NamedTextColor.GREEN, TextDecoration.BOLD)
+                                                .clickEvent(ClickEvent.openUrl(w.installUrl))
+                                                .hoverEvent(HoverEvent.showText(Component.text(
+                                                        "Open download page in browser", NamedTextColor.GRAY))));
+                            }
+                            if (hasButtons) {
+                                player.sendMessage(buttons);
+                            }
                         }
                     }
                 }
@@ -1079,10 +1085,10 @@ public class PlayerListener implements Listener {
         }
 
         // ── InvSee++ ─────────────────────────────────────────────────────────
-        if (Bukkit.getPluginManager().isPluginEnabled("InvSee++")) {
+        if (Bukkit.getPluginManager().isPluginEnabled("InvSeePlusPlus")) {
             org.bukkit.permissions.PermissionAttachment att = viewer.addAttachment(plugin);
-            att.setPermission("invsee.inventory.see", true);
-            att.setPermission("invsee.inventory.edit", canModify);
+            att.setPermission("invseeplusplus.invsee.view", true);
+            att.setPermission("invseeplusplus.invsee.edit", canModify);
             invseeAttachments.put(viewer.getUniqueId(), att);
             viewer.performCommand("invsee " + target.getName());
             return;

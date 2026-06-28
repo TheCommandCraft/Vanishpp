@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.8] - 2026-06-15
+
+### Changed
+- **Scoreboard config (`scoreboards.yml`):** Added comments clarifying that the update timer only runs while at least one player has the scoreboard open (zero overhead otherwise), and an admin note at the bottom on how to toggle it with `/vsb`.
+- **ProtocolLib Missing Warning:** Merged the two separate ProtocolLib-missing warnings (duplicate on join for ops) into a single notice that uses the styled red box format and includes both the `[ Download ProtocolLib ]` and `[Disabled Features ▶]` buttons. The warning respects `/vignore` dismiss state as before.
+
+### Fixed
+- **InvSee++ Integration Broken:** The plugin name lookup used `"InvSee++"` but InvSee++ registers itself as `"InvSeePlusPlus"` — the soft-dependency never resolved and the integration check always fell through to the built-in fallback. Also corrected the permission nodes granted during a session (`invseeplusplus.invsee.view` / `invseeplusplus.invsee.edit` instead of the incorrect `invsee.inventory.see` / `invsee.inventory.edit`). Fixes GitHub issue #15.
+
 ## [1.1.8] - 2026-06-14
 
 ### Fixed
