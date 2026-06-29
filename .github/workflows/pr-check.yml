@@ -22,12 +22,12 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      # 手动配置 Maven 依赖缓存，使用 PR 源分支名作为 key 的一部分，实现严格隔离，预防缓存攻击
+      # Manual Maven dependency cache with PR source branch as part of key for strict isolation
       - name: Cache Maven dependencies
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          # key 包含：runner操作系统、PR源分支名、pom.xml哈希
+          # Key components: runner OS, PR source branch, pom.xml hash
           key: ${{ runner.os }}-m2-${{ github.event.pull_request.head.ref }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-m2-${{ github.event.pull_request.head.ref }}-
@@ -39,5 +39,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: target/surefire-reports/
+          path: "**/target/surefire-reports/"
           retention-days: 7
