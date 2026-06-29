@@ -1,0 +1,42 @@
+name: Tag Prerelease
+
+on:
+  workflow_run:
+    workflows: ["Build and Upload Artifacts"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+
+    steps:
+      - name: Download all artifacts from build workflow
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ github.event.workflow_run.head_sha }}
+          path: downloaded-artifacts
+
+      - name: List downloaded files (for debugging)
+        run: ls -R downloaded-artifacts
+
+      - name: Create GitHub Pre-release (filter out sources/javadoc)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.workflow_run.head_branch }}
+          name: "Pre-release ${{ github.event.workflow_run.head_branch }}"
+          draft: false
+          prerelease: true
+          # Include all JARs, exclude sources and javadoc
+          files: |
+            downloaded-artifacts/**/*.jar
+            !downloaded-artifacts/**/*-sources.jar
+            !downloaded-artifacts/**/*-javadoc.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
