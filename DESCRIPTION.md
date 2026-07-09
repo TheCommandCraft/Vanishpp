@@ -26,7 +26,7 @@ It works perfectly out of the box with zero configuration required, but offers g
 Most plugins just hide you visually. **Vanish++ removes you physically.**
 
 *   **Titan God Mode:** While vanished, you are strictly invincible. You take no damage, are immune to all potion effects, and cannot burn. You are a spectator in survival mode.
-*   **Smart Mob AI (True Sight):** Mobs completely ignore vanished players. Targeting is cancelled via `EntityTargetEvent` before the mob ever commits to an attack path. Mobs that had already locked on before you vanished are force-detargeted immediately.
+*   **Smart Mob AI (True Sight):** Mobs completely ignore vanished players — no attacking, no pathing, and no head-turning. Combat targeting is cancelled via `EntityTargetEvent` before the mob ever commits to an attack path (mobs that had already locked on before you vanished are force-detargeted immediately), while a separate Paper Mob Goal replaces the vanilla look-at-player behavior so mobs don't visually stare at "empty air" either. (Paper/Purpur/Folia; requires Paper's Mob Goal API.)
 *   **Projectile Pass-Through:** We don't use "teleport hacks." Using native Paper events, arrows, tridents, and snowballs fly **physically through** your body. It is impossible to hit a vanished player.
 *   **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you. You are a ghost.
 *   **No Physical Triggers:** You can walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration or block update.
@@ -106,7 +106,7 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **LuckPerms Context Integration:** Registers a `vanished` context node in LuckPerms so permissions can be conditionally granted or revoked while a player is vanished.
 *   **WorldGuard Region Flags:** Two new WorldGuard flags: `vanishpp-force-vanish` (auto-vanishes players entering the region) and `vanishpp-deny-vanish` (blocks toggling vanish inside the region).
 *   **Webhook Support:** Configurable HTTP webhooks fire on vanish/unvanish events for external integrations — Discord bots, dashboards, audit systems, anything.
-*   **Shift-Right-Click Invsee:** Shift-right-clicking a player while vanished opens their inventory via OpenInv or InvSee++ if installed, falling back to the built-in viewer. Permissions are granted for the duration and revoked on close.
+*   **Shift-Right-Click Invsee:** Shift-right-clicking a player while vanished opens their inventory via OpenInv or InvSee++ if installed, falling back to the built-in viewer. Permissions are granted for the duration and revoked on close. Can be disabled server-wide via `invisibility-features.invsee-shift-click: false` in `config.yml`.
 
 </details>
 

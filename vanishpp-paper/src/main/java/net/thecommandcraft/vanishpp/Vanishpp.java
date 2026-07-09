@@ -67,6 +67,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private boolean hasPaperApi = false;
     private ProtocolLibManager protocolLibManager;
     private List<StartupChecker.Warning> startupWarnings = new ArrayList<>();
+    public volatile boolean downgradeDetected = false;
+    public String downgradeFromVersion = null;
     /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
      *  Key format: "x,y,z" */
     public final Set<String> silentlyOpenedBlocks = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
@@ -246,6 +248,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         registerCommand("vchangelog", new VanishChangelogCommand(this));
         registerCommand("vzone", new VanishZoneCommand(this));
         registerCommand("vincognito", new IncognitoCommand(this));
+        registerCommand("vdowngrade", new net.thecommandcraft.vanishpp.commands.DowngradeCommand(this));
 
         // Scoreboard
         saveResource("scoreboards.yml", false);
@@ -260,7 +263,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new VanishWandListener(this), this);
         getServer().getPluginManager().registerEvents(new IncognitoListener(this), this);
         getServer().getPluginManager().registerEvents(new VanishZoneListener(this), this);
-        new net.thecommandcraft.vanishpp.listeners.MobAiManager(this).register();
+        net.thecommandcraft.vanishpp.listeners.MobAiManager mobAiManager =
+                new net.thecommandcraft.vanishpp.listeners.MobAiManager(this);
+        getServer().getPluginManager().registerEvents(mobAiManager, this);
+        mobAiManager.register();
         if (worldGuardHook != null) {
             getServer().getPluginManager().registerEvents(new WorldGuardVanishListener(this), this);
         }
@@ -461,6 +467,23 @@ public class Vanishpp extends JavaPlugin implements Listener {
             } catch (Exception ignored) {}
         }
 
+        if (newProvider instanceof SqlStorage sql && sql.writeSuspended) {
+            downgradeDetected = true;
+            downgradeFromVersion = sql.dbVersion;
+            getLogger().severe("╔═══════════════════════════════════════════════════╗");
+            getLogger().severe("║         VANISH++ — DOWNGRADE DETECTED             ║");
+            getLogger().severe("║                                                   ║");
+            getLogger().severe("║  DB was last written by Vanish++ " + sql.dbVersion + "         ║");
+            getLogger().severe("║  You are running Vanish++ " + getDescription().getVersion() + "              ║");
+            getLogger().severe("║                                                   ║");
+            getLogger().severe("║  All DB WRITES are SUSPENDED to protect data.     ║");
+            getLogger().severe("║  Reads still work — vanish state loads on join.  ║");
+            getLogger().severe("║                                                   ║");
+            getLogger().severe("║  In-game: /vdowngrade info|allow|reset            ║");
+            getLogger().severe("╚═══════════════════════════════════════════════════╝");
+            startDowngradeAlertTask();
+        }
+
         // Migrate data from old storage if the new storage is empty and another source has data
         migrateIfNeeded(newProvider, type);
 
@@ -567,7 +590,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
      */
     public void reconcileVanishState(Player player, boolean dbVanished) {
         boolean memVanished = vanishedPlayers.contains(player.getUniqueId());
-        if (dbVanished == memVanished) return;
+        if (dbVanished == memVanished) {
+            // Even when state looks consistent, defensively clear any stale invisible flag
+            // left by a crash, downgrade, or another plugin so the player is actually visible.
+            if (!dbVanished) forceEnsureVisible(player);
+            return;
+        }
 
         if (dbVanished) {
             // Vanished on another server — apply vanish on this server
@@ -586,6 +614,63 @@ public class Vanishpp extends JavaPlugin implements Listener {
             // Unvanished on another server — clear stale local state
             getLogger().fine("Cross-server unvanish detected for " + player.getName() + " on join — clearing locally");
             removeVanishEffects(player);
+        }
+    }
+
+    private void startDowngradeAlertTask() {
+        vanishScheduler.runTimerGlobal(() -> {
+            if (!downgradeDetected) return;
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.isOp() || p.hasPermission("vanishpp.admin")) {
+                    sendDowngradeWarning(p);
+                }
+            }
+        }, 1L, 600L);
+    }
+
+    public void sendDowngradeWarning(Player player) {
+        player.sendMessage(net.kyori.adventure.text.Component.text(
+                "┌─────────────────────────────────────────────┐", net.kyori.adventure.text.format.NamedTextColor.RED));
+        player.sendMessage(net.kyori.adventure.text.Component.text(
+                "│  ⚠  VANISH++ DB DOWNGRADE DETECTED           │", net.kyori.adventure.text.format.NamedTextColor.RED,
+                net.kyori.adventure.text.format.TextDecoration.BOLD));
+        player.sendMessage(net.kyori.adventure.text.Component.text(
+                "│  DB version: ", net.kyori.adventure.text.format.NamedTextColor.RED)
+                .append(net.kyori.adventure.text.Component.text(downgradeFromVersion,
+                        net.kyori.adventure.text.format.NamedTextColor.YELLOW)));
+        player.sendMessage(net.kyori.adventure.text.Component.text(
+                "│  Running:    ", net.kyori.adventure.text.format.NamedTextColor.RED)
+                .append(net.kyori.adventure.text.Component.text(getDescription().getVersion(),
+                        net.kyori.adventure.text.format.NamedTextColor.YELLOW)));
+        player.sendMessage(net.kyori.adventure.text.Component.text(
+                "│  All DB writes SUSPENDED — data protected.   │", net.kyori.adventure.text.format.NamedTextColor.GOLD));
+        player.sendMessage(net.kyori.adventure.text.Component.text(
+                "│  Run /vdowngrade info|allow|reset             │", net.kyori.adventure.text.format.NamedTextColor.WHITE));
+        player.sendMessage(net.kyori.adventure.text.Component.text(
+                "└─────────────────────────────────────────────┘", net.kyori.adventure.text.format.NamedTextColor.RED));
+        player.showTitle(net.kyori.adventure.title.Title.title(
+                net.kyori.adventure.text.Component.text("⚠ DB DOWNGRADE",
+                        net.kyori.adventure.text.format.NamedTextColor.RED,
+                        net.kyori.adventure.text.format.TextDecoration.BOLD),
+                net.kyori.adventure.text.Component.text("/vdowngrade info|allow|reset",
+                        net.kyori.adventure.text.format.NamedTextColor.YELLOW)));
+    }
+
+    public void clearDowngradeState() {
+        downgradeDetected = false;
+        downgradeFromVersion = null;
+    }
+
+    private void forceEnsureVisible(Player player) {
+        player.setInvisible(false);
+        try {
+            player.setVisibleByDefault(true);
+        } catch (Throwable ignored) {
+            // Best-effort: older API versions lack this method, and test mocks (MockBukkit) may
+            // throw UnsupportedOperationException-style errors instead of NoSuchMethodError.
+        }
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (!online.canSee(player)) online.showPlayer(this, player);
         }
     }
 
@@ -963,8 +1048,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.setInvisible(true);
 
         // DO NOT change gamemode — player should remain in their original mode
-        // Mob look-at prevention is handled by EntityTargetEvent cancellation
-        // and periodic mob target sweep in MobAiManager (runs every 5 ticks)
+        // Combat targeting is prevented by EntityTargetEvent cancellation (PlayerListener).
+        // Visual head/body look-at is a separate AI goal, handled by VanishLookGoal
+        // (injected via MobAiManager, replacing the vanilla LOOK_AT_PLAYER goal).
 
         player.setCollidable(false);
 

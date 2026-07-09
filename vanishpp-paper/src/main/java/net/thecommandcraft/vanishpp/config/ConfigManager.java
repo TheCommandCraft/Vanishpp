@@ -45,7 +45,7 @@ public class ConfigManager {
     // Invisibility Features
     public boolean enableNightVision, enableFly, disableMobTarget, disableHunger, silentChests, ignoreProjectiles;
     public boolean preventRaid, preventSculk, preventTrample, hideTabComplete, preventSleeping, preventEntityInteract;
-    public boolean preventAccidentalChat, godMode, preventPotions, disableFlyOnUnvanish;
+    public boolean preventAccidentalChat, godMode, preventPotions, disableFlyOnUnvanish, invseeShiftClick;
 
     // Appearance extras
     public boolean staffGlowEnabled;
@@ -223,6 +223,7 @@ public class ConfigManager {
         preventAccidentalChat = config.getBoolean("invisibility-features.prevent-accidental-chat", true);
         godMode = config.getBoolean("invisibility-features.god-mode", true);
         preventPotions = config.getBoolean("invisibility-features.prevent-potion-effects", false);
+        invseeShiftClick = config.getBoolean("invisibility-features.invsee-shift-click", true);
         voiceChatEnabled = config.getBoolean("hooks.simple-voice-chat.enabled", true);
         voiceChatIsolate = config.getBoolean("hooks.simple-voice-chat.isolate-vanished-players", true);
         simulateEssentialsMessages = config.getBoolean("hooks.essentials.simulate-join-leave", false);
@@ -350,6 +351,7 @@ public class ConfigManager {
         preventAccidentalChat= s.preventAccidentalChat;
         godMode              = s.godMode;
         preventPotions       = s.preventPotions;
+        invseeShiftClick     = s.invseeShiftClick;
 
         // Gamemodes / Flight
         vanishGamemodesEnabled = s.vanishGamemodesEnabled;

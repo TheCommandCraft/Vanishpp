@@ -25,6 +25,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
+import com.destroystokyo.paper.entity.ai.GoalType;
+import net.thecommandcraft.vanishpp.listeners.VanishLookGoal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -311,6 +313,49 @@ class EventListenerTest {
                 EntityTargetEvent.TargetReason.FORGOT_TARGET);
         assertDoesNotThrow(() -> server.getPluginManager().callEvent(event),
                 "Null target in mob targeting event must not throw");
+    }
+
+    @Test
+    void mobTargeting_cancelled_doesNotClearMobTargetField() {
+        // Regression test: onMobTarget() must ONLY cancel the event, never call
+        // mob.setTarget(null)/stopPathfinding() itself. On a real server that call
+        // fires a secondary FORGOT_TARGET EntityTargetEvent, resetting
+        // NearestAttackableTargetGoal cooldowns and starving nearby non-vanished
+        // players of legitimate attacks. This exact regression has been introduced
+        // and reverted at least three times (commits c0c4722, 9d9d2b4, 7fdcaef,
+        // reintroduced by 6c27d16). If this test starts failing, someone added
+        // mob.setTarget(null) back inside onMobTarget() - remove it again instead.
+        plugin.applyVanishEffects(player);
+
+        Mob mob = (Mob) world.spawnEntity(loc, EntityType.ZOMBIE);
+        PlayerMock otherTarget = server.addPlayer();
+        mob.setTarget(otherTarget);
+
+        EntityTargetLivingEntityEvent event = new EntityTargetLivingEntityEvent(mob, player,
+                EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
+        server.getPluginManager().callEvent(event);
+
+        assertTrue(event.isCancelled(), "Mob targeting a vanished player must be cancelled");
+        assertEquals(otherTarget, mob.getTarget(),
+                "onMobTarget() must not touch the mob's existing target field - only cancel the event");
+    }
+
+    @Test
+    void vanishLookGoal_onlyClaimsLookGoalType() {
+        // Regression guard: VanishLookGoal must claim ONLY GoalType.LOOK. Vanilla attack goals
+        // (e.g. ZombieAttackGoal) also require GoalType.LOOK - if this goal ever also claimed
+        // MOVE/JUMP/TARGET, or was registered at a priority ahead of attack goals, it would
+        // preempt combat AI for every mob on the server, not just vanished-player look-at.
+        // This exact class of bug caused four reverted fix attempts (see CHANGELOG v1.1.4-v1.1.8).
+        VanishLookGoal goal = new VanishLookGoal(plugin, null);
+        assertEquals(java.util.EnumSet.of(GoalType.LOOK), goal.getTypes(),
+                "VanishLookGoal must claim exactly GoalType.LOOK and nothing else");
+
+        // Vanilla attack goals sit at priority 2-4; this must stay well above that.
+        assertTrue(net.thecommandcraft.vanishpp.listeners.MobAiManager.LOOK_GOAL_PRIORITY >= 8,
+                "LOOK_GOAL_PRIORITY must stay at/above vanilla LOOK_AT_PLAYER's own priority (8-10) "
+                        + "to never preempt attack goals - lowering it is the exact mistake that broke "
+                        + "combat in four past regressions (see CHANGELOG v1.1.4-v1.1.8)");
     }
 
     // -------------------------------------------------------------------------

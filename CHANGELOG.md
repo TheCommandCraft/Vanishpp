@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.8] - 2026-07-09
+
+### Fixed
+- **Mobs Still Looking At Vanished Players (for real this time):** Cancelling `EntityTargetEvent` only prevents mobs from *attacking* a vanished player — it never touches the vanilla `LookAtPlayerGoal`, which turns a mob's head/body toward nearby players independently of the target field. Previous attempts (v1.1.4-1.1.8) to fix this via a custom Paper `MobGoals` injection were all reverted because of two bugs: (1) the replacement goal was registered at a priority that collided with vanilla attack goals — which also require the `LOOK` flag — blocking mobs from attacking anyone; (2) the replacement goal's `shouldActivate()` conditionally returned `false` when only vanished players were nearby, "leaking" the `LOOK` slot back to the vanilla goal it was supposed to replace. This rewrite (`VanishLookGoal`, injected by `MobAiManager`) fixes both: it's registered at a fixed low-precedence priority (`10`, below all vanilla attack goals) so it can never block combat, and its activation condition mirrors vanilla exactly (any player in range, vanished or not) — only the actual look target excludes vanished players, so the goal slot is never freed. Injection now covers newly spawned mobs, mobs streamed in on chunk load, and mobs already loaded before the plugin started, closing the "partial injection" gap that caused past leaks. **Known limitation:** Brain-based mobs (Villagers, Piglins, Wardens, etc.) use a separate AI system (Sensors/Memory) not covered by `MobGoals` and are not addressed by this fix. Requires Paper/Purpur/Folia (Spigot/Bukkit only get the combat-target fix, as before).
+- **Redundant mob target clear in `EntityTargetEvent` handler:** Removed a `mob.setTarget(null)`/`stopPathfinding()` call inside the cancelled event handler that had been fixed and reverted twice before (it fires a secondary `FORGOT_TARGET` event, putting `NearestAttackableTargetGoal` on cooldown and starving nearby non-vanished players of legitimate targeting). Cancelling the event alone is sufficient.
+- **Regression guards added:** Both historical mistakes above (the redundant `setTarget(null)` call, and a `GoalType`/priority collision with attack goals) have each been reintroduced multiple times across releases. Added two permanent unit tests (`EventListenerTest`) that fail loudly if either regresses again: `mobTargeting_cancelled_doesNotClearMobTargetField` and `vanishLookGoal_onlyClaimsLookGoalType` (also asserts `MobAiManager.LOOK_GOAL_PRIORITY` stays at/above vanilla's own priority).
+
+## [1.1.8] - 2026-07-08
+
+### Added
+- **DB Downgrade Guard:** When a downgraded plugin version connects to a database previously written by a newer version, all DB writes are suspended immediately to prevent data corruption. Admins are alerted in-game every 30 seconds and on join (title + styled chat box). New command `/vdowngrade info` shows exactly what data is at stake (row counts per table); `/vdowngrade allow` lifts the write-suspend (risky); `/vdowngrade reset [confirm]` wipes all Vanish++ data and starts fresh. A `vpp_plugin_version` table tracks the highest version that has ever written to the DB.
+- **InvSee config toggle:** New `invisibility-features.invsee-shift-click` option (default `true`) lets admins disable the shift-right-click inventory inspection feature entirely. Addresses GitHub issue #20.
+- **Self-healing visibility on join:** Players who are not vanished now have their visibility forcibly reset on join (`setInvisible(false)`, `setVisibleByDefault(true)`, `showPlayer` for any observer that can't see them). This self-corrects stale invisible state caused by server crashes, plugin downgrades, or other unexpected shutdowns.
+
 ## [1.1.8] - 2026-06-15
 
 ### Changed

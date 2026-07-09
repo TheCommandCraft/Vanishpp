@@ -62,6 +62,7 @@ public class ProxyConfigSnapshot {
     public boolean preventAccidentalChat = true;
     public boolean godMode = true;
     public boolean preventPotions = false;
+    public boolean invseeShiftClick = true;
     public boolean vanishGamemodesEnabled = true;
     public boolean defaultSpectatorOnVanish = true;
 
@@ -212,6 +213,7 @@ public class ProxyConfigSnapshot {
             case "invisibility-features.prevent-accidental-chat"    -> s.preventAccidentalChat = bool(val);
             case "invisibility-features.god-mode"                   -> s.godMode = bool(val);
             case "invisibility-features.prevent-potion-effects"     -> s.preventPotions = bool(val);
+            case "invisibility-features.invsee-shift-click"         -> s.invseeShiftClick = bool(val);
             // Vanish Gamemodes
             case "vanish-gamemodes.enabled"                         -> s.vanishGamemodesEnabled = bool(val);
             case "vanish-gamemodes.default-spectator"                -> s.defaultSpectatorOnVanish = bool(val);

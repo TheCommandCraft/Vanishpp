@@ -120,6 +120,9 @@ invisibility-features:
   # If true, players must confirm chat messages to avoid accidental voice leaks.
   prevent-accidental-chat: true
 
+  # Allow staff with vanishpp.invsee to shift-right-click a player to view their inventory.
+  invsee-shift-click: true
+
 # --- [ VANISH EFFECTS ] ---
 # Advanced packet-level hiding techniques.
 vanish-effects:

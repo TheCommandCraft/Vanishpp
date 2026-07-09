@@ -19,7 +19,6 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
-import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -340,6 +339,11 @@ public class PlayerListener implements Listener {
                         }
                     }
                 }
+            }
+
+            // 7. Downgrade guard alert (non-dismissable)
+            if (plugin.downgradeDetected && (player.isOp() || player.hasPermission("vanishpp.admin"))) {
+                plugin.sendDowngradeWarning(player);
             }
         }, 5L);
     }
@@ -672,16 +676,12 @@ public class PlayerListener implements Listener {
     public void onMobTarget(EntityTargetEvent event) {
         if (event.getTarget() instanceof Player p && plugin.isVanished(p)) {
             if (!rules.getRule(p, RuleManager.MOB_TARGETING)) {
-                // Always cancel targeting for vanished players with mob_targeting rule OFF
+                // Cancelling alone is sufficient to prevent the goal from acquiring the target.
+                // Do NOT also call mob.setTarget(null)/stopPathfinding() here - doing so fires a
+                // secondary FORGOT_TARGET EntityTargetEvent, which puts NearestAttackableTargetGoal
+                // on cooldown and starves nearby non-vanished players of legitimate targeting.
+                // (Regressed twice before by re-adding this exact call; see commits c0c4722/7fdcaef.)
                 event.setCancelled(true);
-
-                // Force clear the mob's target immediately to prevent residual tracking
-                if (event.getEntity() instanceof Mob mob) {
-                    try {
-                        mob.setTarget(null);
-                        mob.getPathfinder().stopPathfinding();
-                    } catch (Throwable ignored) {}
-                }
             }
         }
     }
@@ -1069,6 +1069,7 @@ public class PlayerListener implements Listener {
         Player viewer = event.getPlayer();
         if (!viewer.isSneaking()) return;
         if (!(event.getRightClicked() instanceof Player target)) return;
+        if (!config.invseeShiftClick) return;
         if (!viewer.hasPermission("vanishpp.invsee")) return;
 
         event.setCancelled(true);

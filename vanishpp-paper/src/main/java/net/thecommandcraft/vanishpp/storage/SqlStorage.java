@@ -21,6 +21,9 @@ public class SqlStorage implements StorageProvider {
     private volatile long lastNotificationTime = 0;
     private static final long NOTIFICATION_COOLDOWN = 300000; // 5 minutes between notifications
 
+    public volatile boolean writeSuspended = false;
+    public String dbVersion = null;
+
     public SqlStorage(Vanishpp plugin, String type) {
         this.plugin = plugin;
         this.type = type.toLowerCase();
@@ -70,6 +73,7 @@ public class SqlStorage implements StorageProvider {
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_levels (uuid VARCHAR(36) PRIMARY KEY, level INT)");
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_acknowledgements (uuid VARCHAR(36), notification_id VARCHAR(128), PRIMARY KEY(uuid, notification_id))");
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_schema_version (version INT PRIMARY KEY)");
+                st.execute("CREATE TABLE IF NOT EXISTS vpp_plugin_version (id INT PRIMARY KEY, version VARCHAR(32) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
             }
             // Seed schema version only if table is empty
             try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM vpp_schema_version");
@@ -82,7 +86,101 @@ public class SqlStorage implements StorageProvider {
                 }
             }
             runSchemaMigrations(conn);
+            checkPluginVersionStamp(conn);
         }
+    }
+
+    private void checkPluginVersionStamp(Connection conn) throws SQLException {
+        String current = plugin.getDescription().getVersion();
+        try (PreparedStatement ps = conn.prepareStatement("SELECT version FROM vpp_plugin_version WHERE id = 1");
+             ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+                // Fresh install or first run after upgrade — write the stamp
+                String ins = type.equals("postgresql")
+                        ? "INSERT INTO vpp_plugin_version (id, version) VALUES (1, ?) ON CONFLICT (id) DO NOTHING"
+                        : "INSERT IGNORE INTO vpp_plugin_version (id, version) VALUES (1, ?)";
+                try (PreparedStatement ip = conn.prepareStatement(ins)) {
+                    ip.setString(1, current);
+                    ip.executeUpdate();
+                }
+                return;
+            }
+            String stored = rs.getString("version");
+            if (compareVersions(stored, current) > 0) {
+                // DB was written by a newer version — suspend writes
+                writeSuspended = true;
+                dbVersion = stored;
+            } else {
+                // Same or older — update stamp to current (keep highest ever seen)
+                try (PreparedStatement up = conn.prepareStatement(
+                        "UPDATE vpp_plugin_version SET version = ? WHERE id = 1")) {
+                    up.setString(1, current);
+                    up.executeUpdate();
+                }
+            }
+        }
+    }
+
+    /** Compares two semantic version strings (e.g. "1.1.8-beta" vs "1.2.0"). Returns positive if a > b. */
+    static int compareVersions(String a, String b) {
+        int[] pa = parseSemver(a), pb = parseSemver(b);
+        for (int i = 0; i < 3; i++) {
+            int diff = pa[i] - pb[i];
+            if (diff != 0) return diff;
+        }
+        return 0;
+    }
+
+    private static int[] parseSemver(String v) {
+        String clean = v.contains("-") ? v.substring(0, v.indexOf('-')) : v;
+        String[] parts = clean.split("\\.", -1);
+        int[] result = new int[3];
+        for (int i = 0; i < 3 && i < parts.length; i++) {
+            try { result[i] = Integer.parseInt(parts[i]); } catch (NumberFormatException ignored) {}
+        }
+        return result;
+    }
+
+    /** Returns row counts for each vpp_* table — used by the downgrade guard command. */
+    public Map<String, Long> getDataSummary() {
+        Map<String, Long> summary = new LinkedHashMap<>();
+        String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels",
+                           "vpp_rule_presets", "vpp_history", "vpp_stats"};
+        try (Connection conn = dataSource.getConnection()) {
+            for (String table : tables) {
+                try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM " + table);
+                     ResultSet rs = ps.executeQuery()) {
+                    summary.put(table, rs.next() ? rs.getLong(1) : 0L);
+                } catch (SQLException e) {
+                    summary.put(table, -1L);
+                }
+            }
+        } catch (SQLException e) {
+            handleDatabaseError(e);
+        }
+        return summary;
+    }
+
+    /** Wipes all player data and resets the version stamp. Lifts write-suspend. */
+    public void resetDatabase() {
+        String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements",
+                           "vpp_rule_presets", "vpp_preferences", "vpp_history", "vpp_stats"};
+        try (Connection conn = dataSource.getConnection();
+             Statement st = conn.createStatement()) {
+            for (String table : tables) {
+                st.execute("DELETE FROM " + table);
+            }
+            try (PreparedStatement up = conn.prepareStatement(
+                    "UPDATE vpp_plugin_version SET version = ? WHERE id = 1")) {
+                up.setString(1, plugin.getDescription().getVersion());
+                up.executeUpdate();
+            }
+        } catch (SQLException e) {
+            handleDatabaseError(e);
+            return;
+        }
+        writeSuspended = false;
+        dbVersion = null;
     }
 
     private static final int CURRENT_SCHEMA_VERSION = 3;
@@ -230,6 +328,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setVanished(UUID uuid, boolean vanished) {
+        if (writeSuspended) return;
         String query = vanished ? "INSERT IGNORE INTO vpp_vanished (uuid) VALUES (?)"
                 : "DELETE FROM vpp_vanished WHERE uuid = ?";
         if (type.equals("postgresql") && vanished) {
@@ -284,6 +383,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setRule(UUID uuid, String rule, Object value) {
+        if (writeSuspended) return;
         String query = "REPLACE INTO vpp_rules (uuid, rule_key, rule_value) VALUES (?, ?, ?)";
         if (type.equals("postgresql")) {
             query = "INSERT INTO vpp_rules (uuid, rule_key, rule_value) VALUES (?, ?, ?) ON CONFLICT (uuid, rule_key) DO UPDATE SET rule_value = EXCLUDED.rule_value";
@@ -341,6 +441,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void addAcknowledgement(UUID uuid, String notificationId) {
+        if (writeSuspended) return;
         String query = type.equals("postgresql")
                 ? "INSERT INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?) ON CONFLICT (uuid, notification_id) DO NOTHING"
                 : "INSERT IGNORE INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?)";
@@ -371,6 +472,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setVanishLevel(UUID uuid, int level) {
+        if (writeSuspended) return;
         String query = "REPLACE INTO vpp_levels (uuid, level) VALUES (?, ?)";
         if (type.equals("postgresql")) {
             query = "INSERT INTO vpp_levels (uuid, level) VALUES (?, ?) ON CONFLICT (uuid) DO UPDATE SET level = EXCLUDED.level";
@@ -390,6 +492,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void saveRulePreset(UUID uuid, String presetName, Map<String, Boolean> rules) {
+        if (writeSuspended) return;
         // Delete existing rows for this preset first, then re-insert
         String del = "DELETE FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?";
         String ins = type.equals("postgresql")
@@ -442,6 +545,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void deleteRulePreset(UUID uuid, String presetName) {
+        if (writeSuspended) return;
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "DELETE FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?")) {
@@ -475,6 +579,7 @@ public class SqlStorage implements StorageProvider {
     }
 
     private void setPref(UUID uuid, String key, String value) {
+        if (writeSuspended) return;
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?) ON CONFLICT (uuid,pref_key) DO UPDATE SET pref_value=EXCLUDED.pref_value"
                 : "REPLACE INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?)";
@@ -489,6 +594,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void addHistoryEntry(VanishHistoryEntry entry) {
+        if (writeSuspended) return;
         String q = "INSERT INTO vpp_history (uuid,player_name,action,timestamp,server,reason,duration_ms)"
                 + " VALUES (?,?,?,?,?,?,?)";
         try (Connection conn = dataSource.getConnection();
@@ -571,7 +677,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void recordVanishSession(UUID uuid, long durationMs) {
-        if (durationMs <= 0) return;
+        if (writeSuspended || durationMs <= 0) return;
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,1,?)"
                   + " ON CONFLICT (uuid) DO UPDATE SET total_ms=vpp_stats.total_ms+EXCLUDED.total_ms,"
@@ -592,6 +698,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setStats(UUID uuid, VanishStats stats) {
+        if (writeSuspended) return;
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,?,?)"
                   + " ON CONFLICT (uuid) DO UPDATE SET total_ms=EXCLUDED.total_ms,"
@@ -648,6 +755,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void removePlayerData(UUID uuid) {
+        if (writeSuspended) return;
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {

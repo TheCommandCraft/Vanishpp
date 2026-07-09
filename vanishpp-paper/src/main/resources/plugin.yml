@@ -94,6 +94,10 @@ commands:
     usage: /vincognito [player] [fakename|off]
     aliases: [ vincog ]
     permission: vanishpp.incognito
+  vdowngrade:
+    description: Manage a detected DB version downgrade (view data at stake, allow writes, or reset).
+    usage: /vdowngrade <info|allow|reset [confirm]>
+    permission: vanishpp.admin
 
 permissions:
   vanishpp.*:
