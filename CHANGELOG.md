@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.8] - 2026-07-26
+
+### Fixed
+- **Client crash "Player is not on any team" on unvanish:** Non-staff clients never receive the packet that adds a vanished player to the internal `Vanishpp_Vanished` scoreboard team (it's scrubbed), but once the player unvanished they *did* receive the "Remove Members" packet for it — telling the client to remove an entry it never knew it had, crashing the client. `ProtocolLibManager` now unconditionally cancels both Add- and Remove-Members packets for that team for non-staff observers, regardless of the vanished player's current state at packet-send time.
+- **Mob target clearing violated Folia's region-threading model:** Both the one-shot clear-on-vanish pass (`applyVanishEffects`) and the every-tick combat safety net (`MobAiManager.sweepMobTargets`) called `Mob#setTarget`/`getPathfinder().stopPathfinding()` directly from the caller's thread instead of the mob's owning region thread, and `sweepMobTargets` called `Player#getNearbyEntities` the same way. On Folia this either throws or silently corrupts state depending on the entity's region. Both call sites now dispatch through `VanishScheduler#runEntity`, with mob mutations dispatched individually per-mob (a mob near a region boundary can be owned by a different region than the player that triggered the sweep). Thanks to @quiquelhappy (PR #19) for tracking down the crash and the initial fix.
+
 ## [1.1.8] - 2026-07-09
 
 ### Fixed

@@ -53,18 +53,26 @@ public class MobAiManager implements Listener {
             // Only enforce clearing if mob_targeting rule is OFF
             if (plugin.getRuleManager().getRule(p, RuleManager.MOB_TARGETING)) continue;
 
-            // Check all nearby mobs and clear any that have the vanished player as target
-            for (Entity entity : p.getNearbyEntities(128, 128, 128)) {
-                if (!(entity instanceof Mob mob)) continue;
+            // getNearbyEntities() requires the owning region thread (Folia safety) — dispatch per player.
+            plugin.getVanishScheduler().runEntity(p, () -> sweepForPlayer(p), null);
+        }
+    }
 
-                // Clear target if aimed at this vanished player
+    private void sweepForPlayer(Player p) {
+        // Check all nearby mobs and clear any that have the vanished player as target
+        for (Entity entity : p.getNearbyEntities(128, 128, 128)) {
+            if (!(entity instanceof Mob mob)) continue;
+
+            // A mob near a region boundary may belong to a different region than the
+            // player — its target/pathfinder must be touched on its own owning thread.
+            plugin.getVanishScheduler().runEntity(mob, () -> {
                 if (p.equals(mob.getTarget())) {
                     mob.setTarget(null);
                     try {
                         mob.getPathfinder().stopPathfinding();
                     } catch (Throwable ignored) {}
                 }
-            }
+            }, null);
         }
     }
 
