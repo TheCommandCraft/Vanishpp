@@ -1,6 +1,6 @@
 # Vanish++ multi-platform test environment
 # Platforms: Paper · Purpur · Folia · Spigot · Bukkit (CraftBukkit)
-# All servers run MC 26.1.2 with ProtocolLib and the locally built Vanishpp JAR.
+# All servers run MC 26.2 with ProtocolLib and the locally built Vanishpp JAR.
 #
 # Ports:
 #   Paper   25565 (MC)  25575 (RCON)
@@ -20,7 +20,7 @@ x-common: &common
 
 x-common-env: &common-env
   EULA: "TRUE"
-  VERSION: "26.1.2"
+  VERSION: "26.2"
   MEMORY: "1536M"
   ONLINE_MODE: "FALSE"
   OPS: "TheCommandCraft,TCC_STUDIOS"
@@ -66,9 +66,9 @@ services:
     environment:
       <<: *common-env
       TYPE: PAPER
-      PAPER_BUILD: "LATEST"
+      PAPER_CHANNEL: "experimental"
       RCON_PORT: "25575"
-      MOTD: "§aVanish++ Test §7— §fPaper §726.1.2"
+      MOTD: "§aVanish++ Test §7— §fPaper §726.2"
     volumes:
       - paper_data:/data
       - ./plugins:/plugins:ro
@@ -83,7 +83,7 @@ services:
       <<: *common-env
       TYPE: PURPUR
       RCON_PORT: "25576"
-      MOTD: "§dVanish++ Test §7— §fPurpur §726.1.2"
+      MOTD: "§dVanish++ Test §7— §fPurpur §726.2"
       PLUGINS: " "
     volumes:
       - purpur_data:/data
@@ -99,7 +99,7 @@ services:
       <<: *common-env
       TYPE: FOLIA
       RCON_PORT: "25577"
-      MOTD: "§bVanish++ Test §7— §fFolia §726.1.2"
+      MOTD: "§bVanish++ Test §7— §fFolia §726.2"
       PLUGINS: " "
     volumes:
       - folia_data:/data
@@ -116,7 +116,7 @@ services:
       TYPE: SPIGOT
       MEMORY: "2G"           # Extra heap for BuildTools compilation on first run
       RCON_PORT: "25578"
-      MOTD: "§eVanish++ Test §7— §fSpigot §726.1.2"
+      MOTD: "§eVanish++ Test §7— §fSpigot §726.2"
     volumes:
       - spigot_data:/data
       - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
@@ -132,7 +132,7 @@ services:
       TYPE: BUKKIT
       MEMORY: "2G"           # Extra heap for BuildTools compilation on first run
       RCON_PORT: "25579"
-      MOTD: "§6Vanish++ Test §7— §fBukkit §726.1.2"
+      MOTD: "§6Vanish++ Test §7— §fBukkit §726.2"
     volumes:
       - bukkit_data:/data
       - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar

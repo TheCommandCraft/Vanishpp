@@ -1,6 +1,6 @@
 # Vanish++ Velocity proxy test environment
 # Topology: Velocity → paper1 (25565/RCON 25575) + paper2 (25566/RCON 25576)
-# Versions: Minecraft 26.1.2, Velocity 3.4.0-SNAPSHOT build 559
+# Versions: Minecraft 26.2, Velocity 3.4.0-SNAPSHOT build 559
 #
 # Usage:
 #   docker compose -f docker-compose-proxy.yml up -d
@@ -49,7 +49,7 @@ services:
     tty: true
 
   paper1:
-    image: itzg/minecraft-server:latest  # Latest Paper 26.1.2 build (LATEST)
+    image: itzg/minecraft-server:latest  # Latest Paper 26.2 build (LATEST)
     container_name: vpp_proxy_paper1
 
     tty: true
@@ -63,8 +63,8 @@ services:
     environment:
       EULA: "TRUE"
       TYPE: PAPER
-      VERSION: "26.1.2"
-      BUILD_NUMBER: "LATEST"
+      VERSION: "26.2"
+      PAPER_CHANNEL: "experimental"
       MEMORY: "1536M"
       ONLINE_MODE: "FALSE"
       OPS: "TheCommandCraft,TCC_STUDIOS"
@@ -83,7 +83,7 @@ services:
       - ./paper1-config/vanishpp:/data/plugins/vanishpp
 
   paper2:
-    image: itzg/minecraft-server:latest  # Latest Paper 26.1.2 build (LATEST)
+    image: itzg/minecraft-server:latest  # Latest Paper 26.2 build (LATEST)
     container_name: vpp_proxy_paper2
 
     tty: true
@@ -97,8 +97,8 @@ services:
     environment:
       EULA: "TRUE"
       TYPE: PAPER
-      VERSION: "26.1.2"
-      BUILD_NUMBER: "LATEST"
+      VERSION: "26.2"
+      PAPER_CHANNEL: "experimental"
       MEMORY: "1536M"
       ONLINE_MODE: "FALSE"
       OPS: "TheCommandCraft,TCC_STUDIOS"

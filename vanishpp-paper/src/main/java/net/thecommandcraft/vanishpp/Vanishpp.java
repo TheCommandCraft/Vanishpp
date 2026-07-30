@@ -342,27 +342,35 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // --- Minecraft version check ---
         String bukkitVersion = Bukkit.getBukkitVersion(); // e.g. "1.21.11-R0.1-SNAPSHOT"
         String mcVersion = bukkitVersion.split("-")[0];    // e.g. "1.21.11"
-        String[] parts = mcVersion.split("\\.");
 
-        boolean supported = false;
-        if (parts.length >= 2) {
-            try {
-                int major = Integer.parseInt(parts[0]);
-                int minor = Integer.parseInt(parts[1]);
-                // Supported: 1.21.x or 26.x.x (Minecraft 2026 year-based naming scheme)
-                if ((major == 1 && minor == 21) || major == 26) {
-                    supported = true;
-                }
-            } catch (NumberFormatException ignored) {
-            }
-        }
-
-        if (supported) {
+        if (isVersionSupported(mcVersion)) {
             getLogger().info("Minecraft version: " + mcVersion + " (supported).");
         } else {
             getLogger().warning("Minecraft version: " + mcVersion + " — this version has NOT been tested with Vanish++.");
-            getLogger().warning("Vanish++ is built and tested for Minecraft 1.21 — 1.21.11 and 26.x.x. Running on " + mcVersion);
+            getLogger().warning("Vanish++ is built and tested for Minecraft 1.20.6+, 1.21.x, and 26.x.x. Running on " + mcVersion);
             getLogger().warning("may cause unexpected behavior or errors. Proceed at your own risk.");
+        }
+    }
+
+    /** Supported: 1.20.6+, 1.21.x, or 26.x.x (Minecraft 2026 year-based naming scheme). */
+    static boolean isVersionSupported(String mcVersion) {
+        String[] parts = mcVersion.split("\\.");
+        if (parts.length < 2) {
+            return false;
+        }
+        try {
+            int major = Integer.parseInt(parts[0]);
+            int minor = Integer.parseInt(parts[1]);
+            int patch = parts.length >= 3 ? Integer.parseInt(parts[2]) : 0;
+            if (major == 26) {
+                return true;
+            }
+            if (major == 1 && minor == 21) {
+                return true;
+            }
+            return major == 1 && minor == 20 && patch >= 6;
+        } catch (NumberFormatException e) {
+            return false;
         }
     }
 

@@ -7,7 +7,7 @@
 [![Modrinth](https://img.shields.io/modrinth/v/kbKpK1bc?label=Modrinth&logo=modrinth)](https://modrinth.com/plugin/vanish++)
 [![Modrinth Downloads](https://img.shields.io/modrinth/dt/kbKpK1bc?logo=modrinth)](https://modrinth.com/plugin/vanish++)
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://adoptium.net/)
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21--1.21.x-brightgreen)](https://www.minecraft.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.20.6--26.2-brightgreen)](https://www.minecraft.net/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 </div>
@@ -145,7 +145,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 
 **Requirements:**
 - Java 21
-- Paper 1.21+ (or a compatible fork)
+- Paper 1.20.6+ (or a compatible fork)
 - ProtocolLib 5.3.0+ *(highly recommended — required for stealth features)*
 
 **Supported platforms:**
@@ -158,7 +158,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 | **Spigot** | Compatible | Physics/projectile features degrade without Paper API |
 | **Bukkit** | Compatible | Same limitations as Spigot |
 
-**Supported versions:** Minecraft 1.21 — 1.21.x
+**Supported versions:** Minecraft 1.20.6 — 26.2
 
 **Optional integrations:** TAB (NEZNAMY), PlaceholderAPI, Dynmap, EssentialsX, DiscordSRV, Simple Voice Chat
 
