@@ -15,6 +15,7 @@ CLAUDE.md
 # Dev-only scripts and docs
 docker-compose.builder.yml
 docker-compose.yml
+publish-modrinth.sh
 todo.txt
 test.log
 Icon.pxo
