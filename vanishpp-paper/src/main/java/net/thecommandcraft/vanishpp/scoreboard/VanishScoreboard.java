@@ -290,6 +290,14 @@ public class VanishScoreboard {
         timeFmt.setTimeZone(tz);
         SimpleDateFormat dateFmt = new SimpleDateFormat("dd/MM/yyyy");
         dateFmt.setTimeZone(tz);
+        SimpleDateFormat time12Fmt = new SimpleDateFormat("h:mm");
+        time12Fmt.setTimeZone(tz);
+        SimpleDateFormat time12PaddedFmt = new SimpleDateFormat("hh:mm");
+        time12PaddedFmt.setTimeZone(tz);
+        SimpleDateFormat time12AmpmFmt = new SimpleDateFormat("h:mm a");
+        time12AmpmFmt.setTimeZone(tz);
+        SimpleDateFormat time12AmpmPaddedFmt = new SimpleDateFormat("hh:mm a");
+        time12AmpmPaddedFmt.setTimeZone(tz);
 
         // --- Player position & direction ---
         org.bukkit.Location loc = player.getLocation();
@@ -353,7 +361,11 @@ public class VanishScoreboard {
             .replace("%chunks%",     String.valueOf(player.getWorld().getChunkCount()))
             // Time
             .replace("%time%",       timeFmt.format(now))
-            .replace("%date%",       dateFmt.format(now));
+            .replace("%date%",       dateFmt.format(now))
+            .replace("%time_12%",              time12Fmt.format(now))
+            .replace("%time_12_padded%",       time12PaddedFmt.format(now))
+            .replace("%time_12_ampm%",         time12AmpmFmt.format(now))
+            .replace("%time_12_ampm_padded%",  time12AmpmPaddedFmt.format(now));
 
         try {
             if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null)

@@ -280,4 +280,29 @@ class VanishStateTest {
                 !p2.getMetadata("vanished").get(0).asBoolean(),
                 "Non-vanished player must not have vanished metadata");
     }
+
+    // -------------------------------------------------------------------------
+    // reconcileVanishState() — self-heal against stale invisibility flags
+    // -------------------------------------------------------------------------
+
+    @Test
+    void reconcile_reassertsInvisibility_whenVanishedButFlagStale() {
+        plugin.applyVanishEffects(player);
+        player.setInvisible(false); // simulate a crash/downgrade clearing the flag
+
+        plugin.reconcileVanishState(player, true);
+
+        assertTrue(player.isInvisible(),
+                "A player who is still vanished per DB+memory must have the invisible flag reasserted");
+    }
+
+    @Test
+    void reconcile_forcesVisible_whenUnvanishedButFlagStale() {
+        player.setInvisible(true); // simulate stale flag on a never-vanished player
+
+        plugin.reconcileVanishState(player, false);
+
+        assertFalse(player.isInvisible(),
+                "A player who is not vanished per DB+memory must have the invisible flag cleared");
+    }
 }

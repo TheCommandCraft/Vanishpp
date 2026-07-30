@@ -41,6 +41,10 @@
 #  Time
 #   %time%               Current time  (HH:mm, respects timezone below)
 #   %date%               Current date  (dd/MM/yyyy)
+#   %time_12%            Current time, 12-hour, no leading zero  (h:mm, e.g. 9:41)
+#   %time_12_padded%     Current time, 12-hour, padded  (hh:mm, e.g. 09:41)
+#   %time_12_ampm%       Current time, 12-hour with AM/PM  (h:mm a, e.g. 9:41 PM)
+#   %time_12_ampm_padded% Current time, 12-hour padded with AM/PM  (hh:mm a, e.g. 09:41 PM)
 #
 # PlaceholderAPI placeholders are also supported if installed.
 # -------------------------------------------------------

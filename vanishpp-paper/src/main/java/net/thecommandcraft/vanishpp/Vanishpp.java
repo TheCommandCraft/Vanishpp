@@ -591,9 +591,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void reconcileVanishState(Player player, boolean dbVanished) {
         boolean memVanished = vanishedPlayers.contains(player.getUniqueId());
         if (dbVanished == memVanished) {
-            // Even when state looks consistent, defensively clear any stale invisible flag
-            // left by a crash, downgrade, or another plugin so the player is actually visible.
-            if (!dbVanished) forceEnsureVisible(player);
+            // Even when state looks consistent, defensively reassert the actual visibility
+            // flag against any staleness left by a crash, downgrade, or another plugin.
+            if (dbVanished) resyncVanishEffects(player);
+            else forceEnsureVisible(player);
             return;
         }
 
@@ -1456,6 +1457,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // Metadata
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
+        player.setInvisible(true);
         player.setCollidable(false);
 
         // Fly
