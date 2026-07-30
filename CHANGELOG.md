@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.8] - 2026-07-30
+
+### Fixed
+- **Vanish chat filter discarded LuckPerms Chat / HoverChat formatting:** `applyVanishChatFilter()` (used both for the seer-only "vanished" chat relay and for the `/vanishchat confirm` bypass) unconditionally replaced the `AsyncChatEvent` renderer with a hardcoded `prefix + displayName + ": " + message`, throwing away any renderer already installed by a lower-priority chat formatter (prefixes/suffixes, hover text, click events). The renderer is now wrapped instead of replaced — VPP's `[VANISHED]` tag is prepended in front of whatever LuckPerms Chat, HoverChat, or any other formatter already produced.
+
 ## [1.1.8] - 2026-07-26
 
 ### Fixed

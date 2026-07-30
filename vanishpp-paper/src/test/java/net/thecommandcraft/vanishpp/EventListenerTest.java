@@ -3,6 +3,11 @@ package net.thecommandcraft.vanishpp;
 import be.seeseemelk.mockbukkit.MockBukkit;
 import be.seeseemelk.mockbukkit.ServerMock;
 import be.seeseemelk.mockbukkit.entity.PlayerMock;
+import io.papermc.paper.chat.ChatRenderer;
+import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.thecommandcraft.vanishpp.config.RuleManager;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -15,6 +20,9 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Projectile;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
@@ -22,6 +30,7 @@ import org.bukkit.event.entity.*;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
@@ -30,6 +39,9 @@ import net.thecommandcraft.vanishpp.listeners.VanishLookGoal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -1115,5 +1127,41 @@ class EventListenerTest {
         assertTrue(plugin.getRawVanishedPlayers().contains(playerB.getUniqueId()));
         assertFalse(plugin.getRawVanishedPlayers().contains(player.getUniqueId()),
                 "Un-vanished player must not be in vanished set");
+    }
+
+    // -------------------------------------------------------------------------
+    // Chat rendering — must not clobber renderers installed by other chat
+    // plugins (LuckPerms Chat, HoverChat) that ran at a lower priority.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void vanishChatFilter_preservesThirdPartyRenderer_onConfirmedSend() {
+        plugin.applyVanishEffects(player);
+        // Simulate the /vanishchat confirm flow: bypass metadata set, message forced through.
+        player.setMetadata("vanishpp_chat_bypass", new FixedMetadataValue(plugin, true));
+
+        // Simulate a third-party chat formatter (e.g. LuckPerms Chat) that ran at a lower
+        // priority and installed its own renderer with formatting VPP must not discard.
+        Listener fakeFormatter = new Listener() {
+            @EventHandler(priority = EventPriority.LOWEST)
+            public void onChat(AsyncChatEvent event) {
+                event.renderer((source, displayName, message, audience) ->
+                        Component.text("<LPC-FORMATTED>").append(message));
+            }
+        };
+        server.getPluginManager().registerEvents(fakeFormatter, plugin);
+
+        Set<Audience> viewers = new HashSet<>(server.getOnlinePlayers());
+        Component message = Component.text("hello staff");
+        AsyncChatEvent event = new AsyncChatEvent(false, player, viewers,
+                ChatRenderer.defaultRenderer(), message, message, null);
+        server.getPluginManager().callEvent(event);
+
+        Component rendered = event.renderer().render(player, player.displayName(), message, Audience.empty());
+        String plain = PlainTextComponentSerializer.plainText().serialize(rendered);
+
+        assertTrue(plain.contains("<LPC-FORMATTED>"),
+                "Confirmed vanish chat must preserve formatting installed by other chat plugins");
+        assertTrue(plain.contains("hello staff"), "Original message content must survive");
     }
 }

@@ -1,6 +1,7 @@
 package net.thecommandcraft.vanishpp.listeners;
 
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
+import io.papermc.paper.chat.ChatRenderer;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -436,10 +437,14 @@ public class PlayerListener implements Listener {
         event.viewers().removeIf(viewer ->
             viewer instanceof Player obs && !plugin.getPermissionManager().hasPermission(obs, "vanishpp.see")
         );
-        // Add [Vanished] prefix for seers
+        // Wrap whatever renderer is already installed (e.g. by LuckPerms Chat, HoverChat, or
+        // another formatter that ran at a lower priority) instead of replacing it outright.
+        // This keeps their prefixes/suffixes, hover text, and click events intact for the
+        // seer-only / confirmed message, and only adds the [Vanished] tag in front of it.
+        ChatRenderer previousRenderer = event.renderer();
         Component prefix = plugin.getMessageManager().parse(config.vanishTabPrefix, player);
         event.renderer((source, displayName, message, audience) ->
-            prefix.append(displayName).append(Component.text(": ")).append(message)
+            prefix.append(previousRenderer.render(source, displayName, message, audience))
         );
     }
 
