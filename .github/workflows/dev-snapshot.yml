@@ -1,0 +1,85 @@
+name: Dev Snapshot
+
+# Manually-triggered, on-demand dev/snapshot build. Run this from the Actions tab
+# whenever you want the current state of `main` (or any branch) packaged and
+# published as a GitHub pre-release, without committing to a real version bump.
+#
+# This is deliberately separate from prerelease.yml, which only fires on real
+# vX.Y.Z(-suffix) version tags you push yourself. Dev snapshots get an
+# auto-generated, never-colliding version string instead (base pom.xml version
+# + a running build number + short commit SHA), so they never need a manual
+# tag decision and can never accidentally collide with a future real release
+# tag. Not published to Modrinth — GitHub-only, exactly for eager
+# testers/yourself to grab the latest build.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn -B clean verify
+
+      - name: Compute snapshot version
+        id: version
+        run: |
+          set -euo pipefail
+          base_version="$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)"
+          short_sha="$(git rev-parse --short HEAD)"
+          dev_version="${base_version}-dev.${{ github.run_number }}+${short_sha}"
+          {
+            echo "dev_version=$dev_version"
+            echo "tag=v${dev_version}"
+            echo "short_sha=$short_sha"
+          } >> "$GITHUB_OUTPUT"
+          echo "Computed dev snapshot version: $dev_version"
+
+      - name: Build release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          last_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "")"
+          {
+            echo "notes<<SNAPSHOT_EOF"
+            echo "Automated dev/snapshot build from commit \`${{ steps.version.outputs.short_sha }}\` on \`${{ github.ref_name }}\`."
+            echo ""
+            echo "**This is an unstable development build, not a stable release.** It has not been published to Modrinth."
+            echo ""
+            if [ -n "$last_tag" ]; then
+              echo "Commits since $last_tag:"
+              echo '```'
+              git log "${last_tag}..HEAD" --oneline --no-decorate | head -50
+              echo '```'
+            fi
+            echo "SNAPSHOT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub pre-release (filter out sources/javadoc)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Dev Snapshot ${{ steps.version.outputs.dev_version }}"
+          body: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: true
+          files: |
+            **/target/**.jar
+            !**/target/**-sources.jar
+            !**/target/**-javadoc.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
