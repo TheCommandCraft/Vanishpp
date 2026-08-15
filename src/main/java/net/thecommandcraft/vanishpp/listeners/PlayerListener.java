@@ -44,7 +44,7 @@ public class PlayerListener implements Listener {
     private final ConfigManager config;
     private final RuleManager rules;
     private final Map<UUID, GameMode> silentChestViewers = new HashMap<>();
-    private final Map<UUID, String> silentChestBlockKeys = new HashMap<>(); // block key per viewer for cleanup
+    private final Map<UUID, List<String>> silentChestBlockKeys = new HashMap<>(); // block key(s) per viewer for cleanup
     private final Map<UUID, Inventory> silentChestRealInventories = new HashMap<>(); // snapshot → real for sync-back
     private final Map<UUID, Map<String, Long>> ruleNotificationCooldowns = new HashMap<>();
     private final Set<UUID> hasSeenDisableTip = new HashSet<>();
@@ -216,8 +216,8 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
-            String blockKey = silentChestBlockKeys.remove(uuid);
-            if (blockKey != null) plugin.silentlyOpenedBlocks.remove(blockKey);
+            List<String> blockKeys = silentChestBlockKeys.remove(uuid);
+            if (blockKeys != null) blockKeys.forEach(plugin.silentlyOpenedBlocks::remove);
             silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
             // Notify staff that a vanished player silently left
@@ -625,7 +625,24 @@ public class PlayerListener implements Listener {
                 Inventory snapshot = Bukkit.createInventory(null, realInv.getSize(), title);
                 snapshot.setContents(realInv.getContents());
                 silentChestViewers.put(player.getUniqueId(), player.getGameMode());
-                silentChestBlockKeys.put(player.getUniqueId(), blockKey);
+                // Safety net: also register the block key(s) with the ProtocolLib packet
+                // suppressor (registerSilentChestListeners) in case the snapshot trick alone
+                // doesn't stop the server from emitting a BLOCK_ACTION/sound packet for the
+                // real block (e.g. observed leaking for double chests). Both halves of a
+                // double chest are separate block entities and must both be registered.
+                Set<String> blockKeys = new LinkedHashSet<>();
+                blockKeys.add(blockKey);
+                if (realInv.getHolder() instanceof org.bukkit.block.DoubleChest doubleChest) {
+                    for (org.bukkit.inventory.InventoryHolder side : new org.bukkit.inventory.InventoryHolder[]{
+                            doubleChest.getLeftSide(), doubleChest.getRightSide()}) {
+                        if (side instanceof org.bukkit.block.Chest chestState) {
+                            var loc = chestState.getLocation();
+                            blockKeys.add(loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ());
+                        }
+                    }
+                }
+                blockKeys.forEach(plugin.silentlyOpenedBlocks::add);
+                silentChestBlockKeys.put(player.getUniqueId(), new ArrayList<>(blockKeys));
                 silentChestRealInventories.put(player.getUniqueId(), realInv);
                 player.openInventory(snapshot);
             }
@@ -664,7 +681,7 @@ public class PlayerListener implements Listener {
 
         Player p = (Player) event.getPlayer();
         GameMode gm = silentChestViewers.remove(uuid);
-        String blockKey = silentChestBlockKeys.remove(uuid);
+        List<String> blockKeys = silentChestBlockKeys.remove(uuid);
 
         // Sync snapshot contents back to the real container
         Inventory realInv = silentChestRealInventories.remove(uuid);
@@ -685,9 +702,9 @@ public class PlayerListener implements Listener {
 
         // Delay removal so ProtocolLib still suppresses close animation + sound packets
         // that fire AFTER InventoryCloseEvent
-        if (blockKey != null) {
-            final String key = blockKey;
-            plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentlyOpenedBlocks.remove(key), 3L);
+        if (blockKeys != null) {
+            final List<String> keys = blockKeys;
+            plugin.getVanishScheduler().runLaterGlobal(() -> keys.forEach(plugin.silentlyOpenedBlocks::remove), 3L);
         }
     }
 

@@ -30,8 +30,12 @@ x-common-env: &common-env
   SIMULATION_DISTANCE: "6"
   RCON_PASSWORD: "vanishtest"
   ENABLE_RCON: "TRUE"
-  # Downloads ProtocolLib into /data/plugins on first start
-  PLUGINS: "https://github.com/dmulloy2/ProtocolLib/releases/download/5.3.0/ProtocolLib.jar"
+  # Downloads ProtocolLib into /data/plugins on first start.
+  # NOTE: 5.3.0 fails to load against MC 1.21.11 (VERSION above) — its onLoad()
+  # throws in PacketRegistry.createRegisterV1_20_5, which ProtocolLib then
+  # misreports as "does not support plugin reloaders" and disables itself.
+  # 5.4.0 is the minimum that actually works with this compose file's MC version.
+  PLUGINS: "https://github.com/dmulloy2/ProtocolLib/releases/download/5.4.0/ProtocolLib.jar"
 
 services:
 
@@ -61,9 +65,13 @@ services:
       TYPE: PURPUR
       RCON_PORT: "25576"
       MOTD: "§dVanish++ Test §7— §fPurpur §71.21.11"
+      # Windows/Docker Desktop note (see Folia): ProtocolLib auto-download onto
+      # the bind-mounted volume hits AccessDeniedException in WSL2. Suppress it
+      # and pre-seed ProtocolLib.jar via the read-only ./plugins dir instead.
+      PLUGINS: " "
     volumes:
       - purpur_data:/data
-      - ./plugins/vanishpp.jar:/data/plugins/vanishpp.jar
+      - ./plugins:/plugins:ro
 
   folia:
     <<: *common
