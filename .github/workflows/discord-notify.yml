@@ -1,0 +1,124 @@
+name: Discord Reports Notify
+
+# Replaces the old raw repo webhook -> Discord `/github` integration, which had no way to
+# filter by actor. This workflow covers the same event set that webhook was subscribed to
+# (issues, issue_comment, pull_request, pull_request_review, pull_request_review_comment,
+# release) and additionally only posts when the action was performed by someone OTHER than
+# the repo owner, so the reports channel only pings for things the owner didn't already know
+# about firsthand.
+#
+# workflow_dispatch exists purely for manual end-to-end testing of both branches (suppress
+# vs. notify) without needing a second GitHub account or waiting for a real external event -
+# see the "Compute event context" step below for how the simulated sender/message are wired
+# in. Manual test runs always prefix the Discord message with "[TEST]".
+
+on:
+  issues:
+  issue_comment:
+  pull_request:
+  pull_request_review:
+  pull_request_review_comment:
+  release:
+  workflow_dispatch:
+    inputs:
+      test_sender:
+        description: "Login to simulate as the actor (try 'TheCommandCraft' to verify suppression, or anything else to verify a real post)"
+        required: true
+        default: "someone-else"
+      test_message:
+        description: "Message body to post if the simulated sender is not suppressed"
+        required: true
+        default: "manual workflow_dispatch test"
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute event context
+        id: context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          TEST_SENDER: ${{ inputs.test_sender }}
+          TEST_MESSAGE: ${{ inputs.test_message }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            sender="$TEST_SENDER"
+            title="[TEST] $TEST_MESSAGE (simulated sender: $TEST_SENDER)"
+            url="https://github.com/$REPO/actions/runs/${{ github.run_id }}"
+            description="Manually triggered test run - does not reflect a real repo event."
+          else
+            sender="$(jq -r '.sender.login' "$GITHUB_EVENT_PATH")"
+            case "$EVENT_NAME" in
+              issues)
+                title="Issue $(jq -r '.action' "$GITHUB_EVENT_PATH"): $(jq -r '.issue.title' "$GITHUB_EVENT_PATH") (#$(jq -r '.issue.number' "$GITHUB_EVENT_PATH"))"
+                url="$(jq -r '.issue.html_url' "$GITHUB_EVENT_PATH")"
+                ;;
+              issue_comment)
+                title="Comment on #$(jq -r '.issue.number' "$GITHUB_EVENT_PATH") $(jq -r '.issue.title' "$GITHUB_EVENT_PATH")"
+                url="$(jq -r '.comment.html_url' "$GITHUB_EVENT_PATH")"
+                ;;
+              pull_request)
+                title="PR $(jq -r '.action' "$GITHUB_EVENT_PATH"): $(jq -r '.pull_request.title' "$GITHUB_EVENT_PATH") (#$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH"))"
+                url="$(jq -r '.pull_request.html_url' "$GITHUB_EVENT_PATH")"
+                ;;
+              pull_request_review)
+                title="Review $(jq -r '.review.state' "$GITHUB_EVENT_PATH") on PR #$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")"
+                url="$(jq -r '.review.html_url' "$GITHUB_EVENT_PATH")"
+                ;;
+              pull_request_review_comment)
+                title="Review comment on PR #$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")"
+                url="$(jq -r '.comment.html_url' "$GITHUB_EVENT_PATH")"
+                ;;
+              release)
+                title="Release $(jq -r '.action' "$GITHUB_EVENT_PATH"): $(jq -r '.release.name // .release.tag_name' "$GITHUB_EVENT_PATH")"
+                url="$(jq -r '.release.html_url' "$GITHUB_EVENT_PATH")"
+                ;;
+              *)
+                title="$EVENT_NAME event"
+                url="https://github.com/$REPO"
+                ;;
+            esac
+            description="by $sender on $REPO"
+          fi
+
+          # Only notify when the action was performed by someone other than the repo owner.
+          # sender.login (the payload's authoritative "who actually did this" field) is used
+          # instead of github.actor, which for some event types reflects the workflow runner
+          # identity rather than the event's real actor.
+          if [ "$sender" = "TheCommandCraft" ]; then
+            should_notify="false"
+          else
+            should_notify="true"
+          fi
+
+          {
+            echo "should_notify=$should_notify"
+            echo "sender=$sender"
+            echo "title=$title"
+            echo "url=$url"
+            echo "description=$description"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Computed: sender=$sender should_notify=$should_notify title=$title"
+
+      - name: Post to Discord
+        if: steps.context.outputs.should_notify == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TITLE: ${{ steps.context.outputs.title }}
+          URL: ${{ steps.context.outputs.url }}
+          DESCRIPTION: ${{ steps.context.outputs.description }}
+        run: |
+          set -euo pipefail
+          payload="$(jq -n \
+            --arg title "$TITLE" \
+            --arg url "$URL" \
+            --arg description "$DESCRIPTION" \
+            '{embeds: [{title: $title, url: $url, description: $description}]}')"
+          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK_URL"
