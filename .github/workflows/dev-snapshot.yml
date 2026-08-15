@@ -6,11 +6,12 @@ name: Dev Snapshot
 #
 # This is deliberately separate from prerelease.yml, which only fires on real
 # vX.Y.Z(-suffix) version tags you push yourself. Dev snapshots get an
-# auto-generated, never-colliding version string instead (base pom.xml version
-# + a running build number + short commit SHA), so they never need a manual
-# tag decision and can never accidentally collide with a future real release
-# tag. Not published to Modrinth — GitHub-only, exactly for eager
-# testers/yourself to grab the latest build.
+# auto-generated version instead: the base pom.xml version + a "-dev.N" counter
+# + the short commit SHA. N counts existing dev-snapshot releases for the
+# *current* base version (not a global run counter), so it naturally starts
+# back at 1 the moment you cut a real vX.Y.Z release and move the base version
+# forward — no manual reset needed. Not published to Modrinth — GitHub-only,
+# for eager testers/yourself to grab the latest build.
 
 on:
   workflow_dispatch: {}
@@ -24,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -35,41 +38,72 @@ jobs:
       - name: Build with Maven
         run: mvn -B clean verify
 
+      - name: Remove non-distributable jar byproducts
+        # softprops/action-gh-release's `files:` glob has no support for `!`
+        # exclusion (each line is matched independently and concatenated), so
+        # unwanted jars have to be removed from disk before the release step
+        # instead of "excluded" from the glob. original-*.jar is the
+        # shade-plugin's pre-relocation byproduct (missing bundled deps like
+        # HikariCP); sources/javadoc jars aren't currently produced by this
+        # build but are cleaned up defensively in case that ever changes.
+        run: |
+          find . -type f \( -name 'original-*.jar' -o -name '*-sources.jar' -o -name '*-javadoc.jar' \) -path '*/target/*' -print -delete
+
       - name: Compute snapshot version
         id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           base_version="$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)"
           short_sha="$(git rev-parse --short HEAD)"
-          dev_version="${base_version}-dev.${{ github.run_number }}+${short_sha}"
+          base_version_re="$(printf '%s' "$base_version" | sed 's/[.[\*^$()+?{|]/\\&/g')"
+
+          existing_max="$(gh release list --limit 200 --json tagName --jq \
+            "[ .[] | .tagName | capture(\"^v${base_version_re}-dev\\\\.(?<n>[0-9]+)\\\\+\"; \"\") | .n | tonumber ] | (if length==0 then 0 else max end)")"
+          next_n=$((existing_max + 1))
+
+          dev_version="${base_version}-dev.${next_n}+${short_sha}"
           {
             echo "dev_version=$dev_version"
             echo "tag=v${dev_version}"
             echo "short_sha=$short_sha"
           } >> "$GITHUB_OUTPUT"
-          echo "Computed dev snapshot version: $dev_version"
+          echo "Computed dev snapshot version: $dev_version (dev counter reset per base version ${base_version}, was at $existing_max)"
 
       - name: Build release notes
         id: notes
         run: |
           set -euo pipefail
           last_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "")"
+          repo_url="https://github.com/${{ github.repository }}"
+
           {
             echo "notes<<SNAPSHOT_EOF"
-            echo "Automated dev/snapshot build from commit \`${{ steps.version.outputs.short_sha }}\` on \`${{ github.ref_name }}\`."
+            echo "Automated dev/snapshot build from commit [\`${{ steps.version.outputs.short_sha }}\`](${repo_url}/commit/${{ github.sha }}) on \`${{ github.ref_name }}\`, triggered by @${{ github.actor }}."
             echo ""
-            echo "**This is an unstable development build, not a stable release.** It has not been published to Modrinth."
+            echo "> [!WARNING]"
+            echo "> This is an unstable development build, not a stable release. It has not been published to Modrinth."
             echo ""
             if [ -n "$last_tag" ]; then
-              echo "Commits since $last_tag:"
-              echo '```'
-              git log "${last_tag}..HEAD" --oneline --no-decorate | head -50
-              echo '```'
+              commit_count="$(git rev-list --count "${last_tag}..HEAD")"
+              echo "### Changes since \`$last_tag\` ($commit_count commit(s))"
+              echo ""
+              git log "${last_tag}..HEAD" --no-decorate --pretty=format:'- %s (`%h`)' | head -50
+              if [ "$commit_count" -gt 50 ]; then
+                echo ""
+                echo "_...and $((commit_count - 50)) more._"
+              fi
+              echo ""
+              echo ""
+              echo "Full diff: ${repo_url}/compare/${last_tag}...${{ github.sha }}"
+            else
+              echo "_No prior version tag found to diff against._"
             fi
             echo "SNAPSHOT_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Publish GitHub pre-release (filter out sources/javadoc)
+      - name: Publish GitHub pre-release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
@@ -77,13 +111,6 @@ jobs:
           body: ${{ steps.notes.outputs.notes }}
           draft: false
           prerelease: true
-          # Exclude sources/javadoc and the shade-plugin's pre-relocation
-          # "original-*.jar" byproducts (missing bundled dependencies like
-          # HikariCP, not meant to be run standalone).
-          files: |
-            **/target/**.jar
-            !**/target/**-sources.jar
-            !**/target/**-javadoc.jar
-            !**/target/original-*.jar
+          files: "**/target/**.jar"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

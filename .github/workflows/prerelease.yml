@@ -43,7 +43,16 @@ jobs:
         if: steps.check-tag.outputs.is_tag == 'true'
         run: ls -R downloaded-artifacts
 
-      - name: Create GitHub Pre-release (filter out sources/javadoc)
+      - name: Remove non-distributable jar byproducts
+        # softprops/action-gh-release's `files:` glob has no support for `!`
+        # exclusion (each line is matched independently and concatenated) -
+        # it silently no-ops rather than filtering, so unwanted jars have to
+        # be removed from disk before the release step instead.
+        if: steps.check-tag.outputs.is_tag == 'true'
+        run: |
+          find downloaded-artifacts -type f \( -name 'original-*.jar' -o -name '*-sources.jar' -o -name '*-javadoc.jar' \) -print -delete
+
+      - name: Create GitHub Pre-release
         if: steps.check-tag.outputs.is_tag == 'true'
         uses: softprops/action-gh-release@v2
         with:
@@ -51,13 +60,6 @@ jobs:
           name: "Pre-release ${{ github.event.workflow_run.head_branch }}"
           draft: false
           prerelease: true
-          # Include all JARs, exclude sources/javadoc and the shade-plugin's
-          # pre-relocation "original-*.jar" byproducts (those are missing
-          # bundled dependencies like HikariCP and aren't meant to be run).
-          files: |
-            downloaded-artifacts/**/*.jar
-            !downloaded-artifacts/**/*-sources.jar
-            !downloaded-artifacts/**/*-javadoc.jar
-            !downloaded-artifacts/**/original-*.jar
+          files: downloaded-artifacts/**/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
