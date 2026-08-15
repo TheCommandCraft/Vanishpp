@@ -283,11 +283,11 @@ public class VelocityConfigManager {
     // ── Storage config accessors (used by ProxySqlStorage) ────────────────────
 
     public String getStorageType() { return str("storage.type", "YAML").toUpperCase(); }
-    public String getDbHost()      { return str("storage.host", "localhost"); }
-    public int    getDbPort()      { return intVal("storage.port", 3306); }
-    public String getDbName()      { return str("storage.database", "vanishpp"); }
-    public String getDbUser()      { return str("storage.username", "root"); }
-    public String getDbPass()      { return str("storage.password", ""); }
-    public boolean getDbSsl()      { return bool("storage.use-ssl", false); }
-    public int    getPoolSize()    { return intVal("storage.pool-size", 10); }
+    public String getDbHost()      { return str("storage.mysql.host", "localhost"); }
+    public int    getDbPort()      { return intVal("storage.mysql.port", 3306); }
+    public String getDbName()      { return str("storage.mysql.database", "vanishpp"); }
+    public String getDbUser()      { return str("storage.mysql.username", "root"); }
+    public String getDbPass()      { return str("storage.mysql.password", ""); }
+    public boolean getDbSsl()      { return bool("storage.mysql.use-ssl", false); }
+    public int    getPoolSize()    { return intVal("storage.mysql.pool-size", 10); }
 }
