@@ -8,16 +8,30 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
+    if: github.event.workflow_run.conclusion == 'success'
 
     steps:
+      - name: Verify this run was triggered by an actual version tag
+        id: check-tag
+        run: |
+          ref="${{ github.event.workflow_run.head_branch }}"
+          # Only real semver tags like v1.2.3 or v1.2.3-beta should cut a pre-release.
+          # `startsWith(head_branch, 'v')` alone would also match ordinary branches
+          # such as "v-experiment", so validate the full pattern here instead.
+          if [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$ ]]; then
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping: '$ref' is not a version tag, not cutting a pre-release."
+          fi
+
       - name: Download all artifacts from build workflow
+        if: steps.check-tag.outputs.is_tag == 'true'
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ github.event.workflow_run.head_sha }}
@@ -26,9 +40,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: List downloaded files (for debugging)
+        if: steps.check-tag.outputs.is_tag == 'true'
         run: ls -R downloaded-artifacts
 
       - name: Create GitHub Pre-release (filter out sources/javadoc)
+        if: steps.check-tag.outputs.is_tag == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.workflow_run.head_branch }}
