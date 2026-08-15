@@ -77,9 +77,13 @@ jobs:
           body: ${{ steps.notes.outputs.notes }}
           draft: false
           prerelease: true
+          # Exclude sources/javadoc and the shade-plugin's pre-relocation
+          # "original-*.jar" byproducts (missing bundled dependencies like
+          # HikariCP, not meant to be run standalone).
           files: |
             **/target/**.jar
             !**/target/**-sources.jar
             !**/target/**-javadoc.jar
+            !**/target/original-*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -51,10 +51,13 @@ jobs:
           name: "Pre-release ${{ github.event.workflow_run.head_branch }}"
           draft: false
           prerelease: true
-          # Include all JARs, exclude sources and javadoc
+          # Include all JARs, exclude sources/javadoc and the shade-plugin's
+          # pre-relocation "original-*.jar" byproducts (those are missing
+          # bundled dependencies like HikariCP and aren't meant to be run).
           files: |
             downloaded-artifacts/**/*.jar
             !downloaded-artifacts/**/*-sources.jar
             !downloaded-artifacts/**/*-javadoc.jar
+            !downloaded-artifacts/**/original-*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
