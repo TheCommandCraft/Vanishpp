@@ -63,7 +63,14 @@ public class AdminDashboardGUI implements Listener {
         event.setCancelled(true);
 
         ItemStack clicked = event.getCurrentItem();
-        if (clicked == null || clicked.getType() != Material.PLAYER_HEAD) return;
+        if (clicked == null) return;
+
+        if (clicked.getType() == Material.BARRIER) {
+            // Close button (slot 53) - previously did nothing beyond cancelling the click.
+            viewer.closeInventory();
+            return;
+        }
+        if (clicked.getType() != Material.PLAYER_HEAD) return;
 
         ItemMeta meta = clicked.getItemMeta();
         if (meta == null || !meta.hasDisplayName()) return;
