@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.8] - 2026-08-16
+
+### Fixed
+- **Silent chest animation leaked to observers on close, and double chests leaked entirely:** Two independent bugs in the silent-chest suppression system. (1) The delayed cleanup after closing a container only kept its block registered for 3 ticks, but vanilla's per-tick `ContainerOpenersCounter` recheck independently re-broadcasts the same open-count change on a later tick, arriving after the 3-tick window closed and leaking the close animation to nearby observers (sound suppression was unaffected — it's a separate packet type with no such duplicate rebroadcast). The window is now 60 ticks. (2) Double chests are two independent tile entities that each fire their own animation/sound packets, but only the clicked half's position was ever registered — the unclicked half's animation and sound always leaked, regardless of the close-timing fix. Both halves are now registered together. Verified against a real Purpur server with raw packet capture (issue #25).
+
 ## [1.1.8] - 2026-07-30
 
 ### Fixed

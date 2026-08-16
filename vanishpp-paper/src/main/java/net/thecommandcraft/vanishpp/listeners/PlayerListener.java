@@ -19,7 +19,9 @@ import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
+import org.bukkit.block.Chest;
 import org.bukkit.block.Container;
+import org.bukkit.block.DoubleChest;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -34,6 +36,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.util.Vector;
@@ -48,7 +51,7 @@ public class PlayerListener implements Listener {
     private final ConfigManager config;
     private final RuleManager rules;
     private final Map<UUID, GameMode> silentChestViewers = new ConcurrentHashMap<>();
-    private final Map<UUID, String> silentChestBlockKeys = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<String>> silentChestBlockKeys = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Long>> ruleNotificationCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> invseeHintCooldowns = new ConcurrentHashMap<>();
     private final Set<UUID> hasSeenDisableTip = ConcurrentHashMap.newKeySet();
@@ -381,8 +384,8 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
-            String blockKey = silentChestBlockKeys.remove(uuid);
-            if (blockKey != null) plugin.silentlyOpenedBlocks.remove(blockKey);
+            Set<String> blockKeys = silentChestBlockKeys.remove(uuid);
+            if (blockKeys != null) plugin.silentlyOpenedBlocks.removeAll(blockKeys);
             silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
             // Notify staff that a vanished player silently left
@@ -898,12 +901,25 @@ public class PlayerListener implements Listener {
         event.setCancelled(true);
 
         if (plugin.hasProtocolLib()) {
-            // Register the block key BEFORE opening so ProtocolLib suppression is already
+            // Register the block key(s) BEFORE opening so ProtocolLib suppression is already
             // active when Container.startOpen() fires its BLOCK_ACTION and sound packets.
-            String blockKey = block.getX() + "," + block.getY() + "," + block.getZ();
-            plugin.silentlyOpenedBlocks.add(blockKey);
+            // A double chest is two independent tile entities (one per half), each firing its
+            // own block_action broadcast — both halves' positions must be registered, not just
+            // the one actually clicked, or the other half's animation/sound leaks to observers.
+            Set<String> blockKeys = new java.util.HashSet<>();
+            blockKeys.add(block.getX() + "," + block.getY() + "," + block.getZ());
+            if (block.getState() instanceof Chest chestState
+                    && chestState.getInventory().getHolder() instanceof DoubleChest doubleChest) {
+                for (InventoryHolder half : new InventoryHolder[]{doubleChest.getLeftSide(), doubleChest.getRightSide()}) {
+                    if (half instanceof Chest halfChest) {
+                        org.bukkit.Location loc = halfChest.getLocation();
+                        blockKeys.add(loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ());
+                    }
+                }
+            }
+            plugin.silentlyOpenedBlocks.addAll(blockKeys);
             silentChestViewers.put(player.getUniqueId(), player.getGameMode());
-            silentChestBlockKeys.put(player.getUniqueId(), blockKey);
+            silentChestBlockKeys.put(player.getUniqueId(), blockKeys);
 
             if (type == Material.ENDER_CHEST) {
                 // Each player has their own ender chest inventory — open it directly.
@@ -916,7 +932,7 @@ public class PlayerListener implements Listener {
                 player.openInventory(c.getInventory());
             } else {
                 // Not a recognised container state — roll back registration
-                plugin.silentlyOpenedBlocks.remove(blockKey);
+                plugin.silentlyOpenedBlocks.removeAll(blockKeys);
                 silentChestViewers.remove(player.getUniqueId());
                 silentChestBlockKeys.remove(player.getUniqueId());
             }
@@ -955,7 +971,7 @@ public class PlayerListener implements Listener {
 
         Player p = (Player) event.getPlayer();
         GameMode gm = silentChestViewers.remove(uuid);
-        String blockKey = silentChestBlockKeys.remove(uuid);
+        Set<String> blockKeys = silentChestBlockKeys.remove(uuid);
 
         // No sync-back needed: with ProtocolLib we open the real inventory directly,
         // so all changes are already live. With the spectator fallback we also open
@@ -974,10 +990,15 @@ public class PlayerListener implements Listener {
         }
 
         // Delay removal so ProtocolLib still suppresses close animation + sound packets
-        // that fire AFTER InventoryCloseEvent
-        if (blockKey != null) {
-            final String key = blockKey;
-            plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentlyOpenedBlocks.remove(key), 3L);
+        // that fire AFTER InventoryCloseEvent. This has to be generous, not just a couple
+        // of ticks: the immediate close triggers one block_action broadcast, but vanilla's
+        // periodic per-tick opener-count recheck (ContainerOpenersCounter) independently
+        // re-broadcasts the same state change on a later tick too. Verified against a real
+        // server that a 3-tick window (the original value) reliably misses that second
+        // broadcast and leaks it; 60 ticks (3s) reliably covers it.
+        if (blockKeys != null) {
+            final Set<String> keys = blockKeys;
+            plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentlyOpenedBlocks.removeAll(keys), 60L);
         }
     }
 
