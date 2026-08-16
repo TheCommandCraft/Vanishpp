@@ -5,10 +5,18 @@ import java.util.*;
 /**
  * Categorizes all config keys for the ConfigGUI.
  * Each category maps to a set of editable config values with type and bounds.
+ *
+ * <p>Display names and per-setting descriptions are <b>not</b> stored here — an enum
+ * constant is instantiated exactly once for the life of the JVM, so any text baked into
+ * the constructor would never pick up a {@code /vconfig reload} and could even run
+ * before {@code LanguageManager} has loaded. Instead this class only holds the stable
+ * category/setting <i>keys</i>; {@link ConfigRenderer} resolves the live display text
+ * from {@code messages.yml} (under {@code gui.config.category.*} /
+ * {@code gui.config.setting-description.*}) fresh on every render.
  */
 public enum ConfigCategory {
 
-    GENERAL("General Settings", new String[]{
+    GENERAL(new String[]{
             "vanish-delay-ticks",
             "double-shift-window",
             "default-hide-commands",
@@ -16,32 +24,32 @@ public enum ConfigCategory {
             "action-bar-enabled"
     }),
 
-    VISIBILITY("Visibility & Rendering", new String[]{
+    VISIBILITY(new String[]{
             "vanish-gamemodes.scoreboard-team",
             "vanish-gamemodes.collision-rule",
             "vanish-gamemodes.name-tag-visibility"
     }),
 
-    SPECTATOR("Spectator Mode", new String[]{
+    SPECTATOR(new String[]{
             "spectator.follow-smooth-damping",
             "spectator.follow-speed-multiplier",
             "spectator.aggressive-follow-velocity",
             "spectator.los-detection-range"
     }),
 
-    STORAGE("Database & Storage", new String[]{
+    STORAGE(new String[]{
             "storage.type",
             "cross-server.enabled",
             "redis.host",
             "redis.port"
     }),
 
-    PERMISSIONS("Permission System", new String[]{
+    PERMISSIONS(new String[]{
             "permissions.layered-permissions-enabled",
             "permissions.default-permission-tier"
     }),
 
-    FEATURES("Features & Behavior", new String[]{
+    FEATURES(new String[]{
             "flight-control.enable-flight",
             "flight-control.unvanish-disable-fly",
             "prevent-sleeping",
@@ -50,15 +58,18 @@ public enum ConfigCategory {
             "integration-hook-tab-enabled"
     });
 
-    private final String displayName;
     private final String[] keys;
     private final Map<String, ConfigValue> settings;
 
-    ConfigCategory(String displayName, String[] keys) {
-        this.displayName = displayName;
+    ConfigCategory(String[] keys) {
         this.keys = keys;
         this.settings = new LinkedHashMap<>();
         initializeSettings();
+    }
+
+    /** Lowercase key used to look up this category's display name in messages.yml (gui.config.category.&lt;key&gt;). */
+    public String getCategoryKey() {
+        return name().toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -80,113 +91,61 @@ public enum ConfigCategory {
     private ConfigValue createConfigValue(String key) {
         return switch (key) {
             // GENERAL
-            case "vanish-delay-ticks" -> new ConfigValue("vanish-delay-ticks",
-                    ConfigType.NUMERIC, 0, 0, 200,
-                    "Delay (ticks) before vanish takes effect");
+            case "vanish-delay-ticks" -> new ConfigValue("vanish-delay-ticks", ConfigType.NUMERIC, 0, 0, 200);
 
-            case "double-shift-window" -> new ConfigValue("double-shift-window",
-                    ConfigType.NUMERIC, 150, 50, 1000,
-                    "Window (ms) for double-shift detection");
+            case "double-shift-window" -> new ConfigValue("double-shift-window", ConfigType.NUMERIC, 150, 50, 1000);
 
-            case "default-hide-commands" -> new ConfigValue("default-hide-commands",
-                    ConfigType.BOOLEAN, false, 0, 0,
-                    "Hide /vanish command from tab completion");
+            case "default-hide-commands" -> new ConfigValue("default-hide-commands", ConfigType.BOOLEAN, false, 0, 0);
 
-            case "vanish-message.enabled" -> new ConfigValue("vanish-message.enabled",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Send vanish/unvanish messages to staff");
+            case "vanish-message.enabled" -> new ConfigValue("vanish-message.enabled", ConfigType.BOOLEAN, true, 0, 0);
 
-            case "action-bar-enabled" -> new ConfigValue("action-bar-enabled",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Show action bar status while vanished");
+            case "action-bar-enabled" -> new ConfigValue("action-bar-enabled", ConfigType.BOOLEAN, true, 0, 0);
 
             // VISIBILITY
-            case "vanish-gamemodes.scoreboard-team" -> new ConfigValue("vanish-gamemodes.scoreboard-team",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Enable scoreboard team for nametag handling");
+            case "vanish-gamemodes.scoreboard-team" -> new ConfigValue("vanish-gamemodes.scoreboard-team", ConfigType.BOOLEAN, true, 0, 0);
 
-            case "vanish-gamemodes.collision-rule" -> new ConfigValue("vanish-gamemodes.collision-rule",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Apply collision rules to vanish team");
+            case "vanish-gamemodes.collision-rule" -> new ConfigValue("vanish-gamemodes.collision-rule", ConfigType.BOOLEAN, true, 0, 0);
 
-            case "vanish-gamemodes.name-tag-visibility" -> new ConfigValue("vanish-gamemodes.name-tag-visibility",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Hide nametags of vanished players");
+            case "vanish-gamemodes.name-tag-visibility" -> new ConfigValue("vanish-gamemodes.name-tag-visibility", ConfigType.BOOLEAN, true, 0, 0);
 
             // SPECTATOR
-            case "spectator.follow-smooth-damping" -> new ConfigValue("spectator.follow-smooth-damping",
-                    ConfigType.NUMERIC, 8, 1, 20,
-                    "Camera damping for smooth follow (higher = smoother)");
+            case "spectator.follow-smooth-damping" -> new ConfigValue("spectator.follow-smooth-damping", ConfigType.NUMERIC, 8, 1, 20);
 
-            case "spectator.follow-speed-multiplier" -> new ConfigValue("spectator.follow-speed-multiplier",
-                    ConfigType.NUMERIC, 100, 50, 300,
-                    "Follow speed multiplier (% of normal)");
+            case "spectator.follow-speed-multiplier" -> new ConfigValue("spectator.follow-speed-multiplier", ConfigType.NUMERIC, 100, 50, 300);
 
-            case "spectator.aggressive-follow-velocity" -> new ConfigValue("spectator.aggressive-follow-velocity",
-                    ConfigType.NUMERIC, 1, 0, 3,
-                    "Aggressive follow velocity (0=off, 3=max)");
+            case "spectator.aggressive-follow-velocity" -> new ConfigValue("spectator.aggressive-follow-velocity", ConfigType.NUMERIC, 1, 0, 3);
 
-            case "spectator.los-detection-range" -> new ConfigValue("spectator.los-detection-range",
-                    ConfigType.NUMERIC, 64, 16, 256,
-                    "Line-of-sight detection range (blocks)");
+            case "spectator.los-detection-range" -> new ConfigValue("spectator.los-detection-range", ConfigType.NUMERIC, 64, 16, 256);
 
             // STORAGE
-            case "storage.type" -> new ConfigValue("storage.type",
-                    ConfigType.STRING, "yaml", 0, 0,
-                    "Storage backend (yaml/mysql/postgresql/redis)");
+            case "storage.type" -> new ConfigValue("storage.type", ConfigType.STRING, "yaml", 0, 0);
 
-            case "cross-server.enabled" -> new ConfigValue("cross-server.enabled",
-                    ConfigType.BOOLEAN, false, 0, 0,
-                    "Enable cross-server vanish synchronization");
+            case "cross-server.enabled" -> new ConfigValue("cross-server.enabled", ConfigType.BOOLEAN, false, 0, 0);
 
-            case "redis.host" -> new ConfigValue("redis.host",
-                    ConfigType.STRING, "localhost", 0, 0,
-                    "Redis server hostname");
+            case "redis.host" -> new ConfigValue("redis.host", ConfigType.STRING, "localhost", 0, 0);
 
-            case "redis.port" -> new ConfigValue("redis.port",
-                    ConfigType.NUMERIC, 6379, 1, 65535,
-                    "Redis server port");
+            case "redis.port" -> new ConfigValue("redis.port", ConfigType.NUMERIC, 6379, 1, 65535);
 
             // PERMISSIONS
-            case "permissions.layered-permissions-enabled" -> new ConfigValue("permissions.layered-permissions-enabled",
-                    ConfigType.BOOLEAN, false, 0, 0,
-                    "Enable layered permission system");
+            case "permissions.layered-permissions-enabled" -> new ConfigValue("permissions.layered-permissions-enabled", ConfigType.BOOLEAN, false, 0, 0);
 
-            case "permissions.default-permission-tier" -> new ConfigValue("permissions.default-permission-tier",
-                    ConfigType.NUMERIC, 0, 0, 5,
-                    "Default permission tier for new players");
+            case "permissions.default-permission-tier" -> new ConfigValue("permissions.default-permission-tier", ConfigType.NUMERIC, 0, 0, 5);
 
             // FEATURES
-            case "flight-control.enable-flight" -> new ConfigValue("flight-control.enable-flight",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Grant flight to vanished players");
+            case "flight-control.enable-flight" -> new ConfigValue("flight-control.enable-flight", ConfigType.BOOLEAN, true, 0, 0);
 
-            case "flight-control.unvanish-disable-fly" -> new ConfigValue("flight-control.unvanish-disable-fly",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Disable flight on unvanish");
+            case "flight-control.unvanish-disable-fly" -> new ConfigValue("flight-control.unvanish-disable-fly", ConfigType.BOOLEAN, true, 0, 0);
 
-            case "prevent-sleeping" -> new ConfigValue("prevent-sleeping",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Prevent sleeping while vanished");
+            case "prevent-sleeping" -> new ConfigValue("prevent-sleeping", ConfigType.BOOLEAN, true, 0, 0);
 
-            case "prevent-eating" -> new ConfigValue("prevent-eating",
-                    ConfigType.BOOLEAN, false, 0, 0,
-                    "Prevent eating while vanished");
+            case "prevent-eating" -> new ConfigValue("prevent-eating", ConfigType.BOOLEAN, false, 0, 0);
 
-            case "tab-plugin-hook-enabled" -> new ConfigValue("tab-plugin-hook-enabled",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Hook TAB plugin for nametag hiding");
+            case "tab-plugin-hook-enabled" -> new ConfigValue("tab-plugin-hook-enabled", ConfigType.BOOLEAN, true, 0, 0);
 
-            case "integration-hook-tab-enabled" -> new ConfigValue("integration-hook-tab-enabled",
-                    ConfigType.BOOLEAN, true, 0, 0,
-                    "Enable TAB plugin integration");
+            case "integration-hook-tab-enabled" -> new ConfigValue("integration-hook-tab-enabled", ConfigType.BOOLEAN, true, 0, 0);
 
             default -> null;
         };
-    }
-
-    public String getDisplayName() {
-        return displayName;
     }
 
     public String[] getKeys() {
@@ -214,16 +173,14 @@ public enum ConfigCategory {
         public final Object defaultValue;
         public final int minBound;
         public final int maxBound;
-        public final String description;
 
         public ConfigValue(String key, ConfigType type, Object defaultValue,
-                          int minBound, int maxBound, String description) {
+                          int minBound, int maxBound) {
             this.key = key;
             this.type = type;
             this.defaultValue = defaultValue;
             this.minBound = minBound;
             this.maxBound = maxBound;
-            this.description = description;
         }
 
         @Override

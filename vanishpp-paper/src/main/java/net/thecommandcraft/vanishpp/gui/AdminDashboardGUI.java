@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class AdminDashboardGUI implements Listener {
 
-    private static final String TITLE = "§6Vanish++ Admin Dashboard";
     private static final int SIZE = 54;
 
     private final Vanishpp plugin;
@@ -40,7 +39,10 @@ public class AdminDashboardGUI implements Listener {
     }
 
     public void open(Player viewer) {
-        Inventory inv = Bukkit.createInventory(null, SIZE, Component.text(TITLE));
+        // Looked up fresh on every open (not cached in a static/constant) so a
+        // /vconfig reload picks up an edited messages.yml without a server restart.
+        String title = plugin.getLanguageManager().getMessage("gui.admin-dashboard.title");
+        Inventory inv = Bukkit.createInventory(null, SIZE, plugin.getMessageManager().parse(title, viewer));
         populateInventory(inv);
 
         // Info panel in last row
@@ -54,8 +56,10 @@ public class AdminDashboardGUI implements Listener {
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player viewer)) return;
+        // Identification relies solely on the viewer being tracked in openViewers — not
+        // on matching the inventory title text, since that title is now a live
+        // language-file lookup and could change mid-session across a /vconfig reload.
         if (!openViewers.contains(viewer.getUniqueId())) return;
-        if (!event.getView().title().toString().contains("Vanish++ Admin Dashboard")) return;
         event.setCancelled(true);
 
         ItemStack clicked = event.getCurrentItem();
@@ -128,14 +132,16 @@ public class AdminDashboardGUI implements Listener {
                 .decoration(TextDecoration.ITALIC, false));
 
         List<Component> lore = new ArrayList<>();
+        // The UUID marker line stays a raw, untranslated component — it's a hidden data
+        // carrier read back by onClick(), not user-facing text.
         lore.add(Component.text("§8UUID: " + p.getUniqueId()).decoration(TextDecoration.ITALIC, false));
-        lore.add(Component.text("Level: " + level, NamedTextColor.AQUA).decoration(TextDecoration.ITALIC, false));
-        lore.add(Component.text("Elapsed: " + elapsed, NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+        lore.add(guiLine("gui.admin-dashboard.level", "%level%", String.valueOf(level)));
+        lore.add(guiLine("gui.admin-dashboard.elapsed", "%elapsed%", elapsed));
         if (reason != null && !reason.isBlank())
-            lore.add(Component.text("Reason: " + reason, NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false));
+            lore.add(guiLine("gui.admin-dashboard.reason", "%reason%", reason));
         lore.add(Component.empty());
-        lore.add(Component.text("Left-click → Rules GUI", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
-        lore.add(Component.text("Right-click → Unvanish", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+        lore.add(guiLine("gui.admin-dashboard.hint-rules"));
+        lore.add(guiLine("gui.admin-dashboard.hint-unvanish"));
         meta.lore(lore);
         skull.setItemMeta(meta);
         return skull;
@@ -146,8 +152,7 @@ public class AdminDashboardGUI implements Listener {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             int count = plugin.getRawVanishedPlayers().size();
-            meta.displayName(Component.text("Vanished: " + count, NamedTextColor.YELLOW)
-                    .decoration(TextDecoration.ITALIC, false));
+            meta.displayName(guiLine("gui.admin-dashboard.vanished-count", "%count%", String.valueOf(count)));
             item.setItemMeta(meta);
         }
         return item;
@@ -157,11 +162,22 @@ public class AdminDashboardGUI implements Listener {
         ItemStack item = new ItemStack(Material.BARRIER);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text("Close", NamedTextColor.RED)
-                    .decoration(TextDecoration.ITALIC, false));
+            meta.displayName(guiLine("gui.admin-dashboard.close"));
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    /** Fresh language-file lookup, parsed through MessageManager, with default italics off. */
+    private Component guiLine(String key) {
+        return plugin.getMessageManager().parse(plugin.getLanguageManager().getMessage(key), null)
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    /** Same as {@link #guiLine(String)} but substitutes a single %token% placeholder first. */
+    private Component guiLine(String key, String token, String value) {
+        String raw = plugin.getLanguageManager().getMessage(key).replace(token, value);
+        return plugin.getMessageManager().parse(raw, null).decoration(TextDecoration.ITALIC, false);
     }
 
     private String getLoreValue(ItemMeta meta, String prefix) {

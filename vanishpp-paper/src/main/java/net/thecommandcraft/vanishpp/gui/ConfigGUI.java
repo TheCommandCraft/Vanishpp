@@ -1,7 +1,5 @@
 package net.thecommandcraft.vanishpp.gui;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
@@ -34,7 +32,7 @@ public class ConfigGUI implements Listener {
 
     public ConfigGUI(Vanishpp plugin) {
         this.plugin = plugin;
-        this.renderer = new ConfigRenderer();
+        this.renderer = new ConfigRenderer(plugin);
         this.playerCategory = new ConcurrentHashMap<>();
         this.playerPage = new ConcurrentHashMap<>();
         this.slotToKeyMapping = new ConcurrentHashMap<>();
@@ -48,7 +46,8 @@ public class ConfigGUI implements Listener {
      */
     public void open(Player player) {
         if (!player.hasPermission("vanishpp.config")) {
-            player.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
+            plugin.getMessageManager().sendMessage(player,
+                    plugin.getLanguageManager().getMessage("gui.config.no-permission"));
             return;
         }
 
@@ -248,12 +247,9 @@ public class ConfigGUI implements Listener {
      * Send action bar confirmation message for saved value.
      */
     private void sendSaveMessage(Player player, String key, String value) {
-        Component message = Component.text("✓ ", NamedTextColor.GREEN)
-                .append(Component.text(key, NamedTextColor.AQUA))
-                .append(Component.text(" → ", NamedTextColor.GRAY))
-                .append(Component.text(value, NamedTextColor.GREEN))
-                .decoration(TextDecoration.ITALIC, false);
-        player.sendActionBar(message);
+        String raw = plugin.getLanguageManager().getMessage("gui.config.setting.saved")
+                .replace("%key%", key).replace("%value%", value);
+        player.sendActionBar(plugin.getMessageManager().parse(raw, player).decoration(TextDecoration.ITALIC, false));
     }
 
     /**

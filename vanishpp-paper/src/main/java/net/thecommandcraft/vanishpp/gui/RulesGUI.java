@@ -33,8 +33,6 @@ import java.util.*;
  */
 public class RulesGUI implements Listener {
 
-    private static final String GUI_TITLE_PREFIX = "§6Rules: ";
-
     private final Vanishpp plugin;
     /** viewer UUID → target player UUID */
     private final Map<UUID, UUID> openGuis = new HashMap<>();
@@ -51,8 +49,12 @@ public class RulesGUI implements Listener {
     public void open(Player viewer, Player target) {
         List<String> rules = sortedRules();
         int size = ((rules.size() / 9) + 1) * 9;
-        Inventory inv = Bukkit.createInventory(null, Math.max(size, 9),
-                Component.text(GUI_TITLE_PREFIX + target.getName()));
+        // Looked up fresh on every open (not cached in a static/constant) so a
+        // /vconfig reload picks up an edited messages.yml without a server restart.
+        String titlePrefix = plugin.getLanguageManager().getMessage("gui.rules.title-prefix");
+        Component title = plugin.getMessageManager().parse(titlePrefix, viewer)
+                .append(Component.text(target.getName()));
+        Inventory inv = Bukkit.createInventory(null, Math.max(size, 9), title);
 
         for (int i = 0; i < rules.size(); i++) {
             inv.setItem(i, buildItem(target, rules.get(i)));
@@ -66,10 +68,10 @@ public class RulesGUI implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player viewer)) return;
         UUID viewerUuid = viewer.getUniqueId();
+        // Identification relies solely on the viewer being tracked in openGuis — not on
+        // matching the inventory title text, since that title is now a live language-file
+        // lookup and could change mid-session across a /vconfig reload.
         if (!openGuis.containsKey(viewerUuid)) return;
-
-        // Ensure this is the GUI we opened (title check)
-        if (!event.getView().title().toString().contains(GUI_TITLE_PREFIX)) return;
 
         event.setCancelled(true);
         ItemStack clicked = event.getCurrentItem();
@@ -113,11 +115,11 @@ public class RulesGUI implements Listener {
         if (meta != null) {
             meta.displayName(Component.text(rule, enabled ? NamedTextColor.GREEN : NamedTextColor.RED)
                     .decoration(TextDecoration.ITALIC, false));
+            String statusKey = enabled ? "gui.rules.status-enabled" : "gui.rules.status-disabled";
             meta.lore(List.of(
-                    Component.text(enabled ? "✔ ENABLED" : "✘ DISABLED",
-                            enabled ? NamedTextColor.GREEN : NamedTextColor.RED)
+                    plugin.getMessageManager().parse(plugin.getLanguageManager().getMessage(statusKey), null)
                             .decoration(TextDecoration.ITALIC, false),
-                    Component.text("Click to toggle", NamedTextColor.GRAY)
+                    plugin.getMessageManager().parse(plugin.getLanguageManager().getMessage("gui.rules.toggle-hint"), null)
                             .decoration(TextDecoration.ITALIC, false)
             ));
             item.setItemMeta(meta);

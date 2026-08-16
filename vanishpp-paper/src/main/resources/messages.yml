@@ -256,16 +256,19 @@ help:
   cmd-vreload: "Reload plugin configuration."
 
 # --- [ RULE PRESETS ] ---
-rules:
-  preset:
-    usage: "&cUsage: /vrules preset <save|load|list|delete> [name]"
-    saved: "&aRule preset &e%name% &asaved."
-    loaded: "&aRule preset &e%name% &aloaded."
-    deleted: "&aRule preset &e%name% &adeleted."
-    not-found: "&cNo preset named &e%name% &cfound."
-    none: "&7You have no saved rule presets."
-    list-header: "&6Your Rule Presets:"
-    list-entry: " &8• &e%name%"
+# NOTE: this used to be nested under a second top-level "rules:" key, which silently
+# shadowed the real "rules:" section above (YAML parses to a map — the second "rules:"
+# block overwrote the first, so rules.status-on/status-off/etc. resolved as missing
+# keys at runtime). Kept as its own top-level section to avoid the collision.
+rules-preset:
+  usage: "&cUsage: /vrules preset <save|load|list|delete> [name]"
+  saved: "&aRule preset &e%name% &asaved."
+  loaded: "&aRule preset &e%name% &aloaded."
+  deleted: "&aRule preset &e%name% &adeleted."
+  not-found: "&cNo preset named &e%name% &cfound."
+  none: "&7You have no saved rule presets."
+  list-header: "&6Your Rule Presets:"
+  list-entry: " &8• &e%name%"
 
 # --- [ BULK VANISH ] ---
 bulk:
@@ -303,3 +306,81 @@ changelog:
     - " &8• &cFixed&7: Folia scheduler illegal delay crash (reported in #11)"
     - " &8• &cFixed&7: Mass disconnect on unvanish (glow packet race + packet burst)"
   footer: "&7-------------------------------"
+
+# --- [ GUI TEXT ] ---
+# Externalizes all in-game GUI text (Rules GUI, Admin Dashboard, Config GUI) so it can
+# be translated/customized without recompiling — same as every other message in this
+# file. Reloads with /vconfig reload; a GUI already open when you reload keeps the text
+# it was opened with until closed and reopened.
+gui:
+  rules:
+    title-prefix: "&6Rules: "
+    status-enabled: "&a✔ ENABLED"
+    status-disabled: "&c✘ DISABLED"
+    toggle-hint: "&7Click to toggle"
+  admin-dashboard:
+    title: "&6Vanish++ Admin Dashboard"
+    level: "&bLevel: %level%"
+    elapsed: "&eElapsed: %elapsed%"
+    reason: "&fReason: %reason%"
+    hint-rules: "&7Left-click → Rules GUI"
+    hint-unvanish: "&cRight-click → Unvanish"
+    vanished-count: "&eVanished: %count%"
+    close: "&cClose"
+  config:
+    title-prefix: "&6Vanish++ Config — "
+    no-permission: "&cYou don't have permission to use this command."
+    nav:
+      previous: "&6◀ PREVIOUS"
+      next: "&6NEXT ▶"
+      page-info: "&ePage %page% / %total%"
+    setting:
+      current-prefix: "&fCurrent: "
+      value-true: "&aTRUE"
+      value-false: "&cFALSE"
+      click-to-toggle: "&eClick to toggle"
+      numeric-controls: "&7Left: -1  |  Right: +1"
+      numeric-controls-shift: "&7Shift: ±10"
+      range: "&6Range: %min% → %max%"
+      display-only: "&7Display only"
+      saved: "&a✓ &b%key% &7→ &a%value%"
+    category:
+      general: "General Settings"
+      visibility: "Visibility & Rendering"
+      spectator: "Spectator Mode"
+      storage: "Database & Storage"
+      permissions: "Permission System"
+      features: "Features & Behavior"
+    setting-description:
+      vanish-delay-ticks: "Delay (ticks) before vanish takes effect"
+      double-shift-window: "Window (ms) for double-shift detection"
+      default-hide-commands: "Hide /vanish command from tab completion"
+      vanish-message:
+        enabled: "Send vanish/unvanish messages to staff"
+      action-bar-enabled: "Show action bar status while vanished"
+      vanish-gamemodes:
+        scoreboard-team: "Enable scoreboard team for nametag handling"
+        collision-rule: "Apply collision rules to vanish team"
+        name-tag-visibility: "Hide nametags of vanished players"
+      spectator:
+        follow-smooth-damping: "Camera damping for smooth follow (higher = smoother)"
+        follow-speed-multiplier: "Follow speed multiplier (% of normal)"
+        aggressive-follow-velocity: "Aggressive follow velocity (0=off, 3=max)"
+        los-detection-range: "Line-of-sight detection range (blocks)"
+      storage:
+        type: "Storage backend (yaml/mysql/postgresql/redis)"
+      cross-server:
+        enabled: "Enable cross-server vanish synchronization"
+      redis:
+        host: "Redis server hostname"
+        port: "Redis server port"
+      permissions:
+        layered-permissions-enabled: "Enable layered permission system"
+        default-permission-tier: "Default permission tier for new players"
+      flight-control:
+        enable-flight: "Grant flight to vanished players"
+        unvanish-disable-fly: "Disable flight on unvanish"
+      prevent-sleeping: "Prevent sleeping while vanished"
+      prevent-eating: "Prevent eating while vanished"
+      tab-plugin-hook-enabled: "Hook TAB plugin for nametag hiding"
+      integration-hook-tab-enabled: "Enable TAB plugin integration"
