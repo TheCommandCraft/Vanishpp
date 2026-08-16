@@ -66,13 +66,19 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
         final String finalPlayerName = playerName;
         final int finalPage = Math.max(1, page);
 
+        // Bukkit.getPlayer() is main-thread-only (and Folia-unsafe off the region thread
+        // entirely) - resolve the online-player UUID here, synchronously, before
+        // dispatching to runAsync. Only the offline playerNameCache lookup (a plain
+        // ConcurrentHashMap read) is safe to do from the async block itself.
+        final UUID onlineUuid = finalPlayerName != null ? resolveOnlineUUID(finalPlayerName) : null;
+
         plugin.getVanishScheduler().runAsync(() -> {
             List<VanishHistoryEntry> entries;
             String header;
 
             if (finalPlayerName != null) {
-                // Find UUID by name (online first, then storage)
-                UUID targetUuid = resolveUUID(finalPlayerName);
+                UUID targetUuid = onlineUuid != null ? onlineUuid
+                        : plugin.playerNameCache.get(finalPlayerName.toLowerCase());
                 if (targetUuid == null) {
                     plugin.getVanishScheduler().runGlobal(() ->
                             plugin.getMessageManager().sendMessage(sender,
@@ -120,10 +126,10 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private UUID resolveUUID(String name) {
+    /** Main-thread-only - must be called before dispatching to an async task, never from one. */
+    private UUID resolveOnlineUUID(String name) {
         Player online = Bukkit.getPlayer(name);
-        if (online != null) return online.getUniqueId();
-        return plugin.playerNameCache.get(name.toLowerCase());
+        return online != null ? online.getUniqueId() : null;
     }
 
     @Override
