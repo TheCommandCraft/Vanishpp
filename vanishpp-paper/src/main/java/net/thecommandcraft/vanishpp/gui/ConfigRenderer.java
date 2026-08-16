@@ -41,7 +41,13 @@ public class ConfigRenderer {
     private static final int SETTINGS_START_ROW = 2;
     private static final int NAVIGATION_ROW = 5;
     private static final int SETTINGS_CONTENT_ROWS = 3;  // Rows 2, 3, 4
-    private static final int ITEMS_PER_PAGE = (SETTINGS_CONTENT_ROWS * 9) - INDENT_WRAPPING;
+    // Actual per-page rendering capacity: placeSettings() reserves INDENT_WRAPPING slots
+    // on EVERY wrapped row (not just once total), so each of the 3 rows only ever holds
+    // ITEMS_PER_ROW items — 3*7=21, not (3*9)-2=25 as this previously computed. Harmless
+    // while every category has <=21 settings (true today), but a category with 22-25
+    // settings would silently drop items past #21 off the end of the page with no error,
+    // and anything beyond 25 would misalign page boundaries entirely.
+    private static final int ITEMS_PER_PAGE = SETTINGS_CONTENT_ROWS * ITEMS_PER_ROW;
 
     private static final Material CATEGORY_ACTIVE = Material.YELLOW_STAINED_GLASS;
     private static final Material CATEGORY_INACTIVE = Material.BLUE_STAINED_GLASS;

@@ -351,36 +351,22 @@ gui:
       storage: "Database & Storage"
       permissions: "Permission System"
       features: "Features & Behavior"
+    # Keyed by the setting's real config.yml path (see ConfigCategory.java) - every key
+    # here must exactly match a key actually exposed by a ConfigCategory entry, or it'll
+    # never be looked up.
     setting-description:
-      vanish-delay-ticks: "Delay (ticks) before vanish takes effect"
-      double-shift-window: "Window (ms) for double-shift detection"
-      default-hide-commands: "Hide /vanish command from tab completion"
-      vanish-message:
-        enabled: "Send vanish/unvanish messages to staff"
-      action-bar-enabled: "Show action bar status while vanished"
+      vanish-appearance:
+        action-bar:
+          enabled: "Show a persistent action bar message while vanished"
       vanish-gamemodes:
-        scoreboard-team: "Enable scoreboard team for nametag handling"
-        collision-rule: "Apply collision rules to vanish team"
-        name-tag-visibility: "Hide nametags of vanished players"
-      spectator:
-        follow-smooth-damping: "Camera damping for smooth follow (higher = smoother)"
-        follow-speed-multiplier: "Follow speed multiplier (% of normal)"
-        aggressive-follow-velocity: "Aggressive follow velocity (0=off, 3=max)"
-        los-detection-range: "Line-of-sight detection range (blocks)"
-      storage:
-        type: "Storage backend (yaml/mysql/postgresql/redis)"
-      cross-server:
-        enabled: "Enable cross-server vanish synchronization"
-      redis:
-        host: "Redis server hostname"
-        port: "Redis server port"
+        enabled: "Master switch for the double-shift spectator quick-toggle"
+        default-spectator: "Automatically enter spectator mode on vanish"
       permissions:
-        layered-permissions-enabled: "Enable layered permission system"
-        default-permission-tier: "Default permission tier for new players"
+        default-vanish-level: "Vanish level granted to players by default"
+        default-see-level: "Minimum vanish level a player can see by default"
+        max-level: "Highest vanish/see level the permission system allows"
       flight-control:
-        enable-flight: "Grant flight to vanished players"
+        vanish-enable-fly: "Grant flight to vanished players"
         unvanish-disable-fly: "Disable flight on unvanish"
-      prevent-sleeping: "Prevent sleeping while vanished"
-      prevent-eating: "Prevent eating while vanished"
-      tab-plugin-hook-enabled: "Hook TAB plugin for nametag hiding"
-      integration-hook-tab-enabled: "Enable TAB plugin integration"
+      invisibility-features:
+        prevent-sleeping: "Prevent sleeping while vanished"
