@@ -37,6 +37,21 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
     public VanishFollowCommand(Vanishpp plugin) {
         this.plugin = plugin;
         Bukkit.getPluginManager().registerEvents(this, plugin);
+        // The follower's own PlayerMoveEvent (onMove below) only updates the overlay when
+        // the FOLLOWER moves — if the follower stands still while the target walks away,
+        // nothing re-synced them at all (the old cross-world-only check in
+        // updateFollowOverlay() never re-teleported within the same world). This periodic
+        // sweep drives the camera-follow independently of the follower's own movement.
+        plugin.getVanishScheduler().runTimerGlobal(this::followTick, 20L, 4L);
+    }
+
+    private void followTick() {
+        for (UUID followerUuid : new ArrayList<>(plugin.spectateFollowTargets.keySet())) {
+            Player follower = Bukkit.getPlayer(followerUuid);
+            if (follower == null) continue;
+            // Teleporting a player requires its owning region thread on Folia.
+            plugin.getVanishScheduler().runEntity(follower, () -> updateFollowOverlay(follower), null);
+        }
     }
 
     @Override
@@ -121,10 +136,11 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
             stopFollow(follower);
             return;
         }
-        // Teleport follower to target (spectator camera follows)
-        if (!follower.getWorld().equals(target.getWorld())) {
-            follower.teleportAsync(target.getLocation());
-        }
+        // Teleport follower to target (spectator camera follows). Re-teleporting every
+        // sweep - not just on a world change - is what actually keeps the camera glued to
+        // a moving target; a same-world-only distance check would still leave the
+        // follower behind for as long as the target keeps moving within one world.
+        follower.teleportAsync(target.getLocation());
         // Action bar overlay
         String overlay = String.format("§7Following: §e%s §8| §7XYZ: §f%.1f, %.1f, %.1f §8| §7HP: §c%.1f §8| §7%s",
                 target.getName(),
