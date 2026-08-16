@@ -2,28 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.8] - 2026-08-16
+## [1.1.9] - 2026-08-16
+
+### Added
+- **GUI text is now translatable:** All in-game GUI text (Rules GUI, Admin Dashboard, Config GUI) was previously hardcoded in Java and is now externalized to a new `gui:` section in `messages.yml`, the same file chat messages already use — admins/translators can edit it and run `/vreload` to see changes instantly, no recompiling or restart needed. Fixes GitHub issue #23.
 
 ### Fixed
 - **Silent chest animation leaked to observers on close, and double chests leaked entirely:** Two independent bugs in the silent-chest suppression system. (1) The delayed cleanup after closing a container only kept its block registered for 3 ticks, but vanilla's per-tick `ContainerOpenersCounter` recheck independently re-broadcasts the same open-count change on a later tick, arriving after the 3-tick window closed and leaking the close animation to nearby observers (sound suppression was unaffected — it's a separate packet type with no such duplicate rebroadcast). The window is now 60 ticks. (2) Double chests are two independent tile entities that each fire their own animation/sound packets, but only the clicked half's position was ever registered — the unclicked half's animation and sound always leaked, regardless of the close-timing fix. Both halves are now registered together. Verified against a real Purpur server with raw packet capture (issue #25).
+- **Paper 26.2 always logged "this version has NOT been tested with Vanish++" despite being a documented-supported version:** `isVersionSupported()` parsed `major`, `minor`, *and* `patch` unconditionally before checking anything, but Paper 26.2 (a patch-less release) reports its runtime version as `26.2.build.112` — a non-numeric third segment — so parsing `patch` threw `NumberFormatException` and the whole check fell through to "unsupported," even though `major == 26` alone should have been enough. Paper 26.1.2 wasn't affected only because it happens to have a numeric third segment (`26.1.2.build.4`). The existing unit tests missed this because they only tested idealized version strings (`"26.2"`, `"26.2.0"`) that never exercised this path — not the real, `.build.N`-suffixed strings `Bukkit.getBukkitVersion()` actually returns. `patch` is now only parsed when the `1.20.x` branch specifically needs it; `major == 26` and `1.21.x` return immediately without touching it. Verified against real Paper 26.2 and 26.1.2 servers (booted under the Java 25 runtime both now require). Addresses GitHub issue #22.
+- **`rules:` key collision in `messages.yml` silently broke `/vrules` messages:** The file had two separate top-level `rules:` sections (rule-command messages, and rule-preset messages) — YAML parses to a map, so the second silently overwrote the first, meaning `rules.status-on`/`status-off`/etc. resolved as "missing key" at runtime (visible as a `duplicate keys found: rules` warning in the server log). The rule-preset section is now `rules-preset:`.
 
-## [1.1.8] - 2026-07-30
+## [1.1.9] - 2026-08-15
+
+### Fixed
+- **Velocity proxy silently ignored MySQL/PostgreSQL storage config:** `VelocityConfigManager`'s storage accessors (`getDbHost`/`getDbPort`/`getDbName`/`getDbUser`/`getDbPass`/`getDbSsl`/`getPoolSize`) read `storage.*` instead of `storage.mysql.*`, so every DB connection field silently fell back to its hardcoded default (`localhost:3306`, db `vanishpp`, user `root`, no password, SSL off) regardless of what was actually configured — on Velocity only, Paper's `SqlStorage` already read the correct path. Verified against a real MariaDB + Velocity proxy setup. Fixes GitHub issue #21.
+
+## [1.1.9] - 2026-07-30
 
 ### Fixed
 - **Vanish chat filter discarded LuckPerms Chat / HoverChat formatting:** `applyVanishChatFilter()` (used both for the seer-only "vanished" chat relay and for the `/vanishchat confirm` bypass) unconditionally replaced the `AsyncChatEvent` renderer with a hardcoded `prefix + displayName + ": " + message`, throwing away any renderer already installed by a lower-priority chat formatter (prefixes/suffixes, hover text, click events). The renderer is now wrapped instead of replaced — VPP's `[VANISHED]` tag is prepended in front of whatever LuckPerms Chat, HoverChat, or any other formatter already produced.
 
-## [1.1.8] - 2026-07-26
+## [1.1.9] - 2026-07-26
 
 ### Fixed
 - **Client crash "Player is not on any team" on unvanish:** Non-staff clients never receive the packet that adds a vanished player to the internal `Vanishpp_Vanished` scoreboard team (it's scrubbed), but once the player unvanished they *did* receive the "Remove Members" packet for it — telling the client to remove an entry it never knew it had, crashing the client. `ProtocolLibManager` now unconditionally cancels both Add- and Remove-Members packets for that team for non-staff observers, regardless of the vanished player's current state at packet-send time.
 - **Mob target clearing violated Folia's region-threading model:** Both the one-shot clear-on-vanish pass (`applyVanishEffects`) and the every-tick combat safety net (`MobAiManager.sweepMobTargets`) called `Mob#setTarget`/`getPathfinder().stopPathfinding()` directly from the caller's thread instead of the mob's owning region thread, and `sweepMobTargets` called `Player#getNearbyEntities` the same way. On Folia this either throws or silently corrupts state depending on the entity's region. Both call sites now dispatch through `VanishScheduler#runEntity`, with mob mutations dispatched individually per-mob (a mob near a region boundary can be owned by a different region than the player that triggered the sweep). Thanks to @quiquelhappy (PR #19) for tracking down the crash and the initial fix.
 
-## [1.1.8] - 2026-07-14
+## [1.1.9] - 2026-07-14
 
 ### Changed
 - **Extended supported Minecraft version range to 1.20.6 — 26.2:** `checkPlatformCompatibility()` now accepts `1.20.x` builds with patch `>= 6` in addition to `1.21.x` and `26.x.x`, matching what the docs already (inaccurately) claimed. Test docker environment bumped from Paper 26.1.2 to Paper 26.2, which currently ships only on Paper's `experimental` release channel (`PAPER_CHANNEL: experimental` added to the Paper services).
 
-## [1.1.8] - 2026-07-11
+## [1.1.9] - 2026-07-11
 
 ### Fixed
 - **Vanished players could get stuck visible ("Vanished Uninvisable"):** The join-time self-heal added in the previous release only corrected the *unvanished-but-invisible* direction (`forceEnsureVisible`) — if a player's `setInvisible` flag was ever cleared while the vanished-set and DB still agreed they were vanished (stale state from an old plugin version, a crash, or a plugin conflict), `reconcileVanishState()` saw "consistent" state and did nothing. `resyncVanishEffects()` — the method meant to reapply state to an already-vanished player — also never called `player.setInvisible(true)`, so even a manual resync couldn't fix it. Both are now fixed: `resyncVanishEffects()` reasserts the invisible flag, and `reconcileVanishState()` calls it whenever DB and memory agree a player is still vanished, making the self-heal symmetric in both directions. Fixes GitHub issue #20.
@@ -31,21 +41,21 @@ All notable changes to this project will be documented in this file.
 ### Added
 - **12-hour clock scoreboard placeholders:** Added four new built-in scoreboard placeholders alongside the existing 24-hour `%time%`: `%time_12%` (`h:mm`, e.g. `9:41`), `%time_12_padded%` (`hh:mm`, e.g. `09:41`), `%time_12_ampm%` (`h:mm a`, e.g. `9:41 PM`), and `%time_12_ampm_padded%` (`hh:mm a`, e.g. `09:41 PM`). All four respect the same `timezone` and `timezone-offset-hours` settings in `scoreboards.yml` as `%time%`.
 
-## [1.1.8] - 2026-07-09
+## [1.1.9] - 2026-07-09
 
 ### Fixed
 - **Mobs Still Looking At Vanished Players (for real this time):** Cancelling `EntityTargetEvent` only prevents mobs from *attacking* a vanished player — it never touches the vanilla `LookAtPlayerGoal`, which turns a mob's head/body toward nearby players independently of the target field. Previous attempts (v1.1.4-1.1.8) to fix this via a custom Paper `MobGoals` injection were all reverted because of two bugs: (1) the replacement goal was registered at a priority that collided with vanilla attack goals — which also require the `LOOK` flag — blocking mobs from attacking anyone; (2) the replacement goal's `shouldActivate()` conditionally returned `false` when only vanished players were nearby, "leaking" the `LOOK` slot back to the vanilla goal it was supposed to replace. This rewrite (`VanishLookGoal`, injected by `MobAiManager`) fixes both: it's registered at a fixed low-precedence priority (`10`, below all vanilla attack goals) so it can never block combat, and its activation condition mirrors vanilla exactly (any player in range, vanished or not) — only the actual look target excludes vanished players, so the goal slot is never freed. Injection now covers newly spawned mobs, mobs streamed in on chunk load, and mobs already loaded before the plugin started, closing the "partial injection" gap that caused past leaks. **Known limitation:** Brain-based mobs (Villagers, Piglins, Wardens, etc.) use a separate AI system (Sensors/Memory) not covered by `MobGoals` and are not addressed by this fix. Requires Paper/Purpur/Folia (Spigot/Bukkit only get the combat-target fix, as before).
 - **Redundant mob target clear in `EntityTargetEvent` handler:** Removed a `mob.setTarget(null)`/`stopPathfinding()` call inside the cancelled event handler that had been fixed and reverted twice before (it fires a secondary `FORGOT_TARGET` event, putting `NearestAttackableTargetGoal` on cooldown and starving nearby non-vanished players of legitimate targeting). Cancelling the event alone is sufficient.
 - **Regression guards added:** Both historical mistakes above (the redundant `setTarget(null)` call, and a `GoalType`/priority collision with attack goals) have each been reintroduced multiple times across releases. Added two permanent unit tests (`EventListenerTest`) that fail loudly if either regresses again: `mobTargeting_cancelled_doesNotClearMobTargetField` and `vanishLookGoal_onlyClaimsLookGoalType` (also asserts `MobAiManager.LOOK_GOAL_PRIORITY` stays at/above vanilla's own priority).
 
-## [1.1.8] - 2026-07-08
+## [1.1.9] - 2026-07-08
 
 ### Added
 - **DB Downgrade Guard:** When a downgraded plugin version connects to a database previously written by a newer version, all DB writes are suspended immediately to prevent data corruption. Admins are alerted in-game every 30 seconds and on join (title + styled chat box). New command `/vdowngrade info` shows exactly what data is at stake (row counts per table); `/vdowngrade allow` lifts the write-suspend (risky); `/vdowngrade reset [confirm]` wipes all Vanish++ data and starts fresh. A `vpp_plugin_version` table tracks the highest version that has ever written to the DB.
 - **InvSee config toggle:** New `invisibility-features.invsee-shift-click` option (default `true`) lets admins disable the shift-right-click inventory inspection feature entirely. Addresses GitHub issue #20.
 - **Self-healing visibility on join:** Players who are not vanished now have their visibility forcibly reset on join (`setInvisible(false)`, `setVisibleByDefault(true)`, `showPlayer` for any observer that can't see them). This self-corrects stale invisible state caused by server crashes, plugin downgrades, or other unexpected shutdowns.
 
-## [1.1.8] - 2026-06-15
+## [1.1.9] - 2026-06-15
 
 ### Changed
 - **Scoreboard config (`scoreboards.yml`):** Added comments clarifying that the update timer only runs while at least one player has the scoreboard open (zero overhead otherwise), and an admin note at the bottom on how to toggle it with `/vsb`.
@@ -54,12 +64,12 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **InvSee++ Integration Broken:** The plugin name lookup used `"InvSee++"` but InvSee++ registers itself as `"InvSeePlusPlus"` — the soft-dependency never resolved and the integration check always fell through to the built-in fallback. Also corrected the permission nodes granted during a session (`invseeplusplus.invsee.view` / `invseeplusplus.invsee.edit` instead of the incorrect `invsee.inventory.see` / `invsee.inventory.edit`). Fixes GitHub issue #15.
 
-## [1.1.8] - 2026-06-14
+## [1.1.9] - 2026-06-14
 
 ### Fixed
 - **LPC/HoverChat Chat Leak:** Vanished players' chat messages were visible to all players when using chat plugins like LuckPerms Chat or HoverChat. The `AsyncChatEvent` handler was registered at `LOWEST` priority, allowing those plugins to process and broadcast the message before VPP could cancel it. Priority raised to `HIGH` so cancellation takes effect after third-party chat formatters run.
 
-## [1.1.8] - 2026-06-13
+## [1.1.9] - 2026-06-13
 
 ### Fixed
 - **WorldGuard Hook Fails on 7.0.12+:** Custom region flags (`vanishpp-deny-vanish`, `vanishpp-force-vanish`, `vanishpp-deny-unvanish`) are now registered in `JavaPlugin.onLoad()` instead of `onEnable()`. WorldGuard 7.0.12+ locks the flag registry before `onEnable()` runs, causing the previous "New flags cannot be registered at this time" error and disabling the WorldGuard integration entirely. Fixes GitHub issue #16.
@@ -68,6 +78,23 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Compile dependency WorldGuard:** `7.0.9` → `7.0.17`.
 - **Test docker environment:** Updated all servers from Minecraft 1.21.11 to **26.1.2** (Paper, Purpur, Folia, Spigot, Bukkit).
+
+## [1.1.9] - 2026-05-29
+
+### Added
+- **`/vconfig gui`:** A full in-game, category-based, paginated Config GUI (`ConfigGUI`/`ConfigRenderer`/`ConfigCategory`) for editing settings without touching YAML by hand — numerical controls with ±1/±10 buttons and min/max range enforcement, sound feedback, and multi-page navigation.
+
+### Changed
+- **Non-destructive config updates:** Config updates previously overwrote the whole file via `YamlConfiguration.save()`, stripping user comments and formatting. A new `ConfigUpdater` now injects only missing keys line-by-line, preserving everything else.
+- **Permission result caching:** High-frequency permission checks (especially `vanishpp.see`) during Tab list and action bar refreshes are now cached for 500ms, cutting down repetitive LuckPerms calls and verbose-log spam without hurting responsiveness.
+
+### Fixed
+- **F3+F4 gamemode switcher desynced:** ProtocolLib was blocking `ENTITY_STATUS` packets a player sent about themselves, breaking the client's own OP-status UI sync. Self-entity packets are now exempted from that filter.
+- **Night vision wiped on unvanish:** Unvanishing unconditionally removed all `NIGHT_VISION` effects, stripping ones granted by equipment, beacons, or other plugins. Replaced with a soft 1-tick expiry plus a two-tick armor unequip/re-equip cycle so equipment-based effects are correctly re-detected instead of destroyed.
+- **Flight auto-engaged unexpectedly on join:** Auto-vanish on join used to force `setFlying(true)` directly, taking players airborne the instant they spawned. Players are now just granted fly permission (`setAllowFlight(true)`) and take off with a normal double-jump.
+- **Hunger regen blocked entirely while vanished:** `FoodLevelChangeEvent` was cancelled unconditionally, preventing vanished players from ever regaining hunger/saturation from eating. Now only cancelled when hunger is decreasing.
+- **Container blocking ignored the `CAN_INTERACT` rule:** A regression from this same round of fixes briefly blocked *all* vanished players from opening any container (chests, barrels, shulkers, hoppers, dispensers, droppers) regardless of their rules. Container blocking now correctly only applies when `CAN_INTERACT` is off.
+- Several smaller bugs from this batch: `/vfollow` left the follower stuck in Spectator if the target disconnected; `/vfollow`/`/vspec` teleports weren't Folia-safe; `/vstats`/`/vhistory` broke on async offline-player lookups; `LuckPermsHook` could register duplicate calculators across `/vanishreload`; `/vincognito off` was ambiguous if a player was literally named "off"; `/vzone` showed radius values incorrectly.
 
 ---
 
