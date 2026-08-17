@@ -79,15 +79,21 @@ public class DowngradeCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("│  All DB writes are currently SUSPENDED.      │", NamedTextColor.WHITE));
         sender.sendMessage(Component.text("└─────────────────────────────────────────────┘", NamedTextColor.GOLD));
         sender.sendMessage(Component.text("")
-                .append(Component.text("[ Allow writes (risky) ]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+                .append(plugin.getMessageManager().parse(
+                        plugin.getConfigManager().getLanguageManager()
+                                .getMessage("downgrade.button-allow-writes"), null)
                         .clickEvent(ClickEvent.runCommand("/vdowngrade allow"))
-                        .hoverEvent(HoverEvent.showText(Component.text(
-                                "Lets the older plugin write to the DB.\nData may be corrupted.", NamedTextColor.RED))))
+                        .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                plugin.getConfigManager().getLanguageManager()
+                                        .getMessage("downgrade.button-allow-writes-hover"), null))))
                 .append(Component.text("  "))
-                .append(Component.text("[ Reset DB (fresh start) ]", NamedTextColor.RED, TextDecoration.BOLD)
+                .append(plugin.getMessageManager().parse(
+                        plugin.getConfigManager().getLanguageManager()
+                                .getMessage("downgrade.button-reset-db"), null)
                         .clickEvent(ClickEvent.runCommand("/vdowngrade reset"))
-                        .hoverEvent(HoverEvent.showText(Component.text(
-                                "Wipes all Vanish++ data from the DB\nand starts fresh.", NamedTextColor.GOLD)))));
+                        .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                plugin.getConfigManager().getLanguageManager()
+                                        .getMessage("downgrade.button-reset-db-hover"), null)))));
     }
 
     private void handleAllow(CommandSender sender, SqlStorage sql) {
@@ -96,9 +102,9 @@ public class DowngradeCommand implements CommandExecutor, TabCompleter {
         plugin.getLogger().severe("DOWNGRADE OVERRIDE: " + sender.getName()
                 + " allowed writes from " + plugin.getDescription().getVersion()
                 + " to DB previously written by " + plugin.downgradeFromVersion + ". Data may corrupt.");
-        sender.sendMessage(Component.text(
-                "DB writes resumed. The plugin is now running on a DB from a newer version. Proceed with caution.",
-                NamedTextColor.YELLOW));
+        sender.sendMessage(plugin.getMessageManager().parse(
+                plugin.getConfigManager().getLanguageManager()
+                        .getMessage("downgrade.writes-resumed"), null));
     }
 
     private void sendResetConfirmPrompt(CommandSender sender, SqlStorage sql) {
@@ -106,9 +112,13 @@ public class DowngradeCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("")
                 .append(Component.text("⚠ This will permanently delete all data shown above.", NamedTextColor.RED, TextDecoration.BOLD)));
         sender.sendMessage(Component.text("Click to confirm: ", NamedTextColor.WHITE)
-                .append(Component.text("[ WIPE DATABASE AND START FRESH ]", NamedTextColor.RED, TextDecoration.BOLD)
+                .append(plugin.getMessageManager().parse(
+                        plugin.getConfigManager().getLanguageManager()
+                                .getMessage("downgrade.button-wipe-db"), null)
                         .clickEvent(ClickEvent.runCommand("/vdowngrade reset confirm"))
-                        .hoverEvent(HoverEvent.showText(Component.text("This cannot be undone!", NamedTextColor.RED)))));
+                        .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                plugin.getConfigManager().getLanguageManager()
+                                        .getMessage("downgrade.button-wipe-db-hover"), null)))));
     }
 
     private void handleReset(CommandSender sender, SqlStorage sql) {

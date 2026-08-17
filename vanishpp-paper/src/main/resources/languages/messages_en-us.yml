@@ -104,6 +104,20 @@ warnings:
   button-disable-config-hover: "&7Sets %path% to false"
 
 # --- [ STAFF NOTIFICATIONS ] ---
+  button-apply-proxy: "&a&l[Apply to Proxy]"
+  button-apply-proxy-hover: "&7Push all %count% changed setting(s) to the proxy config\n&7and sync them to all connected servers"
+  button-dismiss: "&7[Dismiss]"
+  button-dismiss-hover: "&7Stop seeing this warning"
+  button-download-protocollib: "&b&l[ Download ProtocolLib ]"
+  button-download-protocollib-hover: "&7Opens the latest ProtocolLib release on GitHub"
+  button-disabled-features: "&e&l[Disabled Features ▶]"
+  button-disabled-features-hover: "&6&lFeatures disabled without this plugin:"
+  button-set-to: "&a&l[Set to %value%]"
+  button-set-to-hover: "&7Sets %path% to %value% and saves config"
+  button-reload: "&b&l[Reload]"
+  button-reload-hover: "&7Reload Vanish++ config after fixing"
+  button-install-plugin: "&a&l[Install Plugin]"
+  button-install-plugin-hover: "&7Open download page in browser"
 staff:
   silent-join: "&8[&7+&8] &7%player% has silently joined."
   silent-quit: "&8[&7-&8] &7%player% has silently left."
@@ -133,10 +147,18 @@ config:
   proxy-synced: "&aConfig change synced to proxy."
 
 # --- [ PLUGIN LIST ] ---
+  button-confirm-change: "&c&l[CONFIRM CHANGE]"
+  button-confirm-change-hover: "&7Click to confirm changing %path%"
+  button-hide-permanently: "&c&l[CLICK TO HIDE PERMANENTLY]"
+  button-hide-permanently-hover: "&7Stop seeing this message on join"
+  migration-title: "&6&l⚠ Vanish++ Config Migrated"
+  migration-line: "&eStructure updated to v%version%. Custom settings preserved."
 plugins:
   hidden-info: "&8Plugin list is filtered (Vanish++ hidden from non-staff)."
 
 # --- [ VANISHED LIST ] ---
+  button-disable-hiding: "&c&l[Disable hiding]"
+  button-disable-hiding-hover: "&7Makes Vanish++ visible in /plugins"
 list:
   no-vanished-online: "&eThere are no vanished players online."
   header: "&6Vanished Players (%count%):"
@@ -403,3 +425,12 @@ gui:
         unvanish-disable-fly: "Disable flight on unvanish"
       invisibility-features:
         prevent-sleeping: "Prevent sleeping while vanished"
+
+downgrade:
+  button-allow-writes: "&e&l[ Allow writes (risky) ]"
+  button-allow-writes-hover: "&cLets the older plugin write to the DB.\n&cData may be corrupted."
+  button-reset-db: "&c&l[ Reset DB (fresh start) ]"
+  button-reset-db-hover: "&6Wipes all Vanish++ data from the DB\n&6and starts fresh."
+  button-wipe-db: "&c&l[ WIPE DATABASE AND START FRESH ]"
+  button-wipe-db-hover: "&cThis cannot be undone!"
+  writes-resumed: "&eDB writes resumed. The plugin is now running on a DB from a newer version. Proceed with caution."

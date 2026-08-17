@@ -72,15 +72,15 @@ public class PluginHider implements Listener {
                 Component info = Component.text("ℹ ", NamedTextColor.GRAY)
                         .append(plugin.getMessageManager().parse(lm.getMessage("plugins.hidden-info"), player))
                         .append(Component.text(" "))
-                        .append(Component.text("[Disable hiding]", NamedTextColor.RED, TextDecoration.BOLD)
+                        .append(plugin.getMessageManager().parse(lm.getMessage("plugins.button-disable-hiding"), player)
                                 .clickEvent(ClickEvent.runCommand("/vack disable_hiding"))
-                                .hoverEvent(HoverEvent.showText(
-                                        Component.text("Makes Vanish++ visible in /plugins", NamedTextColor.GRAY))))
+                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                        lm.getMessage("plugins.button-disable-hiding-hover"), player))))
                         .append(Component.text("  "))
-                        .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                        .append(plugin.getMessageManager().parse(lm.getMessage("warnings.button-dismiss"), player)
                                 .clickEvent(ClickEvent.runCommand("/vack acknowledge_hiding"))
-                                .hoverEvent(HoverEvent.showText(
-                                        Component.text("Hide this message", NamedTextColor.GRAY))));
+                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                        lm.getMessage("warnings.button-dismiss-hover"), player))));
                 player.sendMessage(info);
             }
         }

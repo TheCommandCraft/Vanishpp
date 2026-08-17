@@ -145,18 +145,21 @@ public class ConfigManager {
             return;
 
         player.sendMessage(Component.text(" "));
-        player.sendMessage(Component.text("⚠ Vanish++ Config Migrated", NamedTextColor.GOLD, TextDecoration.BOLD));
-        player.sendMessage(
-                Component.text("Structure updated to v" + LATEST_CONFIG_VERSION + ". Custom settings preserved.",
-                        NamedTextColor.YELLOW));
+        player.sendMessage(plugin.getMessageManager().parse(
+                languageManager.getMessage("config.migration-title"), player));
+        player.sendMessage(plugin.getMessageManager().parse(
+                languageManager.getMessage("config.migration-line")
+                        .replace("%version%", String.valueOf(LATEST_CONFIG_VERSION)), player));
         for (String note : migrationNotes) {
             player.sendMessage(
                     Component.text(" • ", NamedTextColor.GOLD).append(Component.text(note, NamedTextColor.WHITE)));
         }
-        player.sendMessage(Component.text("[CLICK TO HIDE PERMANENTLY]", NamedTextColor.RED, TextDecoration.BOLD)
+        player.sendMessage(plugin.getMessageManager().parse(
+                languageManager.getMessage("config.button-hide-permanently"), player)
                 .clickEvent(ClickEvent.runCommand("/vack migration"))
                 .hoverEvent(
-                        HoverEvent.showText(Component.text("Stop seeing this message on join", NamedTextColor.GRAY))));
+                        HoverEvent.showText(plugin.getMessageManager().parse(
+                                languageManager.getMessage("config.button-hide-permanently-hover"), player))));
         player.sendMessage(Component.text(" "));
     }
 

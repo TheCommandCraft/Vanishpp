@@ -265,16 +265,19 @@ public class PlayerListener implements Listener {
                                         .append(Component.text(changed.toString(), NamedTextColor.WHITE)));
                         player.sendMessage(
                                 Component.text("   ")
-                                        .append(Component.text("[Apply to Proxy]", NamedTextColor.GREEN, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm.getMessage("warnings.button-apply-proxy"), player)
                                                 .clickEvent(ClickEvent.runCommand("/vack apply_proxy"))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Push all " + nonDefaults.size() + " changed setting(s) to the proxy config\n"
-                                                        + "and sync them to all connected servers", NamedTextColor.GRAY))))
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm.getMessage("warnings.button-apply-proxy-hover")
+                                                                .replace("%count%", String.valueOf(nonDefaults.size())),
+                                                        player))))
                                         .append(Component.text("  "))
-                                        .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm.getMessage("warnings.button-dismiss"), player)
                                                 .clickEvent(ClickEvent.runCommand("/vack proxy_config"))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Stop seeing this warning", NamedTextColor.GRAY)))));
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm.getMessage("warnings.button-dismiss-hover"), player)))));
                         player.sendMessage(Component.text(" "));
                     }
                 }
@@ -297,19 +300,22 @@ public class PlayerListener implements Listener {
                             plugin.getMessageManager().sendMessage(player, lm2.getMessage("warnings.box-bottom"));
                             player.sendMessage(
                                     Component.text("  ")
-                                    .append(Component.text("[ Download ProtocolLib ]",
-                                            NamedTextColor.AQUA, TextDecoration.BOLD)
+                                    .append(plugin.getMessageManager().parse(
+                                            lm2.getMessage("warnings.button-download-protocollib"), player)
                                             .clickEvent(ClickEvent.openUrl(w.installUrl))
-                                            .hoverEvent(HoverEvent.showText(Component.text(
-                                                    "Opens the latest ProtocolLib release on GitHub",
-                                                    NamedTextColor.GRAY))))
+                                            .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                    lm2.getMessage("warnings.button-download-protocollib-hover"),
+                                                    player))))
                                     .append(Component.text("  "))
-                                    .append(Component.text("[Disabled Features ▶]",
-                                            NamedTextColor.YELLOW, TextDecoration.BOLD)
+                                    .append(plugin.getMessageManager().parse(
+                                            lm2.getMessage("warnings.button-disabled-features"), player)
                                             .hoverEvent(HoverEvent.showText(
-                                                    Component.text("Features disabled without this plugin:\n",
-                                                            NamedTextColor.GOLD, TextDecoration.BOLD)
-                                                    .append(Component.text(w.featureList, NamedTextColor.WHITE))))));
+                                                    plugin.getMessageManager().parse(
+                                                            lm2.getMessage("warnings.button-disabled-features-hover"),
+                                                            player)
+                                                    .append(Component.text("\n")
+                                                            .append(Component.text(w.featureList,
+                                                                    NamedTextColor.WHITE)))))));
                             Title title = Title.title(
                                     plugin.getMessageManager().parse(
                                             lm2.getMessage("warnings.protocollib-missing-title"), player),
@@ -331,28 +337,31 @@ public class PlayerListener implements Listener {
                             if (w.configPath != null) {
                                 hasButtons = true;
                                 buttons = buttons
-                                        .append(Component.text("[Set to " + w.fixValue + "]",
-                                                NamedTextColor.GREEN, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm2.getMessage("warnings.button-set-to")
+                                                        .replace("%value%", w.fixValue), player)
                                                 .clickEvent(ClickEvent.runCommand(
                                                         "/vconfig " + w.configPath + " " + w.fixValue))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Sets " + w.configPath + " to " + w.fixValue
-                                                        + " and saves config", NamedTextColor.GRAY))))
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm2.getMessage("warnings.button-set-to-hover")
+                                                                .replace("%path%", w.configPath)
+                                                                .replace("%value%", w.fixValue), player))))
                                         .append(Component.text("  "))
-                                        .append(Component.text("[Reload]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm2.getMessage("warnings.button-reload"), player)
                                                 .clickEvent(ClickEvent.runCommand("/vreload"))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Reload Vanish++ config after fixing",
-                                                        NamedTextColor.GRAY))));
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm2.getMessage("warnings.button-reload-hover"), player))));
                             }
                             if (w.installUrl != null) {
                                 hasButtons = true;
                                 buttons = buttons
-                                        .append(Component.text("[Install Plugin]",
-                                                NamedTextColor.GREEN, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm2.getMessage("warnings.button-install-plugin"), player)
                                                 .clickEvent(ClickEvent.openUrl(w.installUrl))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Open download page in browser", NamedTextColor.GRAY))));
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm2.getMessage("warnings.button-install-plugin-hover"),
+                                                        player))));
                             }
                             if (hasButtons) {
                                 player.sendMessage(buttons);
@@ -1173,10 +1182,10 @@ public class PlayerListener implements Listener {
                             .hoverEvent(HoverEvent.showText(Component.text(
                                     "Download InvSee++ — full inventory access (Modrinth)", NamedTextColor.GRAY))))
                     .append(Component.text("  "))
-                    .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                    .append(plugin.getMessageManager().parse(lm.getMessage("warnings.button-dismiss"), viewer)
                             .clickEvent(ClickEvent.runCommand("/vack invsee_hint"))
-                            .hoverEvent(HoverEvent.showText(Component.text(
-                                    "Don't show this again", NamedTextColor.GRAY)))));
+                            .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                    lm.getMessage("warnings.button-dismiss-hover"), viewer)))));
             viewer.sendMessage(Component.text(" "));
         }
     }

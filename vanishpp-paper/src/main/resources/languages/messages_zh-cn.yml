@@ -104,6 +104,20 @@ warnings:
   button-disable-config-hover: "&7将 %path% 设置为 false"
 
 # --- [ 员工通知 ] ---
+  button-apply-proxy: "&a&l[应用到代理]"
+  button-apply-proxy-hover: "&7将全部 %count% 个更改的设置推送到代理配置\n&7并同步到所有连接的服务器"
+  button-dismiss: "&7[忽略]"
+  button-dismiss-hover: "&7不再显示此警告"
+  button-download-protocollib: "&b&l[ 下载 ProtocolLib ]"
+  button-download-protocollib-hover: "&7在 GitHub 打开最新 ProtocolLib 发布页"
+  button-disabled-features: "&e&l[已禁用的功能 ▶]"
+  button-disabled-features-hover: "&6&l未安装此插件时禁用的功能："
+  button-set-to: "&a&l[设置为 %value%]"
+  button-set-to-hover: "&7将 %path% 设置为 %value% 并保存配置"
+  button-reload: "&b&l[重载]"
+  button-reload-hover: "&7修复后重载 Vanish++ 配置"
+  button-install-plugin: "&a&l[安装插件]"
+  button-install-plugin-hover: "&7在浏览器中打开下载页面"
 staff:
   silent-join: "&8[&7+&8] &7%player% 已静默加入。"
   silent-quit: "&8[&7-&8] &7%player% 已静默离开。"
@@ -133,10 +147,18 @@ config:
   proxy-synced: "&a配置更改已同步到代理。"
 
 # --- [ 插件列表 ] ---
+  button-confirm-change: "&c&l[确认修改]"
+  button-confirm-change-hover: "&7点击确认修改 %path%"
+  button-hide-permanently: "&c&l[点击永久隐藏]"
+  button-hide-permanently-hover: "&7加入时不再显示此消息"
+  migration-title: "&6&l⚠ Vanish++ 配置已迁移"
+  migration-line: "&e配置结构已更新至 v%version%。自定义设置已保留。"
 plugins:
   hidden-info: "&8插件列表已被过滤（Vanish++ 对非员工隐藏）。"
 
 # --- [ 隐身列表 ] ---
+  button-disable-hiding: "&c&l[取消隐藏]"
+  button-disable-hiding-hover: "&7让 Vanish++ 在 /plugins 中可见"
 list:
   no-vanished-online: "&e当前没有玩家在线隐身。"
   header: "&6隐身玩家（%count%）："
@@ -400,3 +422,12 @@ gui:
         unvanish-disable-fly: "解除隐身时关闭飞行"
       invisibility-features:
         prevent-sleeping: "隐身时阻止睡觉"
+
+downgrade:
+  button-allow-writes: "&e&l[ 允许写入（有风险）]"
+  button-allow-writes-hover: "&c允许旧版插件写入数据库。\n&c数据可能损坏。"
+  button-reset-db: "&c&l[ 重置数据库（全新开始）]"
+  button-reset-db-hover: "&6清空数据库中所有 Vanish++ 数据\n&6并重新开始。"
+  button-wipe-db: "&c&l[ 清空数据库并重新开始 ]"
+  button-wipe-db-hover: "&c此操作无法撤销！"
+  writes-resumed: "&e数据库写入已恢复。插件当前运行在由更新版本写入的数据库上，请谨慎操作。"
