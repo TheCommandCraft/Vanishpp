@@ -7,6 +7,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -16,6 +17,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -32,9 +34,12 @@ public class AdminDashboardGUI implements Listener {
 
     private final Vanishpp plugin;
     private final Set<UUID> openViewers = new HashSet<>();
+    /** NBT key carrying the target player's UUID on each skull — invisible, unlike a lore line. */
+    private final NamespacedKey targetUuidKey;
 
     public AdminDashboardGUI(Vanishpp plugin) {
         this.plugin = plugin;
+        this.targetUuidKey = new NamespacedKey(plugin, "vpp_target_uuid");
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
@@ -75,8 +80,8 @@ public class AdminDashboardGUI implements Listener {
         ItemMeta meta = clicked.getItemMeta();
         if (meta == null || !meta.hasDisplayName()) return;
 
-        // Extract player name from lore (first lore line contains UUID as hidden key)
-        String uuidStr = getLoreValue(meta, "§8UUID: ");
+        // Extract target player UUID from invisible item NBT
+        String uuidStr = meta.getPersistentDataContainer().get(targetUuidKey, PersistentDataType.STRING);
         if (uuidStr == null) return;
         UUID targetUuid;
         try { targetUuid = UUID.fromString(uuidStr); }
@@ -139,9 +144,8 @@ public class AdminDashboardGUI implements Listener {
                 .decoration(TextDecoration.ITALIC, false));
 
         List<Component> lore = new ArrayList<>();
-        // The UUID marker line stays a raw, untranslated component — it's a hidden data
-        // carrier read back by onClick(), not user-facing text.
-        lore.add(Component.text("§8UUID: " + p.getUniqueId()).decoration(TextDecoration.ITALIC, false));
+        // Target UUID stored in invisible item NBT (read back by onClick) — not a lore line.
+        meta.getPersistentDataContainer().set(targetUuidKey, PersistentDataType.STRING, p.getUniqueId().toString());
         lore.add(guiLine("gui.admin-dashboard.level", "%level%", String.valueOf(level)));
         lore.add(guiLine("gui.admin-dashboard.elapsed", "%elapsed%", elapsed));
         if (reason != null && !reason.isBlank())
@@ -185,15 +189,5 @@ public class AdminDashboardGUI implements Listener {
     private Component guiLine(String key, String token, String value) {
         String raw = plugin.getLanguageManager().getMessage(key).replace(token, value);
         return plugin.getMessageManager().parse(raw, null).decoration(TextDecoration.ITALIC, false);
-    }
-
-    private String getLoreValue(ItemMeta meta, String prefix) {
-        if (!meta.hasLore() || meta.lore() == null) return null;
-        for (Component line : meta.lore()) {
-            String s = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
-                    .legacySection().serialize(line);
-            if (s.startsWith(prefix)) return s.substring(prefix.length()).trim();
-        }
-        return null;
     }
 }
