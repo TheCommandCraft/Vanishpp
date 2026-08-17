@@ -667,7 +667,9 @@ public class PlayerListener implements Listener {
                             blockType == Material.HOPPER ||
                             blockType == Material.DISPENSER ||
                             blockType == Material.DROPPER ||
-                            blockType.name().endsWith("SHULKER_BOX");
+                            blockType.name().endsWith("SHULKER_BOX") ||
+                            // Copper chests (all oxidation + waxed variants), 1.21+
+                            blockType.name().endsWith("COPPER_CHEST");
                     if (isContainer && !rules.getRule(p, RuleManager.CAN_INTERACT)) {
                         event.setCancelled(true);
                         event.setUseItemInHand(Event.Result.DENY);
@@ -895,7 +897,9 @@ public class PlayerListener implements Listener {
             return;
         Material type = block.getType();
         boolean isContainer = type == Material.CHEST || type == Material.TRAPPED_CHEST || type == Material.BARREL
-                || type.name().endsWith("SHULKER_BOX") || type == Material.ENDER_CHEST;
+                || type.name().endsWith("SHULKER_BOX") || type == Material.ENDER_CHEST
+                // Copper chests (all oxidation + waxed variants), 1.21+
+                || type.name().endsWith("COPPER_CHEST");
         if (!isContainer) return;
 
         event.setCancelled(true);
