@@ -142,6 +142,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         checkPlatformCompatibility(isFolia);
 
         // 1. Load Data/Config Managers
+        // Ensure bundled language files exist before ConfigManager/LanguageManager load.
+        extractLanguageFiles();
         this.configManager = new ConfigManager(this);
         configManager.load();
 
@@ -826,6 +828,42 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public YamlConfiguration getScoreboardConfig() {
         return scoreboardConfig;
+    }
+
+    /**
+     * Copies bundled language files from inside the JAR to the languages/ folder in the
+     * plugin data directory. Existing files are not overwritten, preserving any user
+     * customizations.
+     */
+    private void extractLanguageFiles() {
+        java.io.File langDir = new java.io.File(getDataFolder(), "languages");
+        if (!langDir.exists() && !langDir.mkdirs()) {
+            getLogger().warning("Failed to create languages directory.");
+            return;
+        }
+
+        String[] langFiles = {
+            "messages_en-us.yml", "messages_zh-cn.yml"
+        };
+
+        for (String fileName : langFiles) {
+            java.io.File target = new java.io.File(langDir, fileName);
+            if (target.exists()) {
+                continue; // do not overwrite existing files, preserving user customizations
+            }
+            try {
+                java.io.InputStream in = getResource("languages/" + fileName);
+                if (in == null) {
+                    getLogger().warning("Bundled language file not found: languages/" + fileName);
+                    continue;
+                }
+                java.nio.file.Files.copy(in, target.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                in.close();
+            } catch (java.io.IOException e) {
+                getLogger().warning("Failed to extract languages/" + fileName + ": " + e.getMessage());
+            }
+        }
     }
 
     private void registerCommand(String name, org.bukkit.command.CommandExecutor executor) {

@@ -94,6 +94,10 @@ public class ConfigManager {
         return languageManager;
     }
 
+    public String getLanguage() {
+        return language;
+    }
+
     public void load() {
         File configFile = new File(plugin.getDataFolder(), "config.yml");
         if (!configFile.exists())
@@ -157,6 +161,9 @@ public class ConfigManager {
     }
 
     private void loadValues() {
+        // Read the active language first so LanguageManager can pick the
+        // right messages_<lang>.yml file when it loads below.
+        language = config.getString("language", "en-us");
         languageManager.load();
 
         vanishMessage = languageManager.getMessage("vanish.self");

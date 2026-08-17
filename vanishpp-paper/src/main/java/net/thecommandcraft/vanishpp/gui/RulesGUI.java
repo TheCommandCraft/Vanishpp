@@ -109,13 +109,23 @@ public class RulesGUI implements Listener {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /** Returns the translated display name for a rule, falling back to the raw rule id. */
+    private String getRuleDisplayName(String rule) {
+        String msg = plugin.getLanguageManager().getMessage("gui.rules.names." + rule);
+        if (msg == null || msg.startsWith("<red>[Missing:")) {
+            return rule;
+        }
+        return msg;
+    }
+
     private ItemStack buildItem(Player target, String rule) {
         boolean enabled = plugin.getRuleManager().getRule(target, rule);
         Material mat = enabled ? Material.LIME_WOOL : Material.RED_WOOL;
         ItemStack item = new ItemStack(mat);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text(rule, enabled ? NamedTextColor.GREEN : NamedTextColor.RED)
+            meta.displayName(plugin.getMessageManager().parse(getRuleDisplayName(rule), null)
+                    .colorIfAbsent(enabled ? NamedTextColor.GREEN : NamedTextColor.RED)
                     .decoration(TextDecoration.ITALIC, false));
             // Rule id stored in invisible item NBT — the display name is translated, so it
             // can no longer be parsed back into a key, and a visible lore line would leak.

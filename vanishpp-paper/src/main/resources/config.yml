@@ -8,9 +8,16 @@
 # Configuration Version (Internal use for migrations)
 config-version: 9
 
+# --- [ LANGUAGE ] ---
+# Language file to load from the languages/ folder (messages_<code>.yml).
+# Bundled: en-us (default), zh-cn. Add your own language by dropping a
+# messages_<code>.yml file into the languages/ folder.
+language: "en-us"
+
 # --- [ MESSAGES ] ---
-# Most messages (including GUI text) have been moved to messages.yml, which you can
-# freely edit and translate — it's reloaded automatically with /vconfig reload.
+# Most messages (including GUI text) are loaded from the language file selected by
+# the "language" option above (languages/messages_<code>.yml), which you can freely
+# edit and translate — it's reloaded automatically with /vconfig reload.
 # You can still override specific system behaviors here.
 messages:
   # Fake Join/Quit (Visible to normal players to simulate staff leaving/joining)
