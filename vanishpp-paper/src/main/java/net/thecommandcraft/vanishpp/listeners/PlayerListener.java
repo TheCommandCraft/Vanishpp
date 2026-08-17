@@ -134,6 +134,12 @@ public class PlayerListener implements Listener {
                         plugin.getIntegrationManager().updateHooks(player, true);
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
+                        // Rebuild the scoreboard from scratch at these later points too:
+                        // a player restored as vanished via reconciliation (not just
+                        // auto-vanish) is equally exposed to TAB overwriting the sidebar
+                        // after join, so this covers every join-time vanish restore.
+                        if (plugin.getVanishScoreboard() != null)
+                            plugin.getVanishScoreboard().forceReshow(player);
                     }
                 }, delay);
             }
@@ -161,15 +167,26 @@ public class PlayerListener implements Listener {
             });
         }
 
-        // Auto-vanish on join: if player enabled this preference, vanish them now
-        // Only applies if they are not already vanished after reconciliation
-        if (!plugin.isVanished(player) && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")) {
+        // Auto-vanish on join: if player enabled this preference, vanish them now.
+        // Runs after join completes (async) — the same post-join moment that works
+        // reliably for the scoreboard, after TAB and other plugins have finished
+        // their join-time processing.
+        if (plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")) {
             plugin.getVanishScheduler().runAsync(() -> {
                 boolean autoVanish = plugin.getStorageProvider().getAutoVanishOnJoin(joinUuid);
                 if (autoVanish) {
                     plugin.getVanishScheduler().runGlobal(() -> {
-                        if (!player.isOnline() || plugin.isVanished(player)) return;
-                        plugin.vanishPlayerSilently(player);
+                        if (!player.isOnline()) return;
+                        if (plugin.isVanished(player)) {
+                            // Logged off while vanished — the DB restore path already
+                            // applied vanish effects at join, but another plugin
+                            // (e.g. TAB) may have overwritten the sidebar right after
+                            // join. Force-rebuild it at this later point in time.
+                            if (plugin.getVanishScoreboard() != null)
+                                plugin.getVanishScoreboard().forceReshow(player);
+                        } else {
+                            plugin.vanishPlayerSilently(player);
+                        }
                     });
                 }
             });
