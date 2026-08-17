@@ -134,6 +134,12 @@ public class PlayerListener implements Listener {
                         plugin.getIntegrationManager().updateHooks(player, true);
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
+                        // Rebuild the scoreboard from scratch at these later points too:
+                        // a player restored as vanished via reconciliation (not just
+                        // auto-vanish) is equally exposed to TAB overwriting the sidebar
+                        // after join, so this covers every join-time vanish restore.
+                        if (plugin.getVanishScoreboard() != null)
+                            plugin.getVanishScoreboard().forceReshow(player);
                     }
                 }, delay);
             }
