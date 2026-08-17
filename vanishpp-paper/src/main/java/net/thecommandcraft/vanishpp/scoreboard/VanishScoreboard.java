@@ -95,6 +95,22 @@ public class VanishScoreboard {
         if (wasEmpty) startTimerTask(); // first board opened — start the timer
     }
 
+    /**
+     * Force-rebuild this player's board from scratch: drops the tracked board and
+     * shows a brand-new one. Unlike merely re-setting the same Scoreboard object,
+     * this re-sends a full scoreboard so it replaces whatever another plugin
+     * (e.g. TAB via packet injection) put on the client after PlayerJoinEvent.
+     */
+    public void forceReshow(Player player) {
+        if (!plugin.getConfigManager().scoreboardEnabled) return;
+        if (!plugin.isVanished(player)) return;
+        if (manuallyHidden.contains(player.getUniqueId())) return;
+        if (!player.hasPermission("vanishpp.scoreboard")) return;
+        if (player.hasPermission("vanishpp.scoreboard.bypass")) return;
+        boards.remove(player.getUniqueId());
+        show(player);
+    }
+
     public void hide(Player player) {
         if (!boards.containsKey(player.getUniqueId())) return;
         boards.remove(player.getUniqueId());

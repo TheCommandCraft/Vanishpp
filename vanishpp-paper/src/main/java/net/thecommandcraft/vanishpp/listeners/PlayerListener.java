@@ -161,15 +161,26 @@ public class PlayerListener implements Listener {
             });
         }
 
-        // Auto-vanish on join: if player enabled this preference, vanish them now
-        // Only applies if they are not already vanished after reconciliation
-        if (!plugin.isVanished(player) && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")) {
+        // Auto-vanish on join: if player enabled this preference, vanish them now.
+        // Runs after join completes (async) — the same post-join moment that works
+        // reliably for the scoreboard, after TAB and other plugins have finished
+        // their join-time processing.
+        if (plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")) {
             plugin.getVanishScheduler().runAsync(() -> {
                 boolean autoVanish = plugin.getStorageProvider().getAutoVanishOnJoin(joinUuid);
                 if (autoVanish) {
                     plugin.getVanishScheduler().runGlobal(() -> {
-                        if (!player.isOnline() || plugin.isVanished(player)) return;
-                        plugin.vanishPlayerSilently(player);
+                        if (!player.isOnline()) return;
+                        if (plugin.isVanished(player)) {
+                            // Logged off while vanished — the DB restore path already
+                            // applied vanish effects at join, but another plugin
+                            // (e.g. TAB) may have overwritten the sidebar right after
+                            // join. Force-rebuild it at this later point in time.
+                            if (plugin.getVanishScoreboard() != null)
+                                plugin.getVanishScoreboard().forceReshow(player);
+                        } else {
+                            plugin.vanishPlayerSilently(player);
+                        }
                     });
                 }
             });
