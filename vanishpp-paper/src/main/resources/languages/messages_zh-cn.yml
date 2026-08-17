@@ -91,6 +91,17 @@ warnings:
   invsee-hint-line: "&7 内置模式下，盔甲、副手和合成槽位会被隐藏。"
   invsee-hint-sub: "&e 安装受支持的插件以获得完整的物品栏访问："
   invsee-hint-dismissed: "&7物品查看提示已关闭。"
+  # 规则/配置阻止消息下方的内联操作按钮
+  button-allow-1m: "&a&l[允许 1 分钟]"
+  button-allow-1m-hover: "&7启用「%rule%」60 秒"
+  button-allow-perm: "&b&l[永久允许]"
+  button-allow-perm-hover: "&7永久启用「%rule%」"
+  button-unvanish: "&e&l[解除隐身]"
+  button-unvanish-hover: "&7解除隐身以便%action%"
+  button-hide-notifs: "&7[隐藏通知]"
+  button-hide-notifs-hover: "&7关闭所有规则通知"
+  button-disable-config: "&a&l[在配置中禁用]"
+  button-disable-config-hover: "&7将 %path% 设置为 false"
 
 # --- [ 员工通知 ] ---
 staff:

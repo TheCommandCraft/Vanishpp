@@ -1054,18 +1054,22 @@ public class PlayerListener implements Listener {
         plugin.getMessageManager().sendMessage(p, message);
 
         // Interactive buttons: [Allow 1m], [Allow permanently], [Unvanish], [Hide notifications]
-        Component allow1m = Component.text("[Allow 1m]", NamedTextColor.GREEN, TextDecoration.BOLD)
+        Component allow1m = plugin.getMessageManager().parse(lm.getMessage("warnings.button-allow-1m"), p)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
-                .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' for 60 seconds", NamedTextColor.GRAY)));
-        Component allowPerm = Component.text("[Allow permanently]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-allow-1m-hover").replace("%rule%", ruleName), p)));
+        Component allowPerm = plugin.getMessageManager().parse(lm.getMessage("warnings.button-allow-perm"), p)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
-                .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' permanently", NamedTextColor.GRAY)));
-        Component unvanish = Component.text("[Unvanish]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-allow-perm-hover").replace("%rule%", ruleName), p)));
+        Component unvanish = plugin.getMessageManager().parse(lm.getMessage("warnings.button-unvanish"), p)
                 .clickEvent(ClickEvent.runCommand("/vanish"))
-                .hoverEvent(HoverEvent.showText(Component.text("Unvanish so you can " + actionName, NamedTextColor.GRAY)));
-        Component hideNotifs = Component.text("[Hide notifications]", NamedTextColor.GRAY)
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionName), p)));
+        Component hideNotifs = plugin.getMessageManager().parse(lm.getMessage("warnings.button-hide-notifs"), p)
                 .clickEvent(ClickEvent.runCommand("/vrules show_notifications false"))
-                .hoverEvent(HoverEvent.showText(Component.text("Disable all rule notifications", NamedTextColor.GRAY)));
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-hide-notifs-hover"), p)));
         p.sendMessage(allow1m.append(Component.text("  ")).append(allowPerm).append(Component.text("  "))
                 .append(unvanish).append(Component.text("  ")).append(hideNotifs));
     }
@@ -1088,14 +1092,15 @@ public class PlayerListener implements Listener {
                 .replace("%path%", configPath);
         plugin.getMessageManager().sendMessage(p, message);
 
-        Component unvanish = Component.text("[Unvanish]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+        Component unvanish = plugin.getMessageManager().parse(lm.getMessage("warnings.button-unvanish"), p)
                 .clickEvent(ClickEvent.runCommand("/vanish"))
-                .hoverEvent(HoverEvent.showText(Component.text("Unvanish so you can " + actionName, NamedTextColor.GRAY)));
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionName), p)));
         if (p.hasPermission("vanishpp.config")) {
-            Component changeBtn = Component.text("[Disable in config]", NamedTextColor.GREEN, TextDecoration.BOLD)
+            Component changeBtn = plugin.getMessageManager().parse(lm.getMessage("warnings.button-disable-config"), p)
                     .clickEvent(ClickEvent.runCommand("/vconfig " + configPath + " false"))
-                    .hoverEvent(HoverEvent.showText(
-                            Component.text("Sets " + configPath + " to false", NamedTextColor.GRAY)));
+                    .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                            lm.getMessage("warnings.button-disable-config-hover").replace("%path%", configPath), p)));
             p.sendMessage(changeBtn.append(Component.text("  ")).append(unvanish));
         } else {
             p.sendMessage(unvanish);

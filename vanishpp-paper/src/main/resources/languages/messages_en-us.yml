@@ -91,6 +91,17 @@ warnings:
   invsee-hint-line: "&7 Armor, offhand and crafting slots are hidden in built-in mode."
   invsee-hint-sub: "&e Install a supported plugin for full inventory access:"
   invsee-hint-dismissed: "&7Invsee hint dismissed."
+  # Inline action buttons shown under rule/config denial messages.
+  button-allow-1m: "&a&l[Allow 1m]"
+  button-allow-1m-hover: "&7Enable '%rule%' for 60 seconds"
+  button-allow-perm: "&b&l[Allow permanently]"
+  button-allow-perm-hover: "&7Enable '%rule%' permanently"
+  button-unvanish: "&e&l[Unvanish]"
+  button-unvanish-hover: "&7Unvanish so you can %action%"
+  button-hide-notifs: "&7[Hide notifications]"
+  button-hide-notifs-hover: "&7Disable all rule notifications"
+  button-disable-config: "&a&l[Disable in config]"
+  button-disable-config-hover: "&7Sets %path% to false"
 
 # --- [ STAFF NOTIFICATIONS ] ---
 staff:
