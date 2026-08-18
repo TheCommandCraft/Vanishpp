@@ -6,6 +6,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.*;
@@ -204,8 +205,8 @@ public class VanishScoreboard {
             if (team == null) continue;
 
             if (i < maxLines) {
-                String resolved = applyPlaceholders(player, lines.get(i));
-                team.prefix(parse(resolved));
+                Component resolved = applyPlaceholders(player, lines.get(i));
+                team.prefix(resolved);
                 team.suffix(Component.empty());
 
                 Score score = obj.getScore(entry);
@@ -278,8 +279,8 @@ public class VanishScoreboard {
     // Placeholders
     // -------------------------------------------------------------------------
 
-    private String applyPlaceholders(Player player, String text) {
-        if (!text.contains("%")) return text; // fast path
+    private Component applyPlaceholders(Player player, String text) {
+        if (!text.contains("%")) return parse(text); // fast path
 
         // --- Server stats (cheap) ---
         double tps = 20.0;
@@ -329,8 +330,9 @@ public class VanishScoreboard {
         else if (yaw < 292.5)                  direction = plugin.getLanguageManager().getMessage("scoreboards.direction-e");
         else                                    direction = plugin.getLanguageManager().getMessage("scoreboards.direction-se");
 
-        // --- Biome ---
-        String biome = titleCase(loc.getBlock().getBiome().name().replace("_", " "));
+        // --- Biome translation key (client-side translatable) ---
+        NamespacedKey biomeKey = loc.getBlock().getBiome().getKey();
+        String biomeTransKey = "biome." + biomeKey.getNamespace() + "." + biomeKey.getKey();
 
         // --- Gamemode ---
         String gm = switch (player.getGameMode()) {
@@ -346,13 +348,60 @@ public class VanishScoreboard {
         double armorVal = 0.0;
         try { armorVal = player.getAttribute(Attribute.GENERIC_ARMOR).getValue(); } catch (Exception ignored) {}
 
-        text = text
+        // --- Handle %biome% as a TranslatableComponent (client-side i18n) ---
+        if (text.contains("%biome%")) {
+            int idx = text.indexOf("%biome%");
+            String prefix = text.substring(0, idx);
+            String suffix = text.substring(idx + 7); // skip "%biome%"
+
+            prefix = applyStringReplacements(prefix, player, loc, direction, gm, maxHp, armorVal,
+                    tps, tpsColor, memUsed, memMax, now, timeFmt, dateFmt,
+                    time12Fmt, time12PaddedFmt, time12AmpmFmt, time12AmpmPaddedFmt);
+            suffix = applyStringReplacements(suffix, player, loc, direction, gm, maxHp, armorVal,
+                    tps, tpsColor, memUsed, memMax, now, timeFmt, dateFmt,
+                    time12Fmt, time12PaddedFmt, time12AmpmFmt, time12AmpmPaddedFmt);
+
+            // PlaceholderAPI on both parts
+            try {
+                if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
+                    prefix = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, prefix);
+                    suffix = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, suffix);
+                }
+            } catch (Throwable ignored) {}
+
+            return parse(prefix)
+                    .append(net.kyori.adventure.text.Component.translatable(biomeTransKey))
+                    .append(parse(suffix));
+        }
+
+        // --- No %biome%: normal string replacement path ---
+        text = applyStringReplacements(text, player, loc, direction, gm, maxHp, armorVal,
+                tps, tpsColor, memUsed, memMax, now, timeFmt, dateFmt,
+                time12Fmt, time12PaddedFmt, time12AmpmFmt, time12AmpmPaddedFmt);
+
+        try {
+            if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null)
+                text = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, text);
+        } catch (Throwable ignored) {}
+
+        return parse(text);
+    }
+
+    /**
+     * Apply all standard string replacements (except %biome%, handled separately).
+     */
+    private String applyStringReplacements(String text, Player player, org.bukkit.Location loc,
+            String direction, String gm, double maxHp, double armorVal,
+            double tps, String tpsColor, long memUsed, long memMax,
+            Date now, SimpleDateFormat timeFmt, SimpleDateFormat dateFmt,
+            SimpleDateFormat time12Fmt, SimpleDateFormat time12PaddedFmt,
+            SimpleDateFormat time12AmpmFmt, SimpleDateFormat time12AmpmPaddedFmt) {
+        return text
             // Coords & movement
             .replace("%x%",          String.valueOf(loc.getBlockX()))
             .replace("%y%",          String.valueOf(loc.getBlockY()))
             .replace("%z%",          String.valueOf(loc.getBlockZ()))
             .replace("%direction%",  direction)
-            .replace("%biome%",      biome)
             // Player info
             .replace("%player%",     player.getName())
             .replace("%displayname%", PlainTextComponentSerializer.plainText().serialize(player.displayName()))
@@ -382,24 +431,7 @@ public class VanishScoreboard {
             .replace("%time_12_padded%",       time12PaddedFmt.format(now))
             .replace("%time_12_ampm%",         time12AmpmFmt.format(now))
             .replace("%time_12_ampm_padded%",  time12AmpmPaddedFmt.format(now));
-
-        try {
-            if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null)
-                text = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, text);
-        } catch (Throwable ignored) {}
-
-        return text;
     }
 
-    private static String titleCase(String s) {
-        if (s == null || s.isEmpty()) return s;
-        StringBuilder out = new StringBuilder();
-        for (String word : s.split(" ")) {
-            if (!word.isEmpty())
-                out.append(Character.toUpperCase(word.charAt(0)))
-                   .append(word.substring(1).toLowerCase())
-                   .append(' ');
-        }
-        return out.toString().trim();
-    }
 }
+>>>>>>> cd1d495 (feat: biome shown via TranslatableComponent (client-side i18n))
