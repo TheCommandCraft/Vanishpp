@@ -88,7 +88,7 @@ public class RulesGUI implements Listener {
         Player target = Bukkit.getPlayer(targetUuid);
         if (target == null) { viewer.closeInventory(); return; }
 
-// Rule id read from invisible item NBT — the display name is now a translated
+        // Rule id read from invisible item NBT — the display name is now a translated
         // string and can no longer be parsed back into a rule key.
         String ruleName = meta.getPersistentDataContainer().get(ruleKey, PersistentDataType.STRING);
         if (ruleName == null || !plugin.getRuleManager().getAvailableRules().contains(ruleName)) return;
@@ -108,15 +108,6 @@ public class RulesGUI implements Listener {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    /** Returns the translated display name for a rule, falling back to the raw rule id. */
-    private String getRuleDisplayName(String rule) {
-        String msg = plugin.getLanguageManager().getMessage("gui.rules.names." + rule);
-        if (msg == null || msg.startsWith("<red>[Missing:")) {
-            return rule;
-        }
-        return msg;
-    }
 
     private ItemStack buildItem(Player target, String rule) {
         boolean enabled = plugin.getRuleManager().getRule(target, rule);
@@ -140,6 +131,15 @@ public class RulesGUI implements Listener {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    /** Translated rule display name from the language file, falling back to the raw rule key. */
+    private String getRuleDisplayName(String rule) {
+        String msg = plugin.getLanguageManager().getMessage("gui.rules.names." + rule);
+        if (msg == null || msg.startsWith("<red>[Missing:")) {
+            return rule;
+        }
+        return msg;
     }
 
     private List<String> sortedRules() {

@@ -31,6 +31,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -117,7 +121,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        // 0. Folia Detection
+        // 0. Extract language files (ensure external language files exist before loading config)
+        extractLanguageFiles();
+
+        // 0b. Folia Detection
         // Primary: server name — Paper 1.21+ added RegionScheduler to its API so class-presence
         // is no longer a reliable Folia indicator.
         boolean isFolia = "Folia".equalsIgnoreCase(Bukkit.getName());
@@ -138,12 +145,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
             getLogger().info("Standard Bukkit/Paper environment detected. Using Legacy Scheduler.");
         }
 
-        // 0b. Platform & Version Compatibility Checks (console only)
+        // 0c. Platform & Version Compatibility Checks (console only)
         checkPlatformCompatibility(isFolia);
 
         // 1. Load Data/Config Managers
-        // Ensure bundled language files exist before ConfigManager/LanguageManager load.
-        extractLanguageFiles();
         this.configManager = new ConfigManager(this);
         configManager.load();
 
@@ -316,6 +321,45 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getLogger().info("Vanish++ " + getDescription().getVersion() + " enabled.");
     }
 
+    /**
+     * Copies language files from inside the JAR to the languages/ folder in the
+     * plugin data directory. Existing files are not overwritten, preserving any
+     * user customizations.
+     */
+    private void extractLanguageFiles() {
+        File langDir = new File(getDataFolder(), "languages");
+        if (!langDir.exists()) {
+            if (!langDir.mkdirs()) {
+                getLogger().warning("Failed to create languages directory.");
+                return;
+            }
+        }
+
+        // GUI text is integrated into the messages files; only extract messages
+        // and the separate scoreboards files.
+        String[] langFiles = {
+            "messages_en-us.yml", "messages_zh-cn.yml",
+            "scoreboards_en-us.yml", "scoreboards_zh-cn.yml"
+        };
+
+        for (String fileName : langFiles) {
+            File target = new File(langDir, fileName);
+            if (target.exists()) {
+                continue; // do not overwrite existing files, preserving user customizations
+            }
+            try (InputStream in = getResource("languages/" + fileName)) {
+                if (in == null) {
+                    getLogger().warning("Missing language file in JAR: " + fileName);
+                    continue;
+                }
+                Files.copy(in, target.toPath());
+                getLogger().info("Extracted language file: " + fileName);
+            } catch (IOException e) {
+                getLogger().warning("Failed to extract language file " + fileName + ": " + e.getMessage());
+            }
+        }
+    }
+
     private void checkPlatformCompatibility(boolean isFolia) {
         // --- Platform check ---
         String serverName = Bukkit.getName(); // "Paper", "Purpur", "Folia", "CraftBukkit", "Spigot", etc.
@@ -438,6 +482,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 resyncVanishEffects(p);
             }
         }
+
+        // Language may have changed on reload — rebuild live bossbars so
+        // already-vanished players see the new title without re-vanishing.
+        if (vanishBossbar != null) vanishBossbar.refreshAll();
     }
 
     @Override
@@ -828,42 +876,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public YamlConfiguration getScoreboardConfig() {
         return scoreboardConfig;
-    }
-
-    /**
-     * Copies bundled language files from inside the JAR to the languages/ folder in the
-     * plugin data directory. Existing files are not overwritten, preserving any user
-     * customizations.
-     */
-    private void extractLanguageFiles() {
-        java.io.File langDir = new java.io.File(getDataFolder(), "languages");
-        if (!langDir.exists() && !langDir.mkdirs()) {
-            getLogger().warning("Failed to create languages directory.");
-            return;
-        }
-
-        String[] langFiles = {
-            "messages_en-us.yml", "messages_zh-cn.yml"
-        };
-
-        for (String fileName : langFiles) {
-            java.io.File target = new java.io.File(langDir, fileName);
-            if (target.exists()) {
-                continue; // do not overwrite existing files, preserving user customizations
-            }
-            try {
-                java.io.InputStream in = getResource("languages/" + fileName);
-                if (in == null) {
-                    getLogger().warning("Bundled language file not found: languages/" + fileName);
-                    continue;
-                }
-                java.nio.file.Files.copy(in, target.toPath(),
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                in.close();
-            } catch (java.io.IOException e) {
-                getLogger().warning("Failed to extract languages/" + fileName + ": " + e.getMessage());
-            }
-        }
     }
 
     private void registerCommand(String name, org.bukkit.command.CommandExecutor executor) {

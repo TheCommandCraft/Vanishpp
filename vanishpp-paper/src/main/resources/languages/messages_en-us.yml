@@ -30,7 +30,7 @@ vperms:
 update:
   available: "&a&lVanish++ Update Available!"
   current: "&7Current: &c%version%"
-  latest: "&7Latest: &a%version% &8[&e%type%&8]"
+  latest: "&7Latest: &a%version%"
   download: "&6&l[CLICK TO DOWNLOAD]"
   hover: "&eGo to Modrinth Version %version%"
   hide-beta: "&8[&7Don't notify me about beta builds&8]"
@@ -38,25 +38,11 @@ update:
   hide-alpha: "&8[&7Don't notify me about alpha builds&8]"
   hide-alpha-hover: "&7Click to stop receiving alpha update notifications.\n&8Runs: /vconfig update-checker.show-alpha false"
   proxy-available: "&a&lVanish++ Proxy Update Available!"
-  proxy-note: "&7The Velocity proxy is running an outdated Vanish++ version."
-  proxy-current: "&7Proxy current: &c%version%"
-  proxy-latest: "&7Proxy latest: &a%version%"
+  proxy-note: "&7An update is available on the proxy."
+  proxy-current: "&7Current: &c%version%"
+  proxy-latest: "&7Latest: &a%version%"
   proxy-download: "&6&l[CLICK TO DOWNLOAD]"
-  proxy-hover: "&eGo to the download page for version %version%"
-
-# --- [ RULES COMMAND ] ---
-rules:
-  usage: "&cUsage: /vrules [player] <rule> [true|false] [seconds] &7— omit seconds for permanent"
-  invalid-name: "&cInvalid rule name. Use /vrules to see available rules."
-  invalid-value: "&cValue must be 'true' or 'false'."
-  invalid-seconds: "&cInvalid number of seconds."
-  header: "&6Rules for %player%:"
-  line: " • %rule%: <%color%>%status%"
-  status-on: "ENABLED"
-  status-off: "DISABLED"
-  set: "&aRule '%rule%' for %player% set to %status%."
-  set-temp: "&aRule '%rule%' for %player% set to %status% for %seconds%s."
-  expired: "&eTemporary rule '%rule%' has expired."
+  proxy-hover: "&eGo to Modrinth Version %version%"
 
 # --- [ CHAT ] ---
 chat:
@@ -64,6 +50,7 @@ chat:
   sent: "&aMessage sent."
   no-pending: "&cYou have no pending chat messages to confirm."
   usage: "&7Usage: &b/vchat confirm &7— send your pending vanish chat message."
+  players-only: "&cOnly players can use this command."
 
 # --- [ PICKUP ] ---
 pickup:
@@ -156,8 +143,9 @@ config:
   proxy-mismatch-line2: "The following settings are out of sync:"
   proxy-mismatch-line3: "Apply them to the proxy or dismiss this warning."
   proxy-applied: "&aApplied %count% config setting(s) to the proxy."
-  proxy-not-connected: "&cNot connected to a Vanish++ proxy. Cannot sync config."
-  proxy-nothing-to-sync: "&eNo config changes to sync to the proxy."
+  proxy-not-connected: "&cNot connected to the proxy."
+  proxy-nothing-to-sync: "&cNothing to sync with the proxy."
+  gui-only-players: "&cOnly players can use the config GUI."
   proxy-synced: "&aConfig change synced to proxy."
 
 # --- [ PLUGIN LIST ] ---
@@ -312,19 +300,18 @@ help:
   cmd-vreload: "Reload plugin configuration."
 
 # --- [ RULE PRESETS ] ---
-# NOTE: this used to be nested under a second top-level "rules:" key, which silently
-# shadowed the real "rules:" section above (YAML parses to a map — the second "rules:"
-# block overwrote the first, so rules.status-on/status-off/etc. resolved as missing
-# keys at runtime). Kept as its own top-level section to avoid the collision.
-rules-preset:
-  usage: "&cUsage: /vrules preset <save|load|list|delete> [name]"
-  saved: "&aRule preset &e%name% &asaved."
-  loaded: "&aRule preset &e%name% &aloaded."
-  deleted: "&aRule preset &e%name% &adeleted."
-  not-found: "&cNo preset named &e%name% &cfound."
-  none: "&7You have no saved rule presets."
-  list-header: "&6Your Rule Presets:"
-  list-entry: " &8• &e%name%"
+rules:
+  usage: "&cUsage: /vrules [player] <rule> [true|false] [seconds] &7— omit seconds for permanent"
+  invalid-name: "&cInvalid rule name. Use /vrules to see available rules."
+  invalid-value: "&cValue must be 'true' or 'false'."
+  invalid-seconds: "&cInvalid number of seconds."
+  header: "&6Rules for %player%:"
+  line: " • %rule%: <%color%>%status%"
+  status-on: "ENABLED"
+  status-off: "DISABLED"
+  set: "&aRule '%rule%' for %player% set to %status%."
+  set-temp: "&aRule '%rule%' for %player% set to %status% for %seconds%s."
+  expired: "&eTemporary rule '%rule%' has expired."
 
 # --- [ BULK VANISH ] ---
 bulk:
@@ -334,6 +321,7 @@ bulk:
 # --- [ CHANGELOG ] ---
 changelog:
   header: "\n&6&l  Vanish++ 1.1.8 Changelog  "
+  no-entries: "&7No changelog entries found."
   entries:
     - " &8• &eNew&7: /vspec quick-spectate command"
     - " &8• &eNew&7: /vfollow player tracking with HUD"
@@ -363,11 +351,19 @@ changelog:
     - " &8• &cFixed&7: Mass disconnect on unvanish (glow packet race + packet burst)"
   footer: "&7-------------------------------"
 
+# --- [ RULE PRESETS ] ---
+rules-preset:
+  usage: "&cUsage: /vrules preset <save|load|list|delete> [name]"
+  saved: "&aRule preset &e%name% &asaved."
+  loaded: "&aRule preset &e%name% &aloaded."
+  deleted: "&aRule preset &e%name% &adeleted."
+  not-found: "&cNo preset named &e%name% &cfound."
+  none: "&7You have no saved rule presets."
+  list-header: "&6Your Rule Presets:"
+  list-entry: " &8• &e%name%"
+
 # --- [ GUI TEXT ] ---
-# Externalizes all in-game GUI text (Rules GUI, Admin Dashboard, Config GUI) so it can
-# be translated/customized without recompiling — same as every other message in this
-# file. Reloads with /vconfig reload; a GUI already open when you reload keeps the text
-# it was opened with until closed and reopened.
+# GUI labels are looked up live from this file (shared with chat/command messages).
 gui:
   rules:
     title-prefix: "&6Rules: "
@@ -420,9 +416,6 @@ gui:
       storage: "Database & Storage"
       permissions: "Permission System"
       features: "Features & Behavior"
-    # Keyed by the setting's real config.yml path (see ConfigCategory.java) - every key
-    # here must exactly match a key actually exposed by a ConfigCategory entry, or it'll
-    # never be looked up.
     setting-description:
       vanish-appearance:
         action-bar:
@@ -439,6 +432,15 @@ gui:
         unvanish-disable-fly: "Disable flight on unvanish"
       invisibility-features:
         prevent-sleeping: "Prevent sleeping while vanished"
+
+# --- [ VANISH APPEARANCE (multilingual overrides) ] ---
+# Used when the config.yml value is left at its built-in default.
+vanish-appearance:
+  tab-prefix: "&7[VANISHED] "
+
+# --- [ BOSSBAR (multilingual overrides) ] ---
+bossbar:
+  title: "&7[Vanished]"
 
 downgrade:
   button-allow-writes: "&e&l[ Allow writes (risky) ]"

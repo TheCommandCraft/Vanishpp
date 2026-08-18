@@ -81,7 +81,8 @@ public class VanishScoreboard {
         ScoreboardManager sm = Bukkit.getScoreboardManager();
         Scoreboard sb = sm.getNewScoreboard();
 
-        String title = plugin.getScoreboardConfig().getString("title", "&8[ &7Vanish&f++ &8]");
+        // Read the title from the language file
+        String title = plugin.getLanguageManager().getMessage("scoreboards.title");
         Objective obj = sb.registerNewObjective("vanishpp", Criteria.DUMMY, parse(title));
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);
 
@@ -192,10 +193,14 @@ public class VanishScoreboard {
     }
 
     private void update(Player player, Scoreboard sb, Objective obj) {
-        String title = plugin.getScoreboardConfig().getString("title", "&8[ &7Vanish&f++ &8]");
+        // Read title and line content from the language file
+        String title = plugin.getLanguageManager().getMessage("scoreboards.title");
+        List<String> rawLines = plugin.getLanguageManager().getStringList("scoreboards.lines");
+        // Fall back to an empty list if the language file lacks the lines key (avoids NPE)
+        if (rawLines == null) rawLines = Collections.emptyList();
+
         obj.displayName(parse(title));
 
-        List<String> rawLines = plugin.getScoreboardConfig().getStringList("lines");
         List<String> lines = padColumns(rawLines); // align | separators automatically
         int maxLines = Math.min(lines.size(), ENTRIES.length);
 
@@ -434,4 +439,3 @@ public class VanishScoreboard {
     }
 
 }
->>>>>>> cd1d495 (feat: biome shown via TranslatableComponent (client-side i18n))

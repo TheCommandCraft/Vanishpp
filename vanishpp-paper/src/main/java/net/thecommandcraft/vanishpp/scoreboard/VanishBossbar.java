@@ -57,6 +57,26 @@ public class VanishBossbar {
         bossbars.remove(uuid);
     }
 
+    /**
+     * Recreate the bossbar for one player from the current config/language values
+     * (called on language reload so an already-vanished player's bar picks up the
+     * new title without re-vanishing). No-op if the player has no bar.
+     */
+    public void refresh(Player player) {
+        if (!bossbars.containsKey(player.getUniqueId())) return;
+        show(player); // hide()s the stale bar first, then creates a fresh one
+    }
+
+    /**
+     * Recreate the bossbar for every online vanished player (language reload).
+     */
+    public void refreshAll() {
+        for (UUID uuid : new java.util.ArrayList<>(bossbars.keySet())) {
+            Player p = plugin.getServer().getPlayer(uuid);
+            if (p != null && p.isOnline()) refresh(p);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private BossBar createBar() {
