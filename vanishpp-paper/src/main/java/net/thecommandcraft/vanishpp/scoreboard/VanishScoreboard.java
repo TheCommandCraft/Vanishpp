@@ -320,14 +320,14 @@ public class VanishScoreboard {
         double yaw = loc.getYaw();
         if (yaw < 0) yaw += 360;
         String direction;
-        if      (yaw >= 337.5 || yaw < 22.5)  direction = "S";
-        else if (yaw < 67.5)                   direction = "SW";
-        else if (yaw < 112.5)                  direction = "W";
-        else if (yaw < 157.5)                  direction = "NW";
-        else if (yaw < 202.5)                  direction = "N";
-        else if (yaw < 247.5)                  direction = "NE";
-        else if (yaw < 292.5)                  direction = "E";
-        else                                    direction = "SE";
+        if      (yaw >= 337.5 || yaw < 22.5)  direction = plugin.getLanguageManager().getMessage("scoreboards.direction-s");
+        else if (yaw < 67.5)                   direction = plugin.getLanguageManager().getMessage("scoreboards.direction-sw");
+        else if (yaw < 112.5)                  direction = plugin.getLanguageManager().getMessage("scoreboards.direction-w");
+        else if (yaw < 157.5)                  direction = plugin.getLanguageManager().getMessage("scoreboards.direction-nw");
+        else if (yaw < 202.5)                  direction = plugin.getLanguageManager().getMessage("scoreboards.direction-n");
+        else if (yaw < 247.5)                  direction = plugin.getLanguageManager().getMessage("scoreboards.direction-ne");
+        else if (yaw < 292.5)                  direction = plugin.getLanguageManager().getMessage("scoreboards.direction-e");
+        else                                    direction = plugin.getLanguageManager().getMessage("scoreboards.direction-se");
 
         // --- Biome ---
         String biome = titleCase(loc.getBlock().getBiome().name().replace("_", " "));
