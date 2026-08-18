@@ -548,7 +548,7 @@ public class PlayerListener implements Listener {
     public void onDrop(PlayerDropItemEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_DROP_ITEMS)) {
             event.setCancelled(true);
-            sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "dropping items");
+            sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "warnings.action.drop-items");
         }
     }
 
@@ -559,7 +559,7 @@ public class PlayerListener implements Listener {
         if (!plugin.isVanished(p)) return;
         if (!rules.getRule(p, RuleManager.CAN_THROW)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_THROW, "throwing items");
+            sendRuleDeny(p, RuleManager.CAN_THROW, "warnings.action.throw-items");
         }
     }
 
@@ -569,7 +569,7 @@ public class PlayerListener implements Listener {
         if (!plugin.isVanished(p)) return;
         if (!rules.getRule(p, RuleManager.CAN_THROW)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_THROW, "shooting");
+            sendRuleDeny(p, RuleManager.CAN_THROW, "warnings.action.shooting");
         }
     }
 
@@ -596,7 +596,7 @@ public class PlayerListener implements Listener {
     public void onBreak(BlockBreakEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS)) {
             event.setCancelled(true);
-            sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "breaking blocks");
+            sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "warnings.action.break-blocks");
         }
     }
 
@@ -604,7 +604,7 @@ public class PlayerListener implements Listener {
     public void onPlace(BlockPlaceEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS)) {
             event.setCancelled(true);
-            sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "placing blocks");
+            sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "warnings.action.place-blocks");
         }
     }
 
@@ -614,7 +614,7 @@ public class PlayerListener implements Listener {
         if (event.getDamager() instanceof Player player && plugin.isVanished(player)
                 && !rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "attacking");
+            sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "warnings.action.attacking");
         }
 
         // Prevent mobs/entities from attacking vanished players
@@ -630,7 +630,7 @@ public class PlayerListener implements Listener {
         if (event.getEntity() instanceof Player player && plugin.isVanished(player)
                 && !rules.getRule(player, RuleManager.CAN_PICKUP_ITEMS)) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "picking up items");
+            sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "warnings.action.pickup-items");
         }
     }
 
@@ -668,7 +668,7 @@ public class PlayerListener implements Listener {
                     event.setCancelled(true);
                     event.setUseItemInHand(Event.Result.DENY);
                     if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem())
-                        sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "using spawn eggs" : "interaction");
+                        sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "warnings.action.using-spawn-eggs" : "warnings.action.interaction");
                     return;
                 }
             }
@@ -677,7 +677,7 @@ public class PlayerListener implements Listener {
             if (isSpawnEgg && !rules.getRule(p, RuleManager.CAN_THROW)) {
                 event.setCancelled(true);
                 event.setUseItemInHand(Event.Result.DENY);
-                sendRuleDeny(p, RuleManager.CAN_THROW, "using spawn eggs");
+                sendRuleDeny(p, RuleManager.CAN_THROW, "warnings.action.using-spawn-eggs");
                 return;
             }
 
@@ -699,7 +699,7 @@ public class PlayerListener implements Listener {
                     if (isContainer && !rules.getRule(p, RuleManager.CAN_INTERACT)) {
                         event.setCancelled(true);
                         event.setUseItemInHand(Event.Result.DENY);
-                        sendRuleDeny(p, RuleManager.CAN_INTERACT, "container access");
+                        sendRuleDeny(p, RuleManager.CAN_INTERACT, "warnings.action.container-access");
                         return;
                     }
                 }
@@ -730,14 +730,14 @@ public class PlayerListener implements Listener {
         // Always block horse/donkey/mule/llama interaction (mounting, feeding, etc.)
         if (event.getRightClicked() instanceof org.bukkit.entity.AbstractHorse) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_INTERACT, "horse interaction");
+            sendRuleDeny(player, RuleManager.CAN_INTERACT, "warnings.action.horse-interaction");
             return;
         }
 
         // Block other entity interactions if CAN_INTERACT rule is OFF
         if (!rules.getRule(player, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_INTERACT, "entity interaction");
+            sendRuleDeny(player, RuleManager.CAN_INTERACT, "warnings.action.entity-interaction");
         }
     }
 
@@ -804,10 +804,10 @@ public class PlayerListener implements Listener {
         if (!plugin.isVanished(p)) return;
         if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_INTERACT, "sleeping");
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "warnings.action.sleeping");
         } else if (config.preventSleeping) {
             event.setCancelled(true);
-            sendConfigDeny(p, "invisibility-features.prevent-sleeping", "sleeping");
+            sendConfigDeny(p, "invisibility-features.prevent-sleeping", "warnings.action.sleeping");
         }
     }
 
@@ -816,7 +816,7 @@ public class PlayerListener implements Listener {
         if (event.getEntity() instanceof Player p && plugin.isVanished(p)
                 && !rules.getRule(p, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_INTERACT, "mounting");
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "warnings.action.mounting");
         }
     }
 
@@ -1044,9 +1044,11 @@ public class PlayerListener implements Listener {
 
     private void sendRuleDeny(Player p, String ruleName, String actionName) {
         LanguageManager lm = config.getLanguageManager();
+        // Resolve the action description — if it looks like a language key, translate it
+        String actionDisplay = actionName.startsWith("warnings.") ? lm.getMessage(actionName) : actionName;
         plugin.triggerActionBarWarning(p,
                 plugin.getMessageManager()
-                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionName), p));
+                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionDisplay), p));
         if (!rules.getRule(p, RuleManager.SHOW_NOTIFICATIONS))
             return;
         UUID uuid = p.getUniqueId();
@@ -1058,7 +1060,7 @@ public class PlayerListener implements Listener {
         playerCooldowns.put(ruleName, now);
 
         String message = lm.getMessage("warnings.vanish-blocked")
-                .replace("%action%", actionName)
+                .replace("%action%", actionDisplay)
                 .replace("%rule%", ruleName);
         plugin.getMessageManager().sendMessage(p, message);
 
@@ -1074,7 +1076,7 @@ public class PlayerListener implements Listener {
         Component unvanish = plugin.getMessageManager().parse(lm.getMessage("warnings.button-unvanish"), p)
                 .clickEvent(ClickEvent.runCommand("/vanish"))
                 .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
-                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionName), p)));
+                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionDisplay), p)));
         Component hideNotifs = plugin.getMessageManager().parse(lm.getMessage("warnings.button-hide-notifs"), p)
                 .clickEvent(ClickEvent.runCommand("/vrules show_notifications false"))
                 .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
@@ -1086,9 +1088,10 @@ public class PlayerListener implements Listener {
     /** Notify player that a config-level setting blocked their action, with a button to change it. */
     private void sendConfigDeny(Player p, String configPath, String actionName) {
         LanguageManager lm = config.getLanguageManager();
+        String actionDisplay = actionName.startsWith("warnings.") ? lm.getMessage(actionName) : actionName;
         plugin.triggerActionBarWarning(p,
                 plugin.getMessageManager()
-                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionName), p));
+                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionDisplay), p));
         UUID uuid = p.getUniqueId();
         long now = System.currentTimeMillis();
         Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
@@ -1097,14 +1100,14 @@ public class PlayerListener implements Listener {
         playerCooldowns.put(configPath, now);
 
         String message = lm.getMessage("warnings.config-blocked")
-                .replace("%action%", actionName)
+                .replace("%action%", actionDisplay)
                 .replace("%path%", configPath);
         plugin.getMessageManager().sendMessage(p, message);
 
         Component unvanish = plugin.getMessageManager().parse(lm.getMessage("warnings.button-unvanish"), p)
                 .clickEvent(ClickEvent.runCommand("/vanish"))
                 .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
-                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionName), p)));
+                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionDisplay), p)));
         if (p.hasPermission("vanishpp.config")) {
             Component changeBtn = plugin.getMessageManager().parse(lm.getMessage("warnings.button-disable-config"), p)
                     .clickEvent(ClickEvent.runCommand("/vconfig " + configPath + " false"))
