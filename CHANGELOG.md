@@ -8,6 +8,15 @@ All notable changes to this project will be documented in this file.
 - **Client crash "Player is not on any team" still reachable after the previous fix, when an observer was granted `vanishpp.see` live mid-vanish:** The `a5436a6` fix (thanks again to @quiquelhappy, PR #19, for the original diagnosis and fix this builds on) scrubbed ADD/REMOVE `Vanishpp_Vanished` team packets based on the observer's *current* permission at send time, but a client's actual scoreboard knowledge depends on what it was sent in the *past*. An observer promoted to staff (e.g. a live LuckPerms grant, no relog) after missing the original ADD would still receive an unfiltered REMOVE once the vanished player unvanished — the client crashed exactly as before, just from the opposite direction of a permission change. `ProtocolLibManager` now tracks, per observer, which team member names that specific client has actually been sent (`VanishTeamPacketPolicy`), and only forwards a REMOVE for names the client is known to have learned about — regardless of the observer's permission at that moment. As a side effect this also fixes a pre-existing (non-crashing) bug in the other direction: a staff member demoted mid-vanish used to have their REMOVE wrongly suppressed, leaving their client's nametag/team state stale forever; it's now correctly delivered since it no longer depends on current permission either. Covered by a new regression test, `VanishTeamPacketPolicyTest`, exercising both directions.
 - **`ProtocolLibManager` listener registration was all-or-nothing:** All packet listeners were registered in one unguarded method body — a single unsupported `PacketType` on a given server/ProtocolLib version (or any other registration-time exception) silently aborted every listener registered after it, including the crash-preventing team-scrub listener above. Each listener is now registered in its own try/catch, logging a warning and continuing instead of taking down the rest of the hook.
 
+## [1.1.9] - 2026-08-17
+
+### Added
+- **Copper chest support:** Silent-chest suppression and the `CAN_INTERACT` rule gate now recognize all 8 copper chest oxidation/waxed variants (1.21+), matching existing chest/barrel/shulker handling. (Thanks @kanseijo, PR #27)
+
+### Fixed
+- **Rules GUI and Admin Dashboard clicks broke under any non-English language:** Both GUIs identified which rule/target a click referred to by parsing it back out of the item's *display text* (the rule's translated name, or a `§8UUID: …` marker line) — which broke the moment GUI text became translatable the day before (`messages.yml` `gui:` section, above), since the parsed-back string was no longer the literal key it used to be. Both now store the rule id / target UUID in an invisible persistent-data (NBT) key set when the item is built, decoupled entirely from whatever text is displayed. (Thanks @kanseijo, PR #27)
+- **Vanish scoreboard could disappear after rejoin with auto-vanish enabled:** TAB (or any other packet-modifying plugin) rebuilding the sidebar shortly after join could silently overwrite the vanish scoreboard the same tick it was shown, leaving vanished players without it until manually toggled. Added `VanishScoreboard.forceReshow()`, called from both the auto-vanish-on-join path and the multi-stage join reapply loop so every join-time vanish restore re-asserts the scoreboard, not just the auto-vanish-preference case. (Thanks @kanseijo, PR #28)
+
 ## [1.1.9] - 2026-08-16
 
 ### Added
@@ -97,6 +106,7 @@ All notable changes to this project will be documented in this file.
 - **`/vconfig gui`:** A full in-game, category-based, paginated Config GUI (`ConfigGUI`/`ConfigRenderer`/`ConfigCategory`) for editing settings without touching YAML by hand — numerical controls with ±1/±10 buttons and min/max range enforcement, sound feedback, and multi-page navigation.
 
 ### Changed
+*(The rest of this section and the Fixed section below are from @CreeperDisco, PR #14 — thanks for the contribution!)*
 - **Non-destructive config updates:** Config updates previously overwrote the whole file via `YamlConfiguration.save()`, stripping user comments and formatting. A new `ConfigUpdater` now injects only missing keys line-by-line, preserving everything else.
 - **Permission result caching:** High-frequency permission checks (especially `vanishpp.see`) during Tab list and action bar refreshes are now cached for 500ms, cutting down repetitive LuckPerms calls and verbose-log spam without hurting responsiveness.
 
