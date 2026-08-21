@@ -135,9 +135,8 @@ public class PlayerListener implements Listener {
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
                         // Rebuild the scoreboard from scratch at these later points too:
-                        // a player restored as vanished via reconciliation (not just
-                        // auto-vanish) is equally exposed to TAB overwriting the sidebar
-                        // after join, so this covers every join-time vanish restore.
+                        // a player restored as vanished via reconciliation (not just auto-vanish)
+                        // is equally exposed to TAB overwriting the sidebar after join.
                         if (plugin.getVanishScoreboard() != null)
                             plugin.getVanishScoreboard().forceReshow(player);
                     }
@@ -265,16 +264,19 @@ public class PlayerListener implements Listener {
                                         .append(Component.text(changed.toString(), NamedTextColor.WHITE)));
                         player.sendMessage(
                                 Component.text("   ")
-                                        .append(Component.text("[Apply to Proxy]", NamedTextColor.GREEN, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm.getMessage("warnings.button-apply-proxy"), player)
                                                 .clickEvent(ClickEvent.runCommand("/vack apply_proxy"))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Push all " + nonDefaults.size() + " changed setting(s) to the proxy config\n"
-                                                        + "and sync them to all connected servers", NamedTextColor.GRAY))))
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm.getMessage("warnings.button-apply-proxy-hover")
+                                                                .replace("%count%", String.valueOf(nonDefaults.size())),
+                                                        player))))
                                         .append(Component.text("  "))
-                                        .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm.getMessage("warnings.button-dismiss"), player)
                                                 .clickEvent(ClickEvent.runCommand("/vack proxy_config"))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Stop seeing this warning", NamedTextColor.GRAY)))));
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm.getMessage("warnings.button-dismiss-hover"), player)))));
                         player.sendMessage(Component.text(" "));
                     }
                 }
@@ -297,19 +299,22 @@ public class PlayerListener implements Listener {
                             plugin.getMessageManager().sendMessage(player, lm2.getMessage("warnings.box-bottom"));
                             player.sendMessage(
                                     Component.text("  ")
-                                    .append(Component.text("[ Download ProtocolLib ]",
-                                            NamedTextColor.AQUA, TextDecoration.BOLD)
+                                    .append(plugin.getMessageManager().parse(
+                                            lm2.getMessage("warnings.button-download-protocollib"), player)
                                             .clickEvent(ClickEvent.openUrl(w.installUrl))
-                                            .hoverEvent(HoverEvent.showText(Component.text(
-                                                    "Opens the latest ProtocolLib release on GitHub",
-                                                    NamedTextColor.GRAY))))
+                                            .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                    lm2.getMessage("warnings.button-download-protocollib-hover"),
+                                                    player))))
                                     .append(Component.text("  "))
-                                    .append(Component.text("[Disabled Features ▶]",
-                                            NamedTextColor.YELLOW, TextDecoration.BOLD)
+                                    .append(plugin.getMessageManager().parse(
+                                            lm2.getMessage("warnings.button-disabled-features"), player)
                                             .hoverEvent(HoverEvent.showText(
-                                                    Component.text("Features disabled without this plugin:\n",
-                                                            NamedTextColor.GOLD, TextDecoration.BOLD)
-                                                    .append(Component.text(w.featureList, NamedTextColor.WHITE))))));
+                                                    plugin.getMessageManager().parse(
+                                                            lm2.getMessage("warnings.button-disabled-features-hover"),
+                                                            player)
+                                                    .append(Component.text("\n")
+                                                            .append(Component.text(w.featureList,
+                                                                    NamedTextColor.WHITE)))))));
                             Title title = Title.title(
                                     plugin.getMessageManager().parse(
                                             lm2.getMessage("warnings.protocollib-missing-title"), player),
@@ -331,28 +336,31 @@ public class PlayerListener implements Listener {
                             if (w.configPath != null) {
                                 hasButtons = true;
                                 buttons = buttons
-                                        .append(Component.text("[Set to " + w.fixValue + "]",
-                                                NamedTextColor.GREEN, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm2.getMessage("warnings.button-set-to")
+                                                        .replace("%value%", w.fixValue), player)
                                                 .clickEvent(ClickEvent.runCommand(
                                                         "/vconfig " + w.configPath + " " + w.fixValue))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Sets " + w.configPath + " to " + w.fixValue
-                                                        + " and saves config", NamedTextColor.GRAY))))
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm2.getMessage("warnings.button-set-to-hover")
+                                                                .replace("%path%", w.configPath)
+                                                                .replace("%value%", w.fixValue), player))))
                                         .append(Component.text("  "))
-                                        .append(Component.text("[Reload]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm2.getMessage("warnings.button-reload"), player)
                                                 .clickEvent(ClickEvent.runCommand("/vreload"))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Reload Vanish++ config after fixing",
-                                                        NamedTextColor.GRAY))));
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm2.getMessage("warnings.button-reload-hover"), player))));
                             }
                             if (w.installUrl != null) {
                                 hasButtons = true;
                                 buttons = buttons
-                                        .append(Component.text("[Install Plugin]",
-                                                NamedTextColor.GREEN, TextDecoration.BOLD)
+                                        .append(plugin.getMessageManager().parse(
+                                                lm2.getMessage("warnings.button-install-plugin"), player)
                                                 .clickEvent(ClickEvent.openUrl(w.installUrl))
-                                                .hoverEvent(HoverEvent.showText(Component.text(
-                                                        "Open download page in browser", NamedTextColor.GRAY))));
+                                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                                        lm2.getMessage("warnings.button-install-plugin-hover"),
+                                                        player))));
                             }
                             if (hasButtons) {
                                 player.sendMessage(buttons);
@@ -541,7 +549,7 @@ public class PlayerListener implements Listener {
     public void onDrop(PlayerDropItemEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_DROP_ITEMS)) {
             event.setCancelled(true);
-            sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "dropping items");
+            sendRuleDeny(event.getPlayer(), RuleManager.CAN_DROP_ITEMS, "warnings.action-drop-items");
         }
     }
 
@@ -552,7 +560,7 @@ public class PlayerListener implements Listener {
         if (!plugin.isVanished(p)) return;
         if (!rules.getRule(p, RuleManager.CAN_THROW)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_THROW, "throwing items");
+            sendRuleDeny(p, RuleManager.CAN_THROW, "warnings.action-throw-items");
         }
     }
 
@@ -562,7 +570,7 @@ public class PlayerListener implements Listener {
         if (!plugin.isVanished(p)) return;
         if (!rules.getRule(p, RuleManager.CAN_THROW)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_THROW, "shooting");
+            sendRuleDeny(p, RuleManager.CAN_THROW, "warnings.action-shooting");
         }
     }
 
@@ -589,7 +597,7 @@ public class PlayerListener implements Listener {
     public void onBreak(BlockBreakEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS)) {
             event.setCancelled(true);
-            sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "breaking blocks");
+            sendRuleDeny(event.getPlayer(), RuleManager.CAN_BREAK_BLOCKS, "warnings.action-break-blocks");
         }
     }
 
@@ -597,7 +605,7 @@ public class PlayerListener implements Listener {
     public void onPlace(BlockPlaceEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS)) {
             event.setCancelled(true);
-            sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "placing blocks");
+            sendRuleDeny(event.getPlayer(), RuleManager.CAN_PLACE_BLOCKS, "warnings.action-place-blocks");
         }
     }
 
@@ -607,7 +615,7 @@ public class PlayerListener implements Listener {
         if (event.getDamager() instanceof Player player && plugin.isVanished(player)
                 && !rules.getRule(player, RuleManager.CAN_HIT_ENTITIES)) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "attacking");
+            sendRuleDeny(player, RuleManager.CAN_HIT_ENTITIES, "warnings.action-attacking");
         }
 
         // Prevent mobs/entities from attacking vanished players
@@ -623,7 +631,7 @@ public class PlayerListener implements Listener {
         if (event.getEntity() instanceof Player player && plugin.isVanished(player)
                 && !rules.getRule(player, RuleManager.CAN_PICKUP_ITEMS)) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "picking up items");
+            sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "warnings.action-pickup-items");
         }
     }
 
@@ -661,7 +669,7 @@ public class PlayerListener implements Listener {
                     event.setCancelled(true);
                     event.setUseItemInHand(Event.Result.DENY);
                     if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.hasItem())
-                        sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "using spawn eggs" : "interaction");
+                        sendRuleDeny(p, RuleManager.CAN_INTERACT, isSpawnEgg ? "warnings.action-using-spawn-eggs" : "warnings.action-interaction");
                     return;
                 }
             }
@@ -670,7 +678,7 @@ public class PlayerListener implements Listener {
             if (isSpawnEgg && !rules.getRule(p, RuleManager.CAN_THROW)) {
                 event.setCancelled(true);
                 event.setUseItemInHand(Event.Result.DENY);
-                sendRuleDeny(p, RuleManager.CAN_THROW, "using spawn eggs");
+                sendRuleDeny(p, RuleManager.CAN_THROW, "warnings.action-using-spawn-eggs");
                 return;
             }
 
@@ -692,7 +700,7 @@ public class PlayerListener implements Listener {
                     if (isContainer && !rules.getRule(p, RuleManager.CAN_INTERACT)) {
                         event.setCancelled(true);
                         event.setUseItemInHand(Event.Result.DENY);
-                        sendRuleDeny(p, RuleManager.CAN_INTERACT, "container access");
+                        sendRuleDeny(p, RuleManager.CAN_INTERACT, "warnings.action-container-access");
                         return;
                     }
                 }
@@ -723,14 +731,14 @@ public class PlayerListener implements Listener {
         // Always block horse/donkey/mule/llama interaction (mounting, feeding, etc.)
         if (event.getRightClicked() instanceof org.bukkit.entity.AbstractHorse) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_INTERACT, "horse interaction");
+            sendRuleDeny(player, RuleManager.CAN_INTERACT, "warnings.action-horse-interaction");
             return;
         }
 
         // Block other entity interactions if CAN_INTERACT rule is OFF
         if (!rules.getRule(player, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
-            sendRuleDeny(player, RuleManager.CAN_INTERACT, "entity interaction");
+            sendRuleDeny(player, RuleManager.CAN_INTERACT, "warnings.action-entity-interaction");
         }
     }
 
@@ -797,10 +805,10 @@ public class PlayerListener implements Listener {
         if (!plugin.isVanished(p)) return;
         if (!rules.getRule(p, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_INTERACT, "sleeping");
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "warnings.action-sleeping");
         } else if (config.preventSleeping) {
             event.setCancelled(true);
-            sendConfigDeny(p, "invisibility-features.prevent-sleeping", "sleeping");
+            sendConfigDeny(p, "invisibility-features.prevent-sleeping", "warnings.action-sleeping");
         }
     }
 
@@ -809,7 +817,7 @@ public class PlayerListener implements Listener {
         if (event.getEntity() instanceof Player p && plugin.isVanished(p)
                 && !rules.getRule(p, RuleManager.CAN_INTERACT)) {
             event.setCancelled(true);
-            sendRuleDeny(p, RuleManager.CAN_INTERACT, "mounting");
+            sendRuleDeny(p, RuleManager.CAN_INTERACT, "warnings.action-mounting");
         }
     }
 
@@ -1037,9 +1045,11 @@ public class PlayerListener implements Listener {
 
     private void sendRuleDeny(Player p, String ruleName, String actionName) {
         LanguageManager lm = config.getLanguageManager();
+        // Resolve the action description — if it looks like a language key, translate it
+        String actionDisplay = actionName.startsWith("warnings.") ? lm.getMessage(actionName) : actionName;
         plugin.triggerActionBarWarning(p,
                 plugin.getMessageManager()
-                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionName), p));
+                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionDisplay), p));
         if (!rules.getRule(p, RuleManager.SHOW_NOTIFICATIONS))
             return;
         UUID uuid = p.getUniqueId();
@@ -1051,23 +1061,27 @@ public class PlayerListener implements Listener {
         playerCooldowns.put(ruleName, now);
 
         String message = lm.getMessage("warnings.vanish-blocked")
-                .replace("%action%", actionName)
+                .replace("%action%", actionDisplay)
                 .replace("%rule%", ruleName);
         plugin.getMessageManager().sendMessage(p, message);
 
         // Interactive buttons: [Allow 1m], [Allow permanently], [Unvanish], [Hide notifications]
-        Component allow1m = Component.text("[Allow 1m]", NamedTextColor.GREEN, TextDecoration.BOLD)
+        Component allow1m = plugin.getMessageManager().parse(lm.getMessage("warnings.button-allow-1m"), p)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true 60"))
-                .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' for 60 seconds", NamedTextColor.GRAY)));
-        Component allowPerm = Component.text("[Allow permanently]", NamedTextColor.AQUA, TextDecoration.BOLD)
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-allow-1m-hover").replace("%rule%", ruleName), p)));
+        Component allowPerm = plugin.getMessageManager().parse(lm.getMessage("warnings.button-allow-perm"), p)
                 .clickEvent(ClickEvent.runCommand("/vrules " + ruleName + " true"))
-                .hoverEvent(HoverEvent.showText(Component.text("Enable '" + ruleName + "' permanently", NamedTextColor.GRAY)));
-        Component unvanish = Component.text("[Unvanish]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-allow-perm-hover").replace("%rule%", ruleName), p)));
+        Component unvanish = plugin.getMessageManager().parse(lm.getMessage("warnings.button-unvanish"), p)
                 .clickEvent(ClickEvent.runCommand("/vanish"))
-                .hoverEvent(HoverEvent.showText(Component.text("Unvanish so you can " + actionName, NamedTextColor.GRAY)));
-        Component hideNotifs = Component.text("[Hide notifications]", NamedTextColor.GRAY)
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionDisplay), p)));
+        Component hideNotifs = plugin.getMessageManager().parse(lm.getMessage("warnings.button-hide-notifs"), p)
                 .clickEvent(ClickEvent.runCommand("/vrules show_notifications false"))
-                .hoverEvent(HoverEvent.showText(Component.text("Disable all rule notifications", NamedTextColor.GRAY)));
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-hide-notifs-hover"), p)));
         p.sendMessage(allow1m.append(Component.text("  ")).append(allowPerm).append(Component.text("  "))
                 .append(unvanish).append(Component.text("  ")).append(hideNotifs));
     }
@@ -1075,9 +1089,10 @@ public class PlayerListener implements Listener {
     /** Notify player that a config-level setting blocked their action, with a button to change it. */
     private void sendConfigDeny(Player p, String configPath, String actionName) {
         LanguageManager lm = config.getLanguageManager();
+        String actionDisplay = actionName.startsWith("warnings.") ? lm.getMessage(actionName) : actionName;
         plugin.triggerActionBarWarning(p,
                 plugin.getMessageManager()
-                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionName), p));
+                        .parse(lm.getMessage("warnings.action-blocked-actionbar").replace("%action%", actionDisplay), p));
         UUID uuid = p.getUniqueId();
         long now = System.currentTimeMillis();
         Map<String, Long> playerCooldowns = ruleNotificationCooldowns.computeIfAbsent(uuid, k -> new HashMap<>());
@@ -1086,18 +1101,19 @@ public class PlayerListener implements Listener {
         playerCooldowns.put(configPath, now);
 
         String message = lm.getMessage("warnings.config-blocked")
-                .replace("%action%", actionName)
+                .replace("%action%", actionDisplay)
                 .replace("%path%", configPath);
         plugin.getMessageManager().sendMessage(p, message);
 
-        Component unvanish = Component.text("[Unvanish]", NamedTextColor.YELLOW, TextDecoration.BOLD)
+        Component unvanish = plugin.getMessageManager().parse(lm.getMessage("warnings.button-unvanish"), p)
                 .clickEvent(ClickEvent.runCommand("/vanish"))
-                .hoverEvent(HoverEvent.showText(Component.text("Unvanish so you can " + actionName, NamedTextColor.GRAY)));
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage("warnings.button-unvanish-hover").replace("%action%", actionDisplay), p)));
         if (p.hasPermission("vanishpp.config")) {
-            Component changeBtn = Component.text("[Disable in config]", NamedTextColor.GREEN, TextDecoration.BOLD)
+            Component changeBtn = plugin.getMessageManager().parse(lm.getMessage("warnings.button-disable-config"), p)
                     .clickEvent(ClickEvent.runCommand("/vconfig " + configPath + " false"))
-                    .hoverEvent(HoverEvent.showText(
-                            Component.text("Sets " + configPath + " to false", NamedTextColor.GRAY)));
+                    .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                            lm.getMessage("warnings.button-disable-config-hover").replace("%path%", configPath), p)));
             p.sendMessage(changeBtn.append(Component.text("  ")).append(unvanish));
         } else {
             p.sendMessage(unvanish);
@@ -1170,10 +1186,10 @@ public class PlayerListener implements Listener {
                             .hoverEvent(HoverEvent.showText(Component.text(
                                     "Download InvSee++ — full inventory access (Modrinth)", NamedTextColor.GRAY))))
                     .append(Component.text("  "))
-                    .append(Component.text("[Dismiss]", NamedTextColor.GRAY)
+                    .append(plugin.getMessageManager().parse(lm.getMessage("warnings.button-dismiss"), viewer)
                             .clickEvent(ClickEvent.runCommand("/vack invsee_hint"))
-                            .hoverEvent(HoverEvent.showText(Component.text(
-                                    "Don't show this again", NamedTextColor.GRAY)))));
+                            .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                    lm.getMessage("warnings.button-dismiss-hover"), viewer)))));
             viewer.sendMessage(Component.text(" "));
         }
     }

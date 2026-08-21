@@ -91,10 +91,13 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
         if (isSensitive(path) && !confirmed) {
             plugin.getMessageManager().sendMessage(sender, lm.getMessage("config.sensitive-warning")
                     .replace("%path%", path));
-            Component confirmBtn = Component.text("[CONFIRM CHANGE]", NamedTextColor.RED, TextDecoration.BOLD)
+            Component confirmBtn = plugin.getMessageManager().parse(
+                    lm.getMessage("config.button-confirm-change"), null)
                     .clickEvent(ClickEvent.runCommand("/vconfig " + path + " " + valInput + " --confirm"))
                     .hoverEvent(HoverEvent.showText(
-                            Component.text("Click to confirm changing " + path, NamedTextColor.GRAY)));
+                            plugin.getMessageManager().parse(
+                                    lm.getMessage("config.button-confirm-change-hover")
+                                            .replace("%path%", path), null)));
             sender.sendMessage(confirmBtn);
             return true;
         }

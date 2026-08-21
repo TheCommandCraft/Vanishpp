@@ -33,6 +33,8 @@ public class ConfigManager {
             vpermsPermGetHas, vpermsPermGetDoesNotHave;
     public String silentJoinMessage, silentQuitMessage, staffVanishMessage, staffUnvanishMessage;
     public String fakeJoinMessage, fakeQuitMessage;
+    public String consoleSpecify;
+    public String configReloaded;
 
     // Appearance
     public String vanishTabPrefix, vanishNametagPrefix, actionBarText, vanishedPlayerFormat;
@@ -94,6 +96,10 @@ public class ConfigManager {
         return languageManager;
     }
 
+    public String getLanguage() {
+        return config.getString("language", "en-us");
+    }
+
     public void load() {
         File configFile = new File(plugin.getDataFolder(), "config.yml");
         if (!configFile.exists())
@@ -102,20 +108,15 @@ public class ConfigManager {
         YamlConfiguration initialLoad = YamlConfiguration.loadConfiguration(configFile);
         int currentVersion = initialLoad.getInt("config-version", 1);
 
-        // 1. First, perform structural migrations if the version is old
         if (currentVersion < LATEST_CONFIG_VERSION) {
             new MigrationManager(plugin, this).runMigration(configFile, currentVersion, LATEST_CONFIG_VERSION);
             this.migratedThisBoot = true;
-            // Reload after migration
             this.config = YamlConfiguration.loadConfiguration(configFile);
         } else {
             this.config = initialLoad;
         }
 
-        // 2. Then, perform a silent auto-complete of missing keys without breaking format
         new ConfigUpdater(plugin).update(configFile, "config.yml");
-        
-        // Reload final config
         this.config = YamlConfiguration.loadConfiguration(configFile);
         loadValues();
     }
@@ -141,61 +142,70 @@ public class ConfigManager {
             return;
 
         player.sendMessage(Component.text(" "));
-        player.sendMessage(Component.text("⚠ Vanish++ Config Migrated", NamedTextColor.GOLD, TextDecoration.BOLD));
-        player.sendMessage(
-                Component.text("Structure updated to v" + LATEST_CONFIG_VERSION + ". Custom settings preserved.",
-                        NamedTextColor.YELLOW));
+        player.sendMessage(plugin.getMessageManager().parse(
+                languageManager.getMessage("config.migration-title"), player));
+        player.sendMessage(plugin.getMessageManager().parse(
+                languageManager.getMessage("config.migration-line")
+                        .replace("%version%", String.valueOf(LATEST_CONFIG_VERSION)), player));
         for (String note : migrationNotes) {
             player.sendMessage(
                     Component.text(" • ", NamedTextColor.GOLD).append(Component.text(note, NamedTextColor.WHITE)));
         }
-        player.sendMessage(Component.text("[CLICK TO HIDE PERMANENTLY]", NamedTextColor.RED, TextDecoration.BOLD)
+        player.sendMessage(plugin.getMessageManager().parse(
+                languageManager.getMessage("config.button-hide-permanently"), player)
                 .clickEvent(ClickEvent.runCommand("/vack migration"))
                 .hoverEvent(
-                        HoverEvent.showText(Component.text("Stop seeing this message on join", NamedTextColor.GRAY))));
+                        HoverEvent.showText(plugin.getMessageManager().parse(
+                                languageManager.getMessage("config.button-hide-permanently-hover"), player))));
         player.sendMessage(Component.text(" "));
     }
 
     private void loadValues() {
         languageManager.load();
 
-        vanishMessage = languageManager.getMessage("vanish.self");
-        unvanishMessage = languageManager.getMessage("vanish.unvanish-self");
-        noPermissionMessage = languageManager.getMessage("no-permission");
-        playerNotFoundMessage = languageManager.getMessage("player-not-found");
-        vanishedOtherMessage = languageManager.getMessage("vanish.others");
-        unvanishedOtherMessage = languageManager.getMessage("vanish.unvanish-others");
-        silentChestBlocked = languageManager.getMessage("silent-chest.blocked");
-        chatLockedMessage = languageManager.getMessage("chat.locked");
-        chatSentMessage = languageManager.getMessage("chat.sent");
-        noChatPendingMessage = languageManager.getMessage("chat.no-pending");
-        vpermsReload = languageManager.getMessage("vperms.reload");
-        vpermsInvalidUsage = languageManager.getMessage("vperms.invalid-usage");
-        vpermsInvalidPermission = languageManager.getMessage("vperms.invalid-permission");
-        vpermsPermSet = languageManager.getMessage("vperms.perm-set");
-        vpermsPermRemoved = languageManager.getMessage("vperms.perm-removed");
-        vpermsPermGetHas = languageManager.getMessage("vperms.perm-get-has");
-        vpermsPermGetDoesNotHave = languageManager.getMessage("vperms.perm-get-does-not-have");
-        silentJoinMessage = languageManager.getMessage("staff.silent-join");
-        silentQuitMessage = languageManager.getMessage("staff.silent-quit");
-        fakeJoinMessage = config.getString("messages.fake-join", ""); // Fallback to config for these as they might be
-                                                                      // empty intentionally
+        // All keys are prefixed with messages.
+        vanishMessage = languageManager.getMessage("messages.vanish.self");
+        unvanishMessage = languageManager.getMessage("messages.vanish.unvanish-self");
+        noPermissionMessage = languageManager.getMessage("messages.no-permission");
+        playerNotFoundMessage = languageManager.getMessage("messages.player-not-found");
+        vanishedOtherMessage = languageManager.getMessage("messages.vanish.others");
+        unvanishedOtherMessage = languageManager.getMessage("messages.vanish.unvanish-others");
+        silentChestBlocked = languageManager.getMessage("messages.silent-chest.blocked");
+        chatLockedMessage = languageManager.getMessage("messages.chat.locked");
+        chatSentMessage = languageManager.getMessage("messages.chat.sent");
+        noChatPendingMessage = languageManager.getMessage("messages.chat.no-pending");
+        vpermsReload = languageManager.getMessage("messages.vperms.reload");
+        vpermsInvalidUsage = languageManager.getMessage("messages.vperms.invalid-usage");
+        vpermsInvalidPermission = languageManager.getMessage("messages.vperms.invalid-permission");
+        vpermsPermSet = languageManager.getMessage("messages.vperms.perm-set");
+        vpermsPermRemoved = languageManager.getMessage("messages.vperms.perm-removed");
+        vpermsPermGetHas = languageManager.getMessage("messages.vperms.perm-get-has");
+        vpermsPermGetDoesNotHave = languageManager.getMessage("messages.vperms.perm-get-does-not-have");
+        silentJoinMessage = languageManager.getMessage("messages.staff.silent-join");
+        silentQuitMessage = languageManager.getMessage("messages.staff.silent-quit");
+        staffVanishMessage = languageManager.getMessage("messages.staff.notify-vanish");
+        staffUnvanishMessage = languageManager.getMessage("messages.staff.notify-unvanish");
+        consoleSpecify = languageManager.getMessage("messages.console-specify");
+        configReloaded = languageManager.getMessage("messages.config.reloaded");
+
+        fakeJoinMessage = config.getString("messages.fake-join", "");
         fakeQuitMessage = config.getString("messages.fake-quit", "");
 
         staffNotifyEnabled = config.getBoolean("messages.staff-notify.enabled", true);
-        staffVanishMessage = languageManager.getMessage("staff.notify-vanish");
-        staffUnvanishMessage = languageManager.getMessage("staff.notify-unvanish");
 
+        // Tab prefix: use the language-file value when the admin left the built-in default
         vanishTabPrefix = config.getString("vanish-appearance.tab-prefix", "&7[VANISHED] ");
+        if ("&7[VANISHED] ".equals(vanishTabPrefix)) {
+            vanishTabPrefix = languageManager.getMessage("vanish-appearance.tab-prefix");
+        }
         vanishNametagPrefix = config.getString("vanish-appearance.nametag-prefix", "");
         staffGlowEnabled = config.getBoolean("vanish-appearance.staff-glow", true);
         actionBarEnabled = config.getBoolean("vanish-appearance.action-bar.enabled", true);
-        actionBarText = languageManager.getMessage("appearance.action-bar");
-        // Support both old key name and new shorter name (Issue #21)
+        actionBarText = languageManager.getMessage("messages.appearance.action-bar");
         adjustServerListCount = config.contains("vanish-appearance.adjust-server-list")
                 ? config.getBoolean("vanish-appearance.adjust-server-list")
                 : config.getBoolean("vanish-appearance.adjust-server-list-count", true);
-        vanishedPlayerFormat = languageManager.getMessage("appearance.vanished-player-format");
+        vanishedPlayerFormat = languageManager.getMessage("messages.appearance.vanished-player-format");
         hideFromServerList = config.getBoolean("vanish-effects.hide-from-server-list", true);
         hideRealQuit = config.getBoolean("vanish-effects.hide-real-quit-messages", true);
         hideRealJoin = config.getBoolean("vanish-effects.hide-real-join-messages", true);
@@ -249,27 +259,27 @@ public class ConfigManager {
             }
         }
 
-        // Vanish Wand
         wandEnabled = config.getBoolean("vanish-wand.enabled", true);
         wandMaterial = config.getString("vanish-wand.material", "BLAZE_ROD");
         wandDisplayName = config.getString("vanish-wand.display-name", "<gold><bold>Vanish Wand</bold></gold>");
 
-        // Incognito fake names
         incognitoFakeNames = config.getStringList("incognito.fake-names");
         if (incognitoFakeNames.isEmpty()) {
             incognitoFakeNames = List.of("Steve", "Alex", "Notch", "Herobrine", "Player");
         }
 
-        // Webhooks
         webhookEnabled = config.getBoolean("webhook.enabled", false);
         webhookUrls = config.getStringList("webhook.urls");
         webhookPayloadTemplate = config.getString("webhook.payload-template",
             "{\"player\":\"{player}\",\"action\":\"{action}\",\"reason\":\"{reason}\",\"server\":\"{server}\",\"timestamp\":\"{timestamp}\"}");
         webhookAuthHeader = config.getString("webhook.authorization", "");
 
-        // Bossbar
         bossbarEnabled = config.getBoolean("bossbar.enabled", false);
+        // Bossbar title: use the language-file value when the admin left the built-in default
         bossbarTitle = config.getString("bossbar.title", "<gold>✦ You are <red>Vanished</red></gold>");
+        if ("<gold>✦ You are <red>Vanished</red></gold>".equals(bossbarTitle) || "&7[Vanished]".equals(bossbarTitle)) {
+            bossbarTitle = languageManager.getMessage("bossbar.title");
+        }
         bossbarColor = config.getString("bossbar.color", "GOLD");
         bossbarStyle = config.getString("bossbar.style", "PROGRESS");
     }
@@ -278,11 +288,6 @@ public class ConfigManager {
         return LATEST_CONFIG_VERSION;
     }
 
-    /**
-     * Returns all config keys whose current value differs from the bundled defaults.
-     * Storage, proxy, and config-version keys are excluded — they're server-specific.
-     * Used to show the proxy config mismatch warning and to sync changes to the proxy.
-     */
     public Map<String, String> getNonDefaultValues() {
         Map<String, String> result = new java.util.LinkedHashMap<>();
         try (java.io.InputStream in = plugin.getResource("config.yml")) {
@@ -302,13 +307,6 @@ public class ConfigManager {
         return result;
     }
 
-    /**
-     * Applies a {@link ProxyConfigSnapshot} pushed by the Velocity proxy into this ConfigManager's
-     * cached fields. Does NOT write to disk. Language strings are re-loaded from local lang files
-     * (they are not part of the proxy config).
-     *
-     * <p>Called by {@code ProxyConfigCache.update()} whenever the proxy pushes a new config.</p>
-     */
     public void loadFromProxySnapshot(ProxyConfigSnapshot s) {
         // Appearance
         vanishTabPrefix      = s.vanishTabPrefix;
@@ -387,31 +385,33 @@ public class ConfigManager {
             defaultRules.putAll(s.defaultRules);
         }
 
-        // Re-load language strings from local lang files (not part of proxy config)
+        // Reload language strings (all keys use the messages. prefix)
         languageManager.load();
-        vanishMessage        = languageManager.getMessage("vanish.self");
-        unvanishMessage      = languageManager.getMessage("vanish.unvanish-self");
-        noPermissionMessage  = languageManager.getMessage("no-permission");
-        playerNotFoundMessage= languageManager.getMessage("player-not-found");
-        vanishedOtherMessage = languageManager.getMessage("vanish.others");
-        unvanishedOtherMessage = languageManager.getMessage("vanish.unvanish-others");
-        silentChestBlocked   = languageManager.getMessage("silent-chest.blocked");
-        chatLockedMessage    = languageManager.getMessage("chat.locked");
-        chatSentMessage      = languageManager.getMessage("chat.sent");
-        noChatPendingMessage = languageManager.getMessage("chat.no-pending");
-        vpermsReload         = languageManager.getMessage("vperms.reload");
-        vpermsInvalidUsage   = languageManager.getMessage("vperms.invalid-usage");
-        vpermsInvalidPermission = languageManager.getMessage("vperms.invalid-permission");
-        vpermsPermSet        = languageManager.getMessage("vperms.perm-set");
-        vpermsPermRemoved    = languageManager.getMessage("vperms.perm-removed");
-        vpermsPermGetHas     = languageManager.getMessage("vperms.perm-get-has");
-        vpermsPermGetDoesNotHave = languageManager.getMessage("vperms.perm-get-does-not-have");
-        silentJoinMessage    = languageManager.getMessage("staff.silent-join");
-        silentQuitMessage    = languageManager.getMessage("staff.silent-quit");
-        staffVanishMessage   = languageManager.getMessage("staff.notify-vanish");
-        staffUnvanishMessage = languageManager.getMessage("staff.notify-unvanish");
-        actionBarText        = languageManager.getMessage("appearance.action-bar");
-        vanishedPlayerFormat = languageManager.getMessage("appearance.vanished-player-format");
+        vanishMessage        = languageManager.getMessage("messages.vanish.self");
+        unvanishMessage      = languageManager.getMessage("messages.vanish.unvanish-self");
+        noPermissionMessage  = languageManager.getMessage("messages.no-permission");
+        playerNotFoundMessage= languageManager.getMessage("messages.player-not-found");
+        vanishedOtherMessage = languageManager.getMessage("messages.vanish.others");
+        unvanishedOtherMessage = languageManager.getMessage("messages.vanish.unvanish-others");
+        silentChestBlocked   = languageManager.getMessage("messages.silent-chest.blocked");
+        chatLockedMessage    = languageManager.getMessage("messages.chat.locked");
+        chatSentMessage      = languageManager.getMessage("messages.chat.sent");
+        noChatPendingMessage = languageManager.getMessage("messages.chat.no-pending");
+        vpermsReload         = languageManager.getMessage("messages.vperms.reload");
+        vpermsInvalidUsage   = languageManager.getMessage("messages.vperms.invalid-usage");
+        vpermsInvalidPermission = languageManager.getMessage("messages.vperms.invalid-permission");
+        vpermsPermSet        = languageManager.getMessage("messages.vperms.perm-set");
+        vpermsPermRemoved    = languageManager.getMessage("messages.vperms.perm-removed");
+        vpermsPermGetHas     = languageManager.getMessage("messages.vperms.perm-get-has");
+        vpermsPermGetDoesNotHave = languageManager.getMessage("messages.vperms.perm-get-does-not-have");
+        silentJoinMessage    = languageManager.getMessage("messages.staff.silent-join");
+        silentQuitMessage    = languageManager.getMessage("messages.staff.silent-quit");
+        staffVanishMessage   = languageManager.getMessage("messages.staff.notify-vanish");
+        staffUnvanishMessage = languageManager.getMessage("messages.staff.notify-unvanish");
+        actionBarText        = languageManager.getMessage("messages.appearance.action-bar");
+        vanishedPlayerFormat = languageManager.getMessage("messages.appearance.vanished-player-format");
+        consoleSpecify       = languageManager.getMessage("messages.console-specify");
+        configReloaded       = languageManager.getMessage("messages.config.reloaded");
 
         plugin.getLogger().info("[Proxy] ConfigManager updated from proxy snapshot.");
     }

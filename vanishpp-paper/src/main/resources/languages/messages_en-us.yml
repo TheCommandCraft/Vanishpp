@@ -30,27 +30,19 @@ vperms:
 update:
   available: "&a&lVanish++ Update Available!"
   current: "&7Current: &c%version%"
-  latest: "&7Latest: &a%version% &8[&e%type%&8]"
+  latest: "&7Latest: &a%version%"
   download: "&6&l[CLICK TO DOWNLOAD]"
   hover: "&eGo to Modrinth Version %version%"
   hide-beta: "&8[&7Don't notify me about beta builds&8]"
   hide-beta-hover: "&7Click to stop receiving beta update notifications.\n&8Runs: /vconfig update-checker.show-beta false"
   hide-alpha: "&8[&7Don't notify me about alpha builds&8]"
   hide-alpha-hover: "&7Click to stop receiving alpha update notifications.\n&8Runs: /vconfig update-checker.show-alpha false"
-
-# --- [ RULES COMMAND ] ---
-rules:
-  usage: "&cUsage: /vrules [player] <rule> [true|false] [seconds] &7— omit seconds for permanent"
-  invalid-name: "&cInvalid rule name. Use /vrules to see available rules."
-  invalid-value: "&cValue must be 'true' or 'false'."
-  invalid-seconds: "&cInvalid number of seconds."
-  header: "&6Rules for %player%:"
-  line: " • %rule%: <%color%>%status%"
-  status-on: "ENABLED"
-  status-off: "DISABLED"
-  set: "&aRule '%rule%' for %player% set to %status%."
-  set-temp: "&aRule '%rule%' for %player% set to %status% for %seconds%s."
-  expired: "&eTemporary rule '%rule%' has expired."
+  proxy-available: "&a&lVanish++ Proxy Update Available!"
+  proxy-note: "&7An update is available on the proxy."
+  proxy-current: "&7Current: &c%version%"
+  proxy-latest: "&7Latest: &a%version%"
+  proxy-download: "&6&l[CLICK TO DOWNLOAD]"
+  proxy-hover: "&eGo to Modrinth Version %version%"
 
 # --- [ CHAT ] ---
 chat:
@@ -58,6 +50,7 @@ chat:
   sent: "&aMessage sent."
   no-pending: "&cYou have no pending chat messages to confirm."
   usage: "&7Usage: &b/vchat confirm &7— send your pending vanish chat message."
+  players-only: "&cOnly players can use this command."
 
 # --- [ PICKUP ] ---
 pickup:
@@ -85,8 +78,47 @@ warnings:
   invsee-hint-line: "&7 Armor, offhand and crafting slots are hidden in built-in mode."
   invsee-hint-sub: "&e Install a supported plugin for full inventory access:"
   invsee-hint-dismissed: "&7Invsee hint dismissed."
+  # Inline action buttons shown under rule/config denial messages.
+  button-allow-1m: "&a&l[Allow 1m]"
+  button-allow-1m-hover: "&7Enable '%rule%' for 60 seconds"
+  button-allow-perm: "&b&l[Allow permanently]"
+  button-allow-perm-hover: "&7Enable '%rule%' permanently"
+  button-unvanish: "&e&l[Unvanish]"
+  button-unvanish-hover: "&7Unvanish so you can %action%"
+  button-hide-notifs: "&7[Hide notifications]"
+  button-hide-notifs-hover: "&7Disable all rule notifications"
+  button-disable-config: "&a&l[Disable in config]"
+  button-disable-config-hover: "&7Sets %path% to false"
 
 # --- [ STAFF NOTIFICATIONS ] ---
+  button-apply-proxy: "&a&l[Apply to Proxy]"
+  button-apply-proxy-hover: "&7Push all %count% changed setting(s) to the proxy config\n&7and sync them to all connected servers"
+  button-dismiss: "&7[Dismiss]"
+  button-dismiss-hover: "&7Stop seeing this warning"
+  button-download-protocollib: "&b&l[ Download ProtocolLib ]"
+  button-download-protocollib-hover: "&7Opens the latest ProtocolLib release on GitHub"
+  button-disabled-features: "&e&l[Disabled Features ▶]"
+  button-disabled-features-hover: "&6&lFeatures disabled without this plugin:"
+  button-set-to: "&a&l[Set to %value%]"
+  button-set-to-hover: "&7Sets %path% to %value% and saves config"
+  button-reload: "&b&l[Reload]"
+  button-reload-hover: "&7Reload Vanish++ config after fixing"
+  button-install-plugin: "&a&l[Install Plugin]"
+  button-install-plugin-hover: "&7Open download page in browser"
+  action-drop-items: "&fdropping items"
+  action-throw-items: "&fthrowing items"
+  action-shooting: "&fshooting"
+  action-break-blocks: "&fbreaking blocks"
+  action-place-blocks: "&fplacing blocks"
+  action-attacking: "&fattacking"
+  action-pickup-items: "&fpicking up items"
+  action-using-spawn-eggs: "&fusing spawn eggs"
+  action-interaction: "&finteraction"
+  action-container-access: "&fcontainer access"
+  action-horse-interaction: "&fhorse interaction"
+  action-entity-interaction: "&fentity interaction"
+  action-sleeping: "&fsleeping"
+  action-mounting: "&fmounting"
 staff:
   silent-join: "&8[&7+&8] &7%player% has silently joined."
   silent-quit: "&8[&7-&8] &7%player% has silently left."
@@ -111,12 +143,24 @@ config:
   proxy-mismatch-line2: "The following settings are out of sync:"
   proxy-mismatch-line3: "Apply them to the proxy or dismiss this warning."
   proxy-applied: "&aApplied %count% config setting(s) to the proxy."
+  proxy-not-connected: "&cNot connected to the proxy."
+  proxy-nothing-to-sync: "&cNothing to sync with the proxy."
+  gui-only-players: "&cOnly players can use the config GUI."
+  proxy-synced: "&aConfig change synced to proxy."
 
 # --- [ PLUGIN LIST ] ---
+  button-confirm-change: "&c&l[CONFIRM CHANGE]"
+  button-confirm-change-hover: "&7Click to confirm changing %path%"
+  button-hide-permanently: "&c&l[CLICK TO HIDE PERMANENTLY]"
+  button-hide-permanently-hover: "&7Stop seeing this message on join"
+  migration-title: "&6&l⚠ Vanish++ Config Migrated"
+  migration-line: "&eStructure updated to v%version%. Custom settings preserved."
 plugins:
   hidden-info: "&8Plugin list is filtered (Vanish++ hidden from non-staff)."
 
 # --- [ VANISHED LIST ] ---
+  button-disable-hiding: "&c&l[Disable hiding]"
+  button-disable-hiding-hover: "&7Makes Vanish++ visible in /plugins"
 list:
   no-vanished-online: "&eThere are no vanished players online."
   header: "&6Vanished Players (%count%):"
@@ -256,19 +300,18 @@ help:
   cmd-vreload: "Reload plugin configuration."
 
 # --- [ RULE PRESETS ] ---
-# NOTE: this used to be nested under a second top-level "rules:" key, which silently
-# shadowed the real "rules:" section above (YAML parses to a map — the second "rules:"
-# block overwrote the first, so rules.status-on/status-off/etc. resolved as missing
-# keys at runtime). Kept as its own top-level section to avoid the collision.
-rules-preset:
-  usage: "&cUsage: /vrules preset <save|load|list|delete> [name]"
-  saved: "&aRule preset &e%name% &asaved."
-  loaded: "&aRule preset &e%name% &aloaded."
-  deleted: "&aRule preset &e%name% &adeleted."
-  not-found: "&cNo preset named &e%name% &cfound."
-  none: "&7You have no saved rule presets."
-  list-header: "&6Your Rule Presets:"
-  list-entry: " &8• &e%name%"
+rules:
+  usage: "&cUsage: /vrules [player] <rule> [true|false] [seconds] &7— omit seconds for permanent"
+  invalid-name: "&cInvalid rule name. Use /vrules to see available rules."
+  invalid-value: "&cValue must be 'true' or 'false'."
+  invalid-seconds: "&cInvalid number of seconds."
+  header: "&6Rules for %player%:"
+  line: " • %rule%: <%color%>%status%"
+  status-on: "ENABLED"
+  status-off: "DISABLED"
+  set: "&aRule '%rule%' for %player% set to %status%."
+  set-temp: "&aRule '%rule%' for %player% set to %status% for %seconds%s."
+  expired: "&eTemporary rule '%rule%' has expired."
 
 # --- [ BULK VANISH ] ---
 bulk:
@@ -278,6 +321,7 @@ bulk:
 # --- [ CHANGELOG ] ---
 changelog:
   header: "\n&6&l  Vanish++ 1.1.8 Changelog  "
+  no-entries: "&7No changelog entries found."
   entries:
     - " &8• &eNew&7: /vspec quick-spectate command"
     - " &8• &eNew&7: /vfollow player tracking with HUD"
@@ -307,17 +351,38 @@ changelog:
     - " &8• &cFixed&7: Mass disconnect on unvanish (glow packet race + packet burst)"
   footer: "&7-------------------------------"
 
+# --- [ RULE PRESETS ] ---
+rules-preset:
+  usage: "&cUsage: /vrules preset <save|load|list|delete> [name]"
+  saved: "&aRule preset &e%name% &asaved."
+  loaded: "&aRule preset &e%name% &aloaded."
+  deleted: "&aRule preset &e%name% &adeleted."
+  not-found: "&cNo preset named &e%name% &cfound."
+  none: "&7You have no saved rule presets."
+  list-header: "&6Your Rule Presets:"
+  list-entry: " &8• &e%name%"
+
 # --- [ GUI TEXT ] ---
-# Externalizes all in-game GUI text (Rules GUI, Admin Dashboard, Config GUI) so it can
-# be translated/customized without recompiling — same as every other message in this
-# file. Reloads with /vconfig reload; a GUI already open when you reload keeps the text
-# it was opened with until closed and reopened.
+# GUI labels are looked up live from this file (shared with chat/command messages).
 gui:
   rules:
     title-prefix: "&6Rules: "
     status-enabled: "&a✔ ENABLED"
     status-disabled: "&c✘ DISABLED"
     toggle-hint: "&7Click to toggle"
+    names:
+      can_break_blocks: "Break Blocks"
+      can_place_blocks: "Place Blocks"
+      can_hit_entities: "Hit Entities"
+      can_pickup_items: "Pickup Items"
+      can_drop_items: "Drop Items"
+      can_trigger_physical: "Trigger Physical"
+      can_interact: "Interact"
+      can_throw: "Throw"
+      can_chat: "Chat"
+      mob_targeting: "Mob Targeting"
+      show_notifications: "Show Notifications"
+      spectator_gamemode: "Spectator Gamemode"
   admin-dashboard:
     title: "&6Vanish++ Admin Dashboard"
     level: "&bLevel: %level%"
@@ -351,9 +416,6 @@ gui:
       storage: "Database & Storage"
       permissions: "Permission System"
       features: "Features & Behavior"
-    # Keyed by the setting's real config.yml path (see ConfigCategory.java) - every key
-    # here must exactly match a key actually exposed by a ConfigCategory entry, or it'll
-    # never be looked up.
     setting-description:
       vanish-appearance:
         action-bar:
@@ -370,3 +432,21 @@ gui:
         unvanish-disable-fly: "Disable flight on unvanish"
       invisibility-features:
         prevent-sleeping: "Prevent sleeping while vanished"
+
+# --- [ VANISH APPEARANCE (multilingual overrides) ] ---
+# Used when the config.yml value is left at its built-in default.
+vanish-appearance:
+  tab-prefix: "&7[VANISHED] "
+
+# --- [ BOSSBAR (multilingual overrides) ] ---
+bossbar:
+  title: "&7[Vanished]"
+
+downgrade:
+  button-allow-writes: "&e&l[ Allow writes (risky) ]"
+  button-allow-writes-hover: "&cLets the older plugin write to the DB.\n&cData may be corrupted."
+  button-reset-db: "&c&l[ Reset DB (fresh start) ]"
+  button-reset-db-hover: "&6Wipes all Vanish++ data from the DB\n&6and starts fresh."
+  button-wipe-db: "&c&l[ WIPE DATABASE AND START FRESH ]"
+  button-wipe-db-hover: "&cThis cannot be undone!"
+  writes-resumed: "&eDB writes resumed. The plugin is now running on a DB from a newer version. Proceed with caution."

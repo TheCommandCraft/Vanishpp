@@ -1,0 +1,458 @@
+# Vanish++ 中文语言文件
+# 支持 MiniMessage 标签（<red>、<bold> 等）、传统颜色代码（&c、&a 等）
+# 以及 PlaceholderAPI %占位符%。
+
+# --- [ 通用 ] ---
+no-permission: '&c你没有权限使用此命令。'
+player-not-found: '&c未找到玩家。'
+invalid-usage: '&c用法：%usage%'
+console-specify: '&c控制台必须指定玩家。'
+unknown-command: '&c未知命令。输入 "/help" 获取帮助。'
+
+# --- [ 隐身命令 ] ---
+vanish:
+  self: '&6你现在已隐身。'
+  others: '&6你已让 %player% 隐身。'
+  unvanish-self: '&6你已取消隐身。'
+  unvanish-others: '&6你已让 %player% 取消隐身。'
+
+# --- [ VPERMS 命令 ] ---
+vperms:
+  reload: '&aVanish++ 权限已重载。'
+  invalid-usage: '&c用法：/vperms <玩家> <权限> <set|remove|get>'
+  invalid-permission: '&c无效的权限。'
+  perm-set: '&a已为 %player% 设置权限 ''%perm%''。'
+  perm-removed: '&e已从 %player% 移除权限 ''%perm%''。'
+  perm-get-has: '&a%player% 拥有权限 ''%perm%''。'
+  perm-get-does-not-have: '&c%player% 没有权限 ''%perm%''。'
+
+# --- [ 更新检查器 ] ---
+update:
+  available: '&a&lVanish++ 有新版本可用！'
+  current: '&7当前版本：&c%version%'
+  latest: '&7最新版本：&a%version%'
+  download: '&6&l[点击下载]'
+  hover: '&e前往 Modrinth 版本 %version%'
+  hide-beta: '&8[&7Don''t notify me about beta builds&8]'
+  hide-beta-hover: |-
+    &7Click to stop receiving beta update notifications.
+    &8Runs: /vconfig update-checker.show-beta false
+  hide-alpha: '&8[&7Don''t notify me about alpha builds&8]'
+  hide-alpha-hover: |-
+    &7Click to stop receiving alpha update notifications.
+    &8Runs: /vconfig update-checker.show-alpha false
+  proxy-available: '&a&lVanish++ 代理端有新版本可用！'
+  proxy-note: '&7代理端有可用更新。'
+  proxy-current: '&7当前版本：&c%version%'
+  proxy-latest: '&7最新版本：&a%version%'
+  proxy-download: '&6&l[点击下载]'
+  proxy-hover: '&e前往 Modrinth 版本 %version%'
+
+# --- [ 聊天 ] ---
+chat:
+  locked: <red>你已隐身！<gray>点击 <click:run_command:'/vchat confirm'><aqua><underlined>[确认发送]</underlined></aqua></click>
+    <gray>以发送此消息。
+  sent: '&a消息已发送。'
+  no-pending: '&c你没有待发送的聊天消息。'
+  usage: '&7用法：&b/vchat confirm &7— 发送你待发的隐身聊天消息。'
+
+# --- [ 拾取 ] ---
+  players-only: "&c只有玩家可以使用此命令。"
+pickup:
+  enabled: '&e物品拾取现已 &a启用&e。'
+  disabled: '&e物品拾取现已 &c禁用&e。'
+  blocked-actionbar: '&c✖ 物品拾取被阻止'
+
+# --- [ 警告与通知 ] ---
+warnings:
+  protocollib-missing-title: '&c⚠ 警告 ⚠'
+  protocollib-missing-subtitle: '&e缺少 ProtocolLib！'
+  box-top: '&4&l█▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀█'
+  header: '&c&l 缺少关键依赖'
+  line: '&e 未安装 ProtocolLib。'
+  sub: '&c ⚠ 你并未完全隐身！ ⚠'
+  box-bottom: '&4&l█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█'
+  action-blocked-actionbar: '&c&l✖ 操作被阻止：%action%'
+  vanish-blocked: '&c隐身阻止了 &e%action%&c。使用 &b/vrules %rule% true &c以启用。'
+  config-blocked: '&c隐身阻止了 &e%action%&c（配置：&7%path%&c）。'
+  spawn-egg-blocked: '&c隐身时始终禁止使用刷怪蛋以保护你的隐蔽性。'
+  throwable-blocked: '&c隐身阻止了 &e投掷物品&c。使用 &b/vrules can_throw true &c以启用。'
+  ignore-tip: '&7提示：输入 &b/vrules show_notifications false &7可禁用这些消息。'
+  setup-header: '&c⚠ Vanish++ 设置问题：'
+  invsee-hint-header: '&e&l ⚠ 查看背包：受限视图'
+  invsee-hint-line: '&7 在默认模式中，盔甲、副手和合成槽位被隐藏。'
+  invsee-hint-sub: '&e 安装受支持的插件以获得完整背包访问：'
+  invsee-hint-dismissed: '&7查看背包提示已忽略。'
+  # 规则/配置阻止消息下方的内联操作按钮
+  button-allow-1m: '&a&l[允许 1 分钟]'
+  button-allow-1m-hover: '&7启用「%rule%」60 秒'
+  button-allow-perm: '&b&l[永久允许]'
+  button-allow-perm-hover: '&7永久启用「%rule%」'
+  button-unvanish: '&e&l[解除隐身]'
+  button-unvanish-hover: '&7解除隐身以便%action%'
+  button-hide-notifs: '&7[隐藏通知]'
+  button-hide-notifs-hover: '&7关闭所有规则通知'
+  button-disable-config: '&a&l[在配置中禁用]'
+  button-disable-config-hover: '&7将 %path% 设置为 false'
+
+# --- [ 管理员通知 ] ---
+  button-apply-proxy: "&a&l[应用到代理]"
+  button-apply-proxy-hover: "&7将全部 %count% 个更改的设置推送到代理配置\n&7并同步到所有连接的服务器"
+  button-dismiss: "&7[忽略]"
+  button-dismiss-hover: "&7不再显示此警告"
+  button-download-protocollib: "&b&l[ 下载 ProtocolLib ]"
+  button-download-protocollib-hover: "&7在 GitHub 打开最新 ProtocolLib 发布页"
+  button-disabled-features: "&e&l[已禁用的功能 ▶]"
+  button-disabled-features-hover: "&6&l未安装此插件时禁用的功能："
+  button-set-to: "&a&l[设置为 %value%]"
+  button-set-to-hover: "&7将 %path% 设置为 %value% 并保存配置"
+  button-reload: "&b&l[重载]"
+  button-reload-hover: "&7修复后重载 Vanish++ 配置"
+  button-install-plugin: "&a&l[安装插件]"
+  button-install-plugin-hover: "&7在浏览器中打开下载页面"
+  action-drop-items: "&f丢弃物品"
+  action-throw-items: "&f投掷物品"
+  action-shooting: "&f射击"
+  action-break-blocks: "&f破坏方块"
+  action-place-blocks: "&f放置方块"
+  action-attacking: "&f攻击"
+  action-pickup-items: "&f拾取物品"
+  action-using-spawn-eggs: "&f使用刷怪蛋"
+  action-interaction: "&f交互"
+  action-container-access: "&f容器访问"
+  action-horse-interaction: "&f马交互"
+  action-entity-interaction: "&f实体交互"
+  action-sleeping: "&f睡觉"
+  action-mounting: "&f骑乘"
+staff:
+  silent-join: '&8[&7+&8] &7%player% 已静默加入。'
+  silent-quit: '&8[&7-&8] &7%player% 已静默离开。'
+  notify-vanish: '&e[管理员] %player% 已隐身（由 %staff% 操作）。'
+  notify-unvanish: '&e[管理员] %player% 已取消隐身（由 %staff% 操作）。'
+
+# --- [ 外观 ] ---
+appearance:
+  action-bar: '&b你当前处于隐身状态'
+  vanished-player-format: '%prefix%&7%player%: %message%'
+
+# --- [ CONFIG 命令 ] ---
+config:
+  reloaded: '&aVanish++ 配置已成功重载！'
+  updated: '&a已成功将 &e%path% &a更新为 &f%value%'
+  invalid-path: '&c无效的配置路径！'
+  current-value: '&6%path% &7当前值为：&f%value%'
+  usage: '&c用法：/vconfig <键> [值]'
+  sensitive-warning: '&c⚠ 警告：&e%path% &c是敏感设置。更改它可能影响服务器稳定性。请再次运行命令并添加 &b--confirm
+    &c以应用。'
+  proxy-mismatch-title: 检测到代理配置不匹配
+  proxy-mismatch-line1: 你的 Paper 配置与 Velocity 代理配置不同。
+  proxy-mismatch-line2: 以下设置不同步：
+  proxy-mismatch-line3: 将它们应用到代理或忽略此警告。
+  proxy-applied: '&a已将 %count% 个配置设置应用到代理。'
+  proxy-not-connected: '&c未连接到代理。'
+  proxy-nothing-to-sync: '&c没有要同步的代理配置。'
+
+# --- [ 插件列表 ] ---
+  button-confirm-change: "&c&l[确认修改]"
+  button-confirm-change-hover: "&7点击确认修改 %path%"
+  button-hide-permanently: "&c&l[点击永久隐藏]"
+  button-hide-permanently-hover: "&7加入时不再显示此消息"
+  migration-title: "&6&l⚠ Vanish++ 配置已迁移"
+  migration-line: "&e配置结构已更新至 v%version%。自定义设置已保留。"
+  gui-only-players: "&c只有玩家可以使用配置 GUI。"
+  proxy-synced: "&a配置更改已同步到代理。"
+plugins:
+  hidden-info: '&8插件列表已过滤（Vanish++ 对非管理员隐藏）。'
+
+# --- [ 隐身列表 ] ---
+  button-disable-hiding: "&c&l[取消隐藏]"
+  button-disable-hiding-hover: "&7让 Vanish++ 在 /plugins 中可见"
+list:
+  no-vanished-online: '&e当前没有隐身的玩家在线。'
+  header: '&6隐身玩家（%count% 名）：'
+
+# --- [ 确认 ] ---
+acknowledgement:
+  acknowledged: '&a通知已确认。'
+  hiding-dismissed: '&7本版本的通知已忽略。'
+  hiding-visible: '&aVanish++ 现已在插件列表中显示。'
+
+# --- [ 忽略警告 ] ---
+ignore-warning:
+  protocol-denied: '&c权限不足。'
+  player-not-found: '&c未找到玩家。'
+  console-specify: '&c控制台必须指定玩家。'
+  enabled: '&a你将再次收到 ProtocolLib 警告。'
+  disabled: '&c你将不再收到 ProtocolLib 警告。'
+  others-enabled: '&a%player% 将收到警告。'
+  others-disabled: '&c%player% 将忽略警告。'
+
+# --- [ 旁观模式 ] ---
+spectator:
+  entered: '&b已进入旁观模式。&7双击潜行以返回。'
+  exited: '&a已返回 &6%gamemode% &a模式。'
+  forced-unvanish: '&e取消隐身时强制返回 &6%gamemode% &e模式。'
+
+# --- [ 静默容器 ] ---
+silent-chest:
+  blocked: '&c你无法静默打开此容器（不支持该容器类型或受保护）。'
+
+# --- [ 定时隐身 ] ---
+timed-vanish:
+  expired: '&e你的定时隐身已到期。'
+  set: '&a你将在 &e%seconds% 秒 &a后取消隐身。'
+  invalid-duration: '&c无效的持续时间。请使用 &e30s&c、&e5m&c、&e1h&c 等格式。'
+
+# --- [ 频率限制 ] ---
+rate-limit:
+  blocked: '&c你切换隐身过于频繁。请稍后再试。'
+
+# --- [ 战斗隐身冷却 ] ---
+combat:
+  pvp-cooldown: '&c无法隐身 — PvP 冷却中（剩余 %seconds% 秒）。'
+  pve-cooldown: '&c无法隐身 — PvE 冷却中（剩余 %seconds% 秒）。'
+
+# --- [ VSPEC 命令 ] ---
+vspec:
+  usage: '&c用法：/vspec <玩家|stop>'
+  started: '&b现在旁观 &e%player%&b。使用 &f/vspec stop &b返回。'
+  stopped: '&a已返回你之前的位置和游戏模式。'
+  not-spectating: '&c你当前没有旁观任何人。'
+
+# --- [ VFOLLOW 命令 ] ---
+vfollow:
+  usage: '&c用法：/vfollow <玩家|stop>'
+  must-be-vanished: '&c你必须处于隐身状态才能使用 /vfollow。'
+  started: '&b现在跟随 &e%player%&b。使用 &f/vfollow stop &b解除。'
+  stopped: '&a已释放视角锁定。'
+  not-following: '&c你当前没有跟随任何人。'
+  target-disconnected: '&e%player% 已断开连接。跟随模式已结束。'
+
+# --- [ 历史记录 ] ---
+history:
+  no-entries: '&7未找到历史记录。'
+
+# --- [ 自动隐身 ] ---
+auto-vanish:
+  enabled: '&a已为 &e%player% &2启用 &a加入时自动隐身。'
+  disabled: '&c已为 &e%player% &4禁用 &c加入时自动隐身。'
+
+# --- [ 统计数据 ] ---
+stats:
+  header: '&6隐身统计 &7— &e%player%'
+  total-time: ' &7总时间：&f%time%'
+  session-count: ' &7会话次数：&f%count%'
+  longest-session: ' &7最长会话：&f%time%'
+
+# --- [ 挂机 ] ---
+afk:
+  auto-vanished: '&7你因长时间未活动已被自动隐身。'
+  unvanished-on-return: '&a欢迎回来！你已自动取消隐身。'
+
+# --- [ WorldGuard ] ---
+worldguard:
+  deny-vanish: '&c你无法在此区域隐身。'
+  deny-unvanish: '&c你无法在此区域取消隐身。'
+  force-vanished: '&7你已在此区域被强制隐身。'
+
+# --- [ 区域 ] ---
+zone:
+  usage: '&c用法：/vzone <create|delete|list|reload>'
+  create-usage: '&c用法：/vzone create <名称> [半径]'
+  delete-usage: '&c用法：/vzone delete <名称>'
+  created: '&a已创建禁止隐身区域 &e%name%&a，半径 &e%radius% &a米。'
+  deleted: '&a已删除区域 &e%name%&a。'
+  already-exists: '&c名为 &e%name% &c的区域已存在。'
+  not-found: '&c未找到区域 &e%name%&c。'
+  none: '&7未配置任何禁止隐身区域。'
+  list-header: '&6禁止隐身区域 &7（%count% 个）：'
+  list-entry: ' &8• &e%name% &7— &f%world% &7（X:%x% Z:%z%&7，半径 &f%radius%m&7）'
+  reloaded: '&a区域已重载。'
+  forced-unvanish: '&c你已被强制取消隐身 — &e%zone% &c为禁止隐身区域。'
+  invalid-radius: '&c半径必须为正数。'
+
+# --- [ 假名模式 ] ---
+incognito:
+  enabled: '&b已为 &e%player% &2启用 &b假名模式，假名为：&f%fakename%'
+  disabled: '&b已为 &e%player% &4禁用 &b假名模式。'
+  not-active: '&e%player% &7未处于假名模式。'
+  invalid-name: '&c假名必须为 1–16 个字符且不能为空。'
+
+# --- [ 魔杖 ] ---
+wand:
+  given: '&a隐身魔杖已放入你的背包。'
+  disabled: '&c此服务器未启用隐身魔杖功能。'
+
+# --- [ 命令假响应 ] ---
+# 当非管理员执行会暴露隐身玩家在线的命令时显示的内容。
+# 默认值与原版 Minecraft/Paper 输出一致，以便自然融入。
+commands:
+  # 当非管理员对隐身玩家使用 /msg、/tell、/w、/r 等时显示。
+  msg-player-not-found: '&c未找到该玩家'
+
+# --- [ 帮助菜单 ] ---
+help:
+  header: "\n&6&l      Vanish++ 帮助菜单      "
+  subheader: '&7点击命令查看详情：'
+  footer: '&7-------------------------------'
+  unknown-command: '&c未知命令 ''&f%command%&c''。显示完整列表：'
+  cmd-vanish: 切换隐身状态。
+  cmd-vrules: 配置个人隐身规则。
+  cmd-vconfig: 实时更改插件设置。
+  cmd-vlist: 列出所有隐身玩家。
+  cmd-vperms: 管理本地权限。
+  cmd-vignore: 停止 ProtocolLib 警告。
+  cmd-vchat: 确认在隐身时发送聊天消息。
+  cmd-vreload: 重载插件配置。
+
+# --- [ 规则预设 ] ---
+rules:
+  usage: '&c用法：/vrules [玩家] <规则> [true|false] [秒数] &7— 省略秒数为永久'
+  invalid-name: '&c无效的规则名。使用 /vrules 查看可用规则。'
+  invalid-value: '&c值必须是 ''true'' 或 ''false''。'
+  invalid-seconds: '&c无效的秒数。'
+  header: '&6%player% 的规则：'
+  line: ' • %rule%: <%color%>%status%'
+  status-on: '已启用'
+  status-off: '已禁用'
+  set: '&a已将 %player% 的规则 ''%rule%'' 设为 %status%。'
+  set-temp: '&a已将 %player% 的规则 ''%rule%'' 设为 %status%（%seconds% 秒）。'
+  expired: '&e临时规则 ''%rule%'' 已到期。'
+
+# --- [ 批量隐身 ] ---
+bulk:
+  vanished-all: '&a已让 &e%count% &a名玩家隐身。'
+  vanished-world: '&a已让世界 &f%world% &a中的 &e%count% &a名玩家隐身。'
+
+# --- [ 更新日志 ] ---
+changelog:
+  header: "\n&6&l  Vanish++ 1.1.8 更新日志  "
+  entries:
+  - ' &8• &e新增&7：/vspec 快速旁观命令'
+  - ' &8• &e新增&7：/vfollow 玩家跟踪及 HUD'
+  - ' &8• &e新增&7：/vhistory 审计日志'
+  - ' &8• &e新增&7：/vautovanish 按玩家设置加入自动隐身'
+  - ' &8• &e新增&7：/vstats 隐身时间统计'
+  - ' &8• &e新增&7：/vadmin 仪表盘 GUI'
+  - ' &8• &e新增&7：/vwand 切换道具（烈焰棒）'
+  - ' &8• &e新增&7：/vzone 禁止隐身区域'
+  - ' &8• &e新增&7：/vincognito 假名模式'
+  - ' &8• &e新增&7：与 LuckPerms 上下文集成'
+  - ' &8• &e新增&7：WorldGuard 强制/禁止隐身标志'
+  - ' &8• &e新增&7：支持 Webhook 外部集成'
+  - ' &8• &e新增&7：隐身原因跟踪与显示'
+  - ' &8• &e新增&7：批量隐身（/vanish all、/vanish world）'
+  - ' &8• &e新增&7：规则预设（保存/加载/删除）'
+  - ' &8• &e新增&7：Bossbar 隐身状态指示器'
+  - ' &8• &e新增&7：面向开发者的公共 VanishAPI'
+  - ' &8• &e新增&7：隐身历史记录存入数据库'
+  - ' &8• &e新增&7：按玩家设置加入自动隐身'
+  - ' &8• &e新增&7：默认计分板显示 /vsb 切换提示'
+  - ' &8• &e新增&7：Shift+右键查看背包集成 OpenInv 和 InvSee++'
+  - ' &8• &e新增&7：对非管理员屏蔽 /msg、/tell、/r、/me（防探测）'
+  - ' &8• &e新增&7：messages.yml 在升级时自动迁移新键值'
+  - ' &8• &c修复&7：怪物 AI 对隐身玩家的目标锁定（跨版本回归问题）'
+  - ' &8• &c修复&7：Folia 调度器非法延迟崩溃（#11 报告）'
+  - ' &8• &c修复&7：取消隐身时的大规模断连（发光数据包竞赛与突发）'
+  footer: '&7-------------------------------'
+
+# --- [ 规则预设 ] ---
+  no-entries: "&7未找到更新日志条目。"
+rules-preset:
+  usage: '&c用法：/vrules preset <save|load|list|delete> [名称]'
+  saved: '&a已保存规则预设 &e%name%&a。'
+  loaded: '&a已加载规则预设 &e%name%&a。'
+  deleted: '&a已删除规则预设 &e%name%&a。'
+  not-found: '&c未找到名为 &e%name% &c的预设。'
+  none: '&7你没有已保存的规则预设。'
+  list-header: '&6你的规则预设：'
+  list-entry: ' &8• &e%name%'
+
+# --- [ GUI 文案 ] ---
+# GUI 文案与聊天/命令消息共用此文件，实时读取。
+gui:
+  rules:
+    title-prefix: '&6规则：&f'
+    status-enabled: '&a✔ 已启用'
+    status-disabled: '&c✘ 已禁用'
+    toggle-hint: '&7点击切换'
+    names:
+      can_break_blocks: '破坏方块'
+      can_place_blocks: '放置方块'
+      can_hit_entities: '攻击实体'
+      can_pickup_items: '拾取物品'
+      can_drop_items: '丢弃物品'
+      can_trigger_physical: '触发物理'
+      can_interact: '交互'
+      can_throw: '投掷'
+      can_chat: '聊天'
+      mob_targeting: '怪物目标锁定'
+      show_notifications: '显示通知'
+      spectator_gamemode: '旁观游戏模式'
+  admin-dashboard:
+    title: '&6Vanish++ 管理员控制台'
+    level: '&b等级：&f%level%'
+    elapsed: '&e已持续：&f%elapsed%'
+    reason: '&f原因：&f%reason%'
+    hint-rules: '&7左键点击 → &e规则 GUI'
+    hint-unvanish: '&c右键点击 → &c取消隐身'
+    vanished-count: '&e隐身中：&f%count%'
+    close: '&c关闭'
+  config:
+    title-prefix: '&6Vanish++ 配置 — &f'
+    no-permission: '&c你没有权限使用此命令。'
+    nav:
+      previous: '&6◀ 上一页'
+      next: '&6下一页 ▶'
+      page-info: '&e第 %page% / %total% 页'
+    setting:
+      current-prefix: '&f当前：&f'
+      value-true: '&a开启'
+      value-false: '&c关闭'
+      click-to-toggle: '&e点击切换'
+      numeric-controls: '&7左键：-1  |  右键：+1'
+      numeric-controls-shift: '&7Shift：±10'
+      range: '&6范围：%min% → %max%'
+      display-only: '&7仅显示'
+      saved: '&a✓ &b%key% &7→ &a%value%'
+    category:
+      general: '常规设置'
+      visibility: '可见性与渲染'
+      spectator: '旁观模式'
+      storage: '数据库与存储'
+      permissions: '权限系统'
+      features: '功能与行为'
+    setting-description:
+      vanish-appearance:
+        action-bar:
+          enabled: '隐身时持续显示状态动作栏消息'
+      vanish-gamemodes:
+        enabled: '双击潜行快速切换旁观的总开关'
+        default-spectator: '隐身时自动进入旁观模式'
+      permissions:
+        default-vanish-level: '玩家默认获得的隐身等级'
+        default-see-level: '玩家默认能看到的最低隐身等级'
+        max-level: '权限系统允许的最高隐身/可见等级'
+      flight-control:
+        vanish-enable-fly: '给予隐身玩家飞行能力'
+        unvanish-disable-fly: '取消隐身时禁用飞行'
+      invisibility-features:
+        prevent-sleeping: '隐身时禁止睡觉'
+
+# --- [ 隐身外观（多语言） ] ---
+# 当 config.yml 保持内置默认值时使用。
+vanish-appearance:
+  tab-prefix: '&7[已隐身] '
+
+# --- [ Boss 血条（多语言） ] ---
+bossbar:
+  title: '&7[已隐身]'
+
+downgrade:
+  button-allow-writes: "&e&l[ 允许写入（有风险）]"
+  button-allow-writes-hover: "&c允许旧版插件写入数据库。\n&c数据可能损坏。"
+  button-reset-db: "&c&l[ 重置数据库（全新开始）]"
+  button-reset-db-hover: "&6清空数据库中所有 Vanish++ 数据\n&6并重新开始。"
+  button-wipe-db: "&c&l[ 清空数据库并重新开始 ]"
+  button-wipe-db-hover: "&c此操作无法撤销！"
+  writes-resumed: "&e数据库写入已恢复。插件当前运行在由更新版本写入的数据库上，请谨慎操作。"

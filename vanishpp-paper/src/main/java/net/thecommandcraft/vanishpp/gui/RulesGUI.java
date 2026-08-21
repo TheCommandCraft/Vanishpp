@@ -88,7 +88,7 @@ public class RulesGUI implements Listener {
         Player target = Bukkit.getPlayer(targetUuid);
         if (target == null) { viewer.closeInventory(); return; }
 
-// Rule id read from invisible item NBT — the display name is now a translated
+        // Rule id read from invisible item NBT — the display name is now a translated
         // string and can no longer be parsed back into a rule key.
         String ruleName = meta.getPersistentDataContainer().get(ruleKey, PersistentDataType.STRING);
         if (ruleName == null || !plugin.getRuleManager().getAvailableRules().contains(ruleName)) return;
@@ -115,7 +115,8 @@ public class RulesGUI implements Listener {
         ItemStack item = new ItemStack(mat);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text(rule, enabled ? NamedTextColor.GREEN : NamedTextColor.RED)
+            meta.displayName(plugin.getMessageManager().parse(getRuleDisplayName(rule), null)
+                    .colorIfAbsent(enabled ? NamedTextColor.GREEN : NamedTextColor.RED)
                     .decoration(TextDecoration.ITALIC, false));
             // Rule id stored in invisible item NBT — the display name is translated, so it
             // can no longer be parsed back into a key, and a visible lore line would leak.
@@ -130,6 +131,15 @@ public class RulesGUI implements Listener {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    /** Translated rule display name from the language file, falling back to the raw rule key. */
+    private String getRuleDisplayName(String rule) {
+        String msg = plugin.getLanguageManager().getMessage("gui.rules.names." + rule);
+        if (msg == null || msg.startsWith("<red>[Missing:")) {
+            return rule;
+        }
+        return msg;
     }
 
     private List<String> sortedRules() {

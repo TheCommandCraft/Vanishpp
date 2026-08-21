@@ -3,10 +3,13 @@
 # -------------------------------------------------------
 # Reload with /vreload — no restart needed.
 #
-# Column alignment: lines containing "|" are auto-padded
-# so the separator lands at the same column on every line.
-# Label length is measured after stripping color codes.
+# NOTE: The title and line texts are now loaded from language files
+#       located in the 'languages/' folder. To customize the display,
+#       edit languages/scoreboards_en-us.yml or languages/scoreboards_zh-cn.yml
+#       depending on your language setting.
 #
+# This file only contains technical settings (update interval, timezone, etc.).
+# -------------------------------------------------------
 # Built-in placeholders:
 #
 #  Coordinates & world
@@ -48,27 +51,6 @@
 #
 # PlaceholderAPI placeholders are also supported if installed.
 # -------------------------------------------------------
-
-title: "&8[ &7Vanish&f++ &8]"
-
-lines:
-  - "&8&m                     "
-  - " &7World  &8| &f%world%"
-  - " &7TPS    &8| %tps%"
-  - " &7Online &8| &f%online%&8/&f%max_players%  &7(&f%vanished_count% &7hidden&8)"
-  - "&8&m                     "
-  - " &7X &f%x%  &7Y &f%y%  &7Z &f%z%"
-  - " &7Dir    &8| &f%direction%"
-  - " &7Biome  &8| &f%biome%"
-  - "&8&m                     "
-  - " &7Ping   &8| &f%ping%&7ms"
-  - " &7Health &8| &f%health%&8/&7%max_health%"
-  - " &7Food   &8| &f%food%&8/&720"
-  - " &7Armor  &8| &f%armor%"
-  - "&8&m                     "
-  - " &7Time   &8| &f%time%  &7%date%"
-  - "&8&m                     "
-  - " &8/vsb &8| &7toggle"
 
 # Timer refresh rate (ticks — 20 = 1 second).
 # Refreshes TPS, time, online count and other non-position values.

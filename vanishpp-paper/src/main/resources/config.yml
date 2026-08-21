@@ -4,7 +4,8 @@
 #                                                               #
 # ------------------------------------------------------------- #
 
-
+# Language settings (zh-cn, en-us, etc.)
+language: en-us
 # Configuration Version (Internal use for migrations)
 config-version: 9
 
@@ -15,6 +16,15 @@ config-version: 9
 messages:
   # Fake Join/Quit (Visible to normal players to simulate staff leaving/joining)
   # Leave empty to use system defaults.
+  #
+  # Example: fake-join: "&a%player% &7joined the game"
+  #          fake-quit: "&c%player% &7left the game"
+  #
+  # Supported placeholders:
+  #   %player%  - Player's username
+  #   %displayname% - Player's display name (if set)
+  #
+  # Color codes: Use & followed by a color code (e.g., &a for green, &c for red).
   fake-join: ""
   fake-quit: ""
 
