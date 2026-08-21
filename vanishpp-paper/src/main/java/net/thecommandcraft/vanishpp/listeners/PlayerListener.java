@@ -425,6 +425,8 @@ public class PlayerListener implements Listener {
         org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(uuid);
         if (att != null) att.remove();
         plugin.cleanupPlayerCache(uuid);
+        if (plugin.getProtocolLibManager() != null)
+            plugin.getProtocolLibManager().clearObserverKnowledge(uuid);
     }
 
     @EventHandler(priority = EventPriority.HIGH)

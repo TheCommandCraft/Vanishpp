@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.9] - 2026-08-21
+
+### Fixed
+- **Client crash "Player is not on any team" still reachable after the previous fix, when an observer was granted `vanishpp.see` live mid-vanish:** The `a5436a6` fix scrubbed ADD/REMOVE `Vanishpp_Vanished` team packets based on the observer's *current* permission at send time, but a client's actual scoreboard knowledge depends on what it was sent in the *past*. An observer promoted to staff (e.g. a live LuckPerms grant, no relog) after missing the original ADD would still receive an unfiltered REMOVE once the vanished player unvanished — the client crashed exactly as before, just from the opposite direction of a permission change. `ProtocolLibManager` now tracks, per observer, which team member names that specific client has actually been sent (`VanishTeamPacketPolicy`), and only forwards a REMOVE for names the client is known to have learned about — regardless of the observer's permission at that moment. As a side effect this also fixes a pre-existing (non-crashing) bug in the other direction: a staff member demoted mid-vanish used to have their REMOVE wrongly suppressed, leaving their client's nametag/team state stale forever; it's now correctly delivered since it no longer depends on current permission either. Covered by a new regression test, `VanishTeamPacketPolicyTest`, exercising both directions.
+- **`ProtocolLibManager` listener registration was all-or-nothing:** All packet listeners were registered in one unguarded method body — a single unsupported `PacketType` on a given server/ProtocolLib version (or any other registration-time exception) silently aborted every listener registered after it, including the crash-preventing team-scrub listener above. Each listener is now registered in its own try/catch, logging a warning and continuing instead of taking down the rest of the hook.
+
 ## [1.1.9] - 2026-08-16
 
 ### Added
