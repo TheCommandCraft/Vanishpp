@@ -85,4 +85,27 @@ class VanishPlayerInfoPolicyTest {
         assertTrue(result.changed());
         assertEquals(List.of("keep1", "keep2"), result.kept());
     }
+
+    // ---------------------------------------------------------------------
+    // Parse-failure handling (added per TCC review on PR #34)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void parseFailureBeforeAnythingKnown_failsOpen() {
+        // Throw happened at read()/before we parsed any entry: we don't know whether the packet
+        // contains a vanished player. Fail-open (send untouched) is correct here — cancelling
+        // would blank every skin/tab entry for the observer for zero leak-reduction benefit.
+        assertTrue(VanishPlayerInfoPolicy.failOpenOnParseFailure(false),
+                "parse failure before any entry is known must fail open");
+    }
+
+    @Test
+    void parseFailureAfterIdentifyingVanishedEntry_stillFailsOpen() {
+        // Throw happened after we parsed the entries and identified a vanished one (e.g. at write).
+        // Cancelling would still be strictly worse (it blanks everyone's display), so we fail open
+        // here too — the identifiedVanished flag exists so the call site can log that a vanished
+        // entry may have slipped through on this path, toward future per-observer tracking.
+        assertTrue(VanishPlayerInfoPolicy.failOpenOnParseFailure(true),
+                "parse failure after identifying a vanished entry still fails open (cancel is worse)");
+    }
 }

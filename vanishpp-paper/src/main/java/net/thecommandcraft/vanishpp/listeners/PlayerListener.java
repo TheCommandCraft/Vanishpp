@@ -104,9 +104,19 @@ public class PlayerListener implements Listener {
         }
 
         // Immediate Vanish Logic
-        if (plugin.isVanished(player)) {
-            plugin.applyVanishEffects(player);
-            plugin.updateVanishVisibility(player);
+        // If the player has the auto-vanish-on-join preference, treat them as vanished right now
+        // (before the join broadcast is sent) so the join is silent. Without this, an auto-vanish
+        // player who manually unvanished before logging off comes back with isVanished=false: the
+        // join broadcast fires as a normal join, yet the (async) auto-vanish preference then hides
+        // them moments later — a jarring "joined, but not in the list" inconsistency.
+        boolean autoVanishPref = plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")
+                && plugin.getStorageProvider().getAutoVanishOnJoin(joinUuid);
+
+        if (plugin.isVanished(player) || autoVanishPref) {
+            if (autoVanishPref) {
+                plugin.applyVanishEffects(player);
+                plugin.updateVanishVisibility(player);
+            }
             if (config.hideRealJoin)
                 event.joinMessage(null);
             // Notify staff that a vanished player silently joined
@@ -134,10 +144,12 @@ public class PlayerListener implements Listener {
                         plugin.getIntegrationManager().updateHooks(player, true);
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
-                        // Rebuild the scoreboard from scratch at these later points too:
-                        // a player restored as vanished via reconciliation (not just auto-vanish)
-                        // is equally exposed to TAB overwriting the sidebar after join.
-                        if (plugin.getVanishScoreboard() != null)
+                        // Rebuild the scoreboard from scratch at the final stage only, so TAB has
+                        // settled: a player restored as vanished via reconciliation (not just
+                        // auto-vanish) is equally exposed to TAB overwriting the sidebar after join.
+                        // Rebuilding at every stage races TAB's async pipeline and causes the
+                        // sidebar to flicker or get re-overwritten.
+                        if (delay == 60L && plugin.getVanishScoreboard() != null)
                             plugin.getVanishScoreboard().forceReshow(player);
                     }
                 }, delay);
@@ -177,12 +189,11 @@ public class PlayerListener implements Listener {
                     plugin.getVanishScheduler().runGlobal(() -> {
                         if (!player.isOnline()) return;
                         if (plugin.isVanished(player)) {
-                            // Logged off while vanished — the DB restore path already
-                            // applied vanish effects at join, but another plugin
-                            // (e.g. TAB) may have overwritten the sidebar right after
-                            // join. Force-rebuild it at this later point in time.
-                            if (plugin.getVanishScoreboard() != null)
-                                plugin.getVanishScoreboard().forceReshow(player);
+                            // The synchronous block above already applied vanish effects and
+                            // silent-join for auto-vanish players, so by the time this async task
+                            // runs the player is normally already vanished. This is purely a
+                            // safety net for the edge case where the sync check failed (e.g. a
+                            // storage read error at join): only then vanish them silently here.
                         } else {
                             plugin.vanishPlayerSilently(player);
                         }

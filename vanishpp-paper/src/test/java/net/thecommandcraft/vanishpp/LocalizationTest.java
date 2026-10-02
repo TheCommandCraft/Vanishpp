@@ -112,4 +112,18 @@ class LocalizationTest {
                 org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(userFile);
         assertTrue(after.contains(probeKey), "self-heal should restore the dropped key on disk");
     }
+
+    @Test
+    void testVanishAlwaysSetsSleepingIgnored_whenPreventSleepingOff() {
+        // Issue #2: a vanished player must never block the server from skipping the night. Even when
+        // prevent-sleeping is OFF, vanishing should mark the player sleeping-ignored (fauxSleeping)
+        // so they count as a sleeper rather than an awake denominator in the skip-night percentage.
+        plugin.getConfigManager().preventSleeping = false;
+        plugin.applyVanishEffects(player);
+        assertTrue(player.isSleepingIgnored(), "vanished player should be sleeping-ignored even when prevent-sleeping=false");
+
+        // And unvanishing clears it.
+        plugin.removeVanishEffects(player);
+        assertFalse(player.isSleepingIgnored(), "unvanished player should no longer be sleeping-ignored");
+    }
 }
