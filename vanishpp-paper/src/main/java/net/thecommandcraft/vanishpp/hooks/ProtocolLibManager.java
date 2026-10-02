@@ -238,6 +238,7 @@ public class ProtocolLibManager {
                                 "vanishpp.see"))
                             return;
 
+                        boolean identifiedVanished = false; // set true if we parsed and found a vanished entry
                         try {
                             PacketContainer packet = event.getPacket();
                             List<PlayerInfoData> entries = packet.getPlayerInfoDataLists().read(0);
@@ -250,6 +251,8 @@ public class ProtocolLibManager {
 
                             if (!result.changed())
                                 return;
+                            // We now know at least one entry is vanished.
+                            identifiedVanished = true;
                             if (result.cancel()) {
                                 event.setCancelled(true);
                             } else {
@@ -263,8 +266,17 @@ public class ProtocolLibManager {
                             // throws on every player join, blanking all skins. Bukkit's own hidePlayer()
                             // remains the primary vanish-visibility layer, so leaving the packet alone
                             // on a parse error is far less harmful than blanking everyone's display.
-                            ProtocolLibManager.this.plugin.getLogger().fine(
-                                    "PLAYER_INFO scrub skipped (packet not parseable): " + e.getMessage());
+                            // Log the full stack trace so we can see exactly where it throws (TCC
+                            // review follow-up), and note if a vanished entry may have slipped through
+                            // because the failure happened after we identified one (e.g. at write).
+                            if (VanishPlayerInfoPolicy.failOpenOnParseFailure(identifiedVanished)) {
+                                // Intentionally fall through and send the original packet untouched.
+                                ProtocolLibManager.this.plugin.getLogger().warning(
+                                        "PLAYER_INFO scrub skipped (parse error; fail-open). identifiedVanished="
+                                                + identifiedVanished + " — " + e);
+                            } else {
+                                event.setCancelled(true);
+                            }
                         }
                     }
                 });
