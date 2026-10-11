@@ -20,6 +20,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.Warden;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -350,6 +351,150 @@ class EventListenerTest {
         assertTrue(event.isCancelled(), "Mob targeting a vanished player must be cancelled");
         assertEquals(otherTarget, mob.getTarget(),
                 "onMobTarget() must not touch the mob's existing target field - only cancel the event");
+    }
+
+    // -------------------------------------------------------------------------
+    // Warden anger — WardenAngerChangeEvent
+    //
+    // Wardens select their sonic-boom attack via a per-entity anger score
+    // (Warden#getAnger/clearAnger), entirely independent of Mob#target/EntityTargetEvent/
+    // MobGoals - none of which reach a Warden. Regression: a vanished player being hit by
+    // sonic booms despite no mob ever acquiring them as a Mob#target.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void wardenAnger_cancelled_whenTargetIsVanished() {
+        plugin.applyVanishEffects(player);
+
+        org.bukkit.entity.Warden warden = (org.bukkit.entity.Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        io.papermc.paper.event.entity.WardenAngerChangeEvent event =
+                new io.papermc.paper.event.entity.WardenAngerChangeEvent(warden, player, 0, 40);
+        server.getPluginManager().callEvent(event);
+
+        assertTrue(event.isCancelled(), "Warden anger rising against a vanished player must be cancelled");
+    }
+
+    @Test
+    void wardenAnger_notCancelled_whenTargetIsNotVanished() {
+        // Player is NOT vanished
+        org.bukkit.entity.Warden warden = (org.bukkit.entity.Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        io.papermc.paper.event.entity.WardenAngerChangeEvent event =
+                new io.papermc.paper.event.entity.WardenAngerChangeEvent(warden, player, 0, 40);
+        server.getPluginManager().callEvent(event);
+
+        assertFalse(event.isCancelled(), "Warden anger against a non-vanished player must not be cancelled");
+    }
+
+    @Test
+    void wardenAnger_notCancelled_whenMobTargetingRuleAllowed() {
+        plugin.applyVanishEffects(player);
+        plugin.getRuleManager().setRule(player, RuleManager.MOB_TARGETING, true);
+
+        org.bukkit.entity.Warden warden = (org.bukkit.entity.Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        io.papermc.paper.event.entity.WardenAngerChangeEvent event =
+                new io.papermc.paper.event.entity.WardenAngerChangeEvent(warden, player, 0, 40);
+        server.getPluginManager().callEvent(event);
+
+        assertFalse(event.isCancelled(), "mob_targeting rule enabled must let Warden anger through");
+    }
+
+    @Test
+    void mobAiManager_clearsWardenAnger_whenTargetIsVanished() {
+        // NOTE: this test is expected to SKIP (not pass/fail) under the current MockBukkit
+        // version - WardenMock#clearAnger() unconditionally throws UnimplementedOperationException,
+        // which MockBukkit's JUnit5 integration converts into a skip. The sweep's actual
+        // effectiveness (this exact clearAnger() call working as intended) is verified
+        // against a real server instead - see the Warden-anger real-server test notes in the
+        // fix's CHANGELOG entry. Left in place so this starts passing for real the moment
+        // MockBukkit implements clearAnger(), rather than being deleted and forgotten.
+        //
+        // A player can already have nonzero Warden anger from BEFORE vanishing (e.g. noise
+        // made just before toggling vanish) - onWardenAngerChange only guards future rises,
+        // so MobAiManager's periodic sweep has to actively clear pre-existing anger too.
+        player.teleport(loc); // sweepForPlayer uses getNearbyEntities() from the player's location
+        plugin.applyVanishEffects(player);
+
+        org.bukkit.entity.Warden warden = (org.bukkit.entity.Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        warden.increaseAnger(player, 40);
+        assertTrue(warden.getAnger(player) > 0, "test setup: warden must start angry at the player");
+
+        // sweepMobTargets is a runTaskTimer(delay=3, period=1) that dispatches through two
+        // more runTask() hops (per-player, then per-mob) before actually touching the
+        // warden - advance enough ticks to let the whole chain settle.
+        server.getScheduler().performTicks(10);
+
+        assertEquals(0, warden.getAnger(player),
+                "the periodic sweep must clear pre-existing Warden anger toward a vanished player");
+    }
+
+    // -------------------------------------------------------------------------
+    // Warden idle-wander — Mob#setAware freeze/unfreeze
+    //
+    // Independent of anger/Mob#target, an idle Warden with no other target autonomously
+    // pathfinds toward the closest entity it's aware of (Brain-driven, not Goal/target-based -
+    // see MobAiManager#hasOnlyVanishedTargetsNearby). Regression: a vanished player with zero
+    // Warden anger (the previous fix working as intended) still visibly being followed around.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void warden_becomesUnaware_whenOnlyVanishedPlayerNearby() {
+        plugin.applyVanishEffects(player);
+        player.teleport(loc); // sweepForPlayer uses getNearbyEntities() from the player's location
+
+        Warden warden = (Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        assertTrue(warden.isAware(), "test setup: a freshly spawned Warden must start aware");
+
+        server.getScheduler().performTicks(5);
+
+        assertFalse(warden.isAware(),
+                "a Warden with no non-vanished player nearby must be frozen (setAware(false))");
+    }
+
+    @Test
+    void warden_staysAware_whenRealPlayerAlsoNearby() {
+        plugin.applyVanishEffects(player);
+        player.teleport(loc);
+        server.addPlayer().teleport(loc); // a second, non-vanished player at the same spot
+
+        Warden warden = (Warden) world.spawnEntity(loc, EntityType.WARDEN);
+
+        server.getScheduler().performTicks(5);
+
+        assertTrue(warden.isAware(),
+                "a Warden must never be frozen while a real (non-vanished) player is also nearby");
+    }
+
+    @Test
+    void warden_staysAware_whenMobTargetingRuleAllowed() {
+        plugin.applyVanishEffects(player);
+        plugin.getRuleManager().setRule(player, RuleManager.MOB_TARGETING, true);
+        player.teleport(loc);
+
+        Warden warden = (Warden) world.spawnEntity(loc, EntityType.WARDEN);
+
+        server.getScheduler().performTicks(5);
+
+        assertTrue(warden.isAware(), "mob_targeting rule enabled must never freeze a Warden");
+    }
+
+    @Test
+    void warden_reawakens_afterVanishedPlayerNoLongerQualifies() {
+        plugin.applyVanishEffects(player);
+        player.teleport(loc);
+
+        Warden warden = (Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        server.getScheduler().performTicks(5);
+        assertFalse(warden.isAware(), "test setup: Warden must be frozen first");
+
+        plugin.removeVanishEffects(player);
+
+        // unfreezeStaleWardens runs on its own 20-tick timer (started with a 20-tick initial
+        // delay) rather than reacting to removeVanishEffects directly - this is what guarantees
+        // a frozen Warden always thaws even when nothing else ever visits it again.
+        server.getScheduler().performTicks(45);
+
+        assertTrue(warden.isAware(),
+                "unfreezeStaleWardens must restore awareness once no vanished target still qualifies");
     }
 
     @Test

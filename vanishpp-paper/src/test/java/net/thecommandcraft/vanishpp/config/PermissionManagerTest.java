@@ -246,4 +246,65 @@ class PermissionManagerTest {
         assertTrue(perms.canSee(observer, player),
                 "Observer at see level 1 should see player vanished at level 1");
     }
+
+    // -------------------------------------------------------------------------
+    // Vanish-level persistence (applyVanishEffects -> StorageProvider#setVanishLevel)
+    //
+    // The permission-derived level canSee() resolves was always correct - what was broken is
+    // that nothing except storage migration ever called setVanishLevel, so every *display* of
+    // it (/vlist, /vadmin, scoreboard placeholders, cross-server proxy sync) stayed stuck at
+    // the default forever. These tests cover the fix: vanishing now writes the real resolved
+    // level to storage. Visibility gating itself is untouched and already covered above.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testVanish_withNoLevelPermission_persistsDefaultLevel() {
+        plugin.getConfigManager().defaultVanishLevel = 1;
+        player.setOp(false);
+
+        plugin.applyVanishEffects(player);
+
+        assertEquals(1, plugin.getStorageProvider().getVanishLevel(uuid),
+                "no level permission should persist the configured default");
+    }
+
+    @Test
+    void testVanish_withGrantedLevelPermission_persistsThatLevel() {
+        plugin.getConfigManager().maxLevel = 20;
+        player.setOp(false);
+        perms.addPermission(uuid, "vanishpp.vanish.level.7");
+
+        plugin.applyVanishEffects(player);
+
+        assertEquals(7, plugin.getStorageProvider().getVanishLevel(uuid),
+                "vanishing with vanishpp.vanish.level.7 should persist level 7");
+    }
+
+    @Test
+    void testVanish_asOp_persistsMaxLevel() {
+        plugin.getConfigManager().maxLevel = 20;
+        player.setOp(true);
+
+        plugin.applyVanishEffects(player);
+
+        assertEquals(20, plugin.getStorageProvider().getVanishLevel(uuid),
+                "an op resolves to the configured max level, same as canSee()'s own resolution");
+    }
+
+    @Test
+    void testVanish_levelUpdatesOnRevanish_afterPermissionChange() {
+        plugin.getConfigManager().maxLevel = 20;
+        player.setOp(false);
+        perms.addPermission(uuid, "vanishpp.vanish.level.3");
+        plugin.applyVanishEffects(player);
+        assertEquals(3, plugin.getStorageProvider().getVanishLevel(uuid));
+
+        plugin.removeVanishEffects(player);
+        perms.removePermission(uuid, "vanishpp.vanish.level.3");
+        perms.addPermission(uuid, "vanishpp.vanish.level.9");
+        plugin.applyVanishEffects(player);
+
+        assertEquals(9, plugin.getStorageProvider().getVanishLevel(uuid),
+                "re-vanishing after a permission change must persist the newly-resolved level");
+    }
 }

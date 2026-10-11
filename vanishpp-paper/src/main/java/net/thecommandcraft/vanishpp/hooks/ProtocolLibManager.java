@@ -10,7 +10,6 @@ import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.wrappers.*;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 import java.util.*;
@@ -30,6 +29,20 @@ public class ProtocolLibManager {
      */
     private final Map<UUID, Set<String>> knownVanishTeamMembers = new ConcurrentHashMap<>();
 
+    /**
+     * Authoritative entityId -> UUID mapping for online players, populated on join and
+     * cleared on quit. Every non-seer cancellation decision below resolves "is this packet
+     * about a vanished player" through this map rather than through
+     * {@link ProtocolManager#getEntityFromID(org.bukkit.World, int)}, whose live,
+     * world-scoped entity lookup can transiently return null or the wrong entity around
+     * spawn/despawn/cross-world timing - a failed lookup there silently let the packet
+     * through unfiltered instead of failing closed, causing an intermittent leak (observers
+     * seeing a vanished player's equipment/metadata packets go through, e.g. a floating
+     * head). This mapping only ever needs entityId -> UUID, so it sidesteps that race
+     * entirely rather than trying to make the live lookup more reliable.
+     */
+    private final Map<Integer, UUID> entityIdCache = new ConcurrentHashMap<>();
+
     public ProtocolLibManager(Vanishpp plugin) {
         this.plugin = plugin;
     }
@@ -39,12 +52,52 @@ public class ProtocolLibManager {
         knownVanishTeamMembers.remove(observerId);
     }
 
+    /** Call on player join, before any packets for them can be intercepted. */
+    public void cachePlayer(Player p) {
+        entityIdCache.put(p.getEntityId(), p.getUniqueId());
+    }
+
+    /**
+     * Call on player quit. Removing the entry (not just leaving it to go stale) matters:
+     * Minecraft can reuse a numeric entity ID for an unrelated entity later in the same
+     * server session, and a stale mapping would wrongly flag that new entity as the old
+     * (possibly still-vanished-by-UUID-coincidence) player.
+     *
+     * Uses the conditional two-arg Map#remove (only removes if the current mapping still
+     * equals this exact player's UUID) rather than an unconditional remove-by-key, purely as
+     * cheap defense-in-depth: if a fast reconnect ever landed this quit's processing after a
+     * new connection's join already called cachePlayer() for the same reclaimed id, an
+     * unconditional remove would wrongly evict the new, correct entry instead of no-oping.
+     */
+    public void uncachePlayer(Player p) {
+        entityIdCache.remove(p.getEntityId(), p.getUniqueId());
+    }
+
+    /**
+     * Resolves an entityId to a currently-vanished player's UUID, without needing a live
+     * World-scoped entity lookup. Package-private (not private) so
+     * {@code ProtocolLibManagerCacheTest} can exercise it directly.
+     */
+    boolean isVanishedEntity(int entityId) {
+        UUID uuid = entityIdCache.get(entityId);
+        return uuid != null && plugin.isVanished(uuid);
+    }
+
     public void load() {
         if (Bukkit.getPluginManager().getPlugin("ProtocolLib") == null)
             return;
 
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         plugin.getLogger().info("Hooked into ProtocolLib.");
+
+        // Seed the entityId cache for anyone already online. hookProtocolLib() normally only
+        // runs once, during onEnable, before any players can be connected - but a server
+        // /reload (or the plugin being disabled/re-enabled) can re-run it with players
+        // already online, and PlayerJoinEvent won't refire for them.
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            cachePlayer(p);
+        }
+
         registerSilentChestListeners();
 
         // Each listener below is registered in its own try-catch: a single unsupported
@@ -122,10 +175,8 @@ public class ProtocolLibManager {
 
                     // Handle packets where index 0 is the primary entity
                     int entityId = packet.getIntegers().read(0);
-                    Entity entity = protocolManager.getEntityFromID(observer.getWorld(), entityId);
 
-                    if (entity instanceof Player target
-                            && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
+                    if (ProtocolLibManager.this.isVanishedEntity(entityId)) {
                         // Never block packets about the player themselves — this includes
                         // ENTITY_STATUS (OP level updates needed for F3+F4 game mode switcher)
                         // and other self-referencing packets that the client needs.
@@ -148,9 +199,7 @@ public class ProtocolLibManager {
                         if (type == PacketType.Play.Server.COLLECT) {
                             // Index 1 is the collector ID
                             int collectorId = packet.getIntegers().read(1);
-                            Entity collector = protocolManager.getEntityFromID(observer.getWorld(), collectorId);
-                            if (collector instanceof Player p
-                                    && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                            if (ProtocolLibManager.this.isVanishedEntity(collectorId)) {
                                 event.setCancelled(true);
                             }
                         } else if (type == PacketType.Play.Server.MOUNT) {
@@ -160,9 +209,7 @@ public class ProtocolLibManager {
                                 boolean hasVanished = false;
                                 List<Integer> filtered = new ArrayList<>();
                                 for (int id : passengers) {
-                                    Entity e = protocolManager.getEntityFromID(observer.getWorld(), id);
-                                    if (e instanceof Player p
-                                            && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                    if (ProtocolLibManager.this.isVanishedEntity(id)) {
                                         hasVanished = true;
                                     } else {
                                         filtered.add(id);
@@ -282,10 +329,8 @@ public class ProtocolLibManager {
 
                 try {
                     int entityId = event.getPacket().getIntegers().read(0);
-                    Entity entity = protocolManager.getEntityFromID(event.getPlayer().getWorld(), entityId);
 
-                    if (entity instanceof Player target
-                            && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
+                    if (ProtocolLibManager.this.isVanishedEntity(entityId)) {
                         event.setCancelled(true);
                     }
                 } catch (Exception ignored) {

@@ -178,6 +178,19 @@ public class PermissionManager {
         return true;
     }
 
+    /**
+     * The vanish-level a player would resolve to right now, via the same
+     * {@code vanishpp.vanish.level.<n>} permission walk {@link #canSee} already uses to gate
+     * visibility. Public so {@code Vanishpp#applyVanishEffects} can persist it (see
+     * {@code StorageProvider#setVanishLevel}) - the visibility-gating logic above this is
+     * unaffected either way, this only makes the displayed/synced level (used by
+     * {@code /vlist}, {@code /vadmin}, the scoreboard placeholders, and cross-server proxy
+     * sync) reflect reality instead of staying stuck at whatever it was left at.
+     */
+    public int getVanishLevel(Player player) {
+        return getLevel(player, "vanishpp.vanish.level.", plugin.getConfigManager().defaultVanishLevel);
+    }
+
     private int getLevel(Player player, String prefix, int def) {
         if (hasPermission(player, "vanishpp.*"))
             return plugin.getConfigManager().maxLevel;

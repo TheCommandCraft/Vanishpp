@@ -2,6 +2,7 @@ package net.thecommandcraft.vanishpp.listeners;
 
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
 import io.papermc.paper.chat.ChatRenderer;
+import io.papermc.paper.event.entity.WardenAngerChangeEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -93,6 +94,11 @@ public class PlayerListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         final UUID joinUuid = player.getUniqueId();
+
+        // Populate the entityId cache before anything else can intercept packets about this
+        // player - see ProtocolLibManager#cachePlayer.
+        if (plugin.getProtocolLibManager() != null)
+            plugin.getProtocolLibManager().cachePlayer(player);
 
         plugin.playerNameCache.put(player.getName().toLowerCase(), joinUuid);
 
@@ -433,8 +439,10 @@ public class PlayerListener implements Listener {
         org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(uuid);
         if (att != null) att.remove();
         plugin.cleanupPlayerCache(uuid);
-        if (plugin.getProtocolLibManager() != null)
+        if (plugin.getProtocolLibManager() != null) {
             plugin.getProtocolLibManager().clearObserverKnowledge(uuid);
+            plugin.getProtocolLibManager().uncachePlayer(player);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -720,6 +728,27 @@ public class PlayerListener implements Listener {
                 // (Regressed twice before by re-adding this exact call; see commits c0c4722/7fdcaef.)
                 event.setCancelled(true);
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onWardenAngerChange(WardenAngerChangeEvent event) {
+        // Wardens select their sonic-boom attack via a per-entity anger score, entirely
+        // independent of Mob#target/EntityTargetEvent/MobGoals - none of which affect a
+        // Warden.
+        //
+        // Verified against a real server: cancelling this event does NOT reliably stop the
+        // anger value from being applied - the Warden's internal anger update appears to
+        // happen regardless of what this handler does. It's kept anyway as a cheap
+        // best-effort attempt (may behave differently on other Paper/Purpur builds), but it
+        // is NOT what actually keeps a vanished player safe. That guarantee comes from
+        // MobAiManager's periodic sweep (runs every tick), which forcibly clears any Warden
+        // anger toward a vanished player shortly after it rises, regardless of how it got
+        // there - confirmed live. Do not remove the sweep's Warden-anger branch under the
+        // assumption this handler alone covers it.
+        if (event.getTarget() instanceof Player p && plugin.isVanished(p)
+                && !rules.getRule(p, RuleManager.MOB_TARGETING)) {
+            event.setCancelled(true);
         }
     }
 

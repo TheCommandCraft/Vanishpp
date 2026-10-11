@@ -1126,6 +1126,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (vanishTeam != null) vanishTeam.addEntry(player.getName());
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
 
+        // Persist the permission-resolved level so displays/sync (/vlist, /vadmin, the
+        // scoreboard %level%/%vanish_level% placeholders, and the cross-server proxy state)
+        // reflect the player's actual current level instead of staying stuck at whatever it
+        // was last written to - historically only the storage-migration path ever called
+        // setVanishLevel, so every one of those displays was permanently stuck at the
+        // default (1) regardless of what vanishpp.vanish.level.<n> permission a player held.
+        // This does not affect visibility gating at all - canSee() already resolves the level
+        // itself, independently, every time it's called.
+        if (storageProvider != null) {
+            try {
+                storageProvider.setVanishLevel(player.getUniqueId(), permissionManager.getVanishLevel(player));
+            } catch (Throwable ignored) {
+            }
+        }
+
         if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
             player.playerListName(messageManager.parse(configManager.vanishTabPrefix + player.getName(), player));
         }
