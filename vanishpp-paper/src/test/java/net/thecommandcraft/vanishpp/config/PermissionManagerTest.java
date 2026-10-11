@@ -263,6 +263,7 @@ class PermissionManagerTest {
         player.setOp(false);
 
         plugin.applyVanishEffects(player);
+        server.getScheduler().waitAsyncTasksFinished(); // level is persisted async
 
         assertEquals(1, plugin.getStorageProvider().getVanishLevel(uuid),
                 "no level permission should persist the configured default");
@@ -275,6 +276,7 @@ class PermissionManagerTest {
         perms.addPermission(uuid, "vanishpp.vanish.level.7");
 
         plugin.applyVanishEffects(player);
+        server.getScheduler().waitAsyncTasksFinished(); // level is persisted async
 
         assertEquals(7, plugin.getStorageProvider().getVanishLevel(uuid),
                 "vanishing with vanishpp.vanish.level.7 should persist level 7");
@@ -286,6 +288,7 @@ class PermissionManagerTest {
         player.setOp(true);
 
         plugin.applyVanishEffects(player);
+        server.getScheduler().waitAsyncTasksFinished(); // level is persisted async
 
         assertEquals(20, plugin.getStorageProvider().getVanishLevel(uuid),
                 "an op resolves to the configured max level, same as canSee()'s own resolution");
@@ -297,12 +300,14 @@ class PermissionManagerTest {
         player.setOp(false);
         perms.addPermission(uuid, "vanishpp.vanish.level.3");
         plugin.applyVanishEffects(player);
+        server.getScheduler().waitAsyncTasksFinished(); // level is persisted async
         assertEquals(3, plugin.getStorageProvider().getVanishLevel(uuid));
 
         plugin.removeVanishEffects(player);
         perms.removePermission(uuid, "vanishpp.vanish.level.3");
         perms.addPermission(uuid, "vanishpp.vanish.level.9");
         plugin.applyVanishEffects(player);
+        server.getScheduler().waitAsyncTasksFinished(); // level is persisted async
 
         assertEquals(9, plugin.getStorageProvider().getVanishLevel(uuid),
                 "re-vanishing after a permission change must persist the newly-resolved level");

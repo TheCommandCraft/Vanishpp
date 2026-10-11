@@ -5,6 +5,7 @@ import com.destroystokyo.paper.entity.ai.VanillaGoal;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.config.RuleManager;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
@@ -14,8 +15,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.persistence.PersistentDataType;
 
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -48,11 +50,24 @@ public class MobAiManager implements Listener {
      * Wardens this manager has set unaware (see hasOnlyVanishedTargetsNearby) via
      * Mob#setAware(false), so unfreezeStaleWardens knows which ones it's responsible for
      * restoring - never touches a Warden's awareness state unless it's the one that froze it.
+     * Holds the entity reference (not just the UUID) so the thaw pass never needs a global
+     * Bukkit#getEntity lookup, which is not region-thread-safe on Folia.
      */
-    private final Set<UUID> frozenWardens = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Warden> frozenWardens = new ConcurrentHashMap<>();
+
+    /**
+     * PDC marker set alongside every setAware(false) this manager performs. The aware flag is
+     * saved to entity NBT, but frozenWardens is in-memory only - without this marker a Warden
+     * frozen at the moment its chunk unloads, the server stops, or the plugin reloads would come
+     * back permanently unaware with nothing left to thaw it. Any Warden still carrying this
+     * marker when it loads (or when the plugin starts) is thawed; the per-tick sweep re-freezes
+     * it within a tick if a vanished player is still the only one nearby.
+     */
+    private final NamespacedKey frozenKey;
 
     public MobAiManager(Vanishpp plugin) {
         this.plugin = plugin;
+        this.frozenKey = new NamespacedKey(plugin, "warden_frozen");
     }
 
     public void register() {
@@ -72,9 +87,8 @@ public class MobAiManager implements Listener {
         // on every currently loaded mob. Covers mobs already loaded before this listener existed
         // (e.g. right after /vanishreload or a --restart deploy) - new/loading mobs are covered
         // by onCreatureSpawn/onEntitiesLoad below.
-        if (plugin.hasPaperApi()) {
-            plugin.getVanishScheduler().runGlobal(this::injectAllLoadedMobs);
-        }
+        // Also thaws any Warden left frozen by a previous plugin instance (see frozenKey).
+        plugin.getVanishScheduler().runGlobal(this::injectAllLoadedMobs);
     }
 
     private void sweepMobTargets() {
@@ -127,13 +141,10 @@ public class MobAiManager implements Listener {
                     // silently disabled - see hasOnlyVanishedTargetsNearby. unfreezeStaleWardens
                     // guarantees this always gets reversed even after this player stops being
                     // the one bringing this Warden into sweepForPlayer's reach at all.
-                    UUID wardenId = warden.getUniqueId();
                     if (hasOnlyVanishedTargetsNearby(warden)) {
-                        if (frozenWardens.add(wardenId)) {
-                            warden.setAware(false);
-                        }
-                    } else if (frozenWardens.remove(wardenId)) {
-                        warden.setAware(true);
+                        if (!frozenWardens.containsKey(warden.getUniqueId())) freezeWarden(warden);
+                    } else if (frozenWardens.containsKey(warden.getUniqueId())) {
+                        thawWarden(warden);
                     }
                 }
             }, null);
@@ -171,21 +182,39 @@ public class MobAiManager implements Listener {
     private void unfreezeStaleWardens() {
         if (frozenWardens.isEmpty()) return;
 
-        for (UUID id : frozenWardens) {
-            Entity entity = Bukkit.getEntity(id);
-            if (!(entity instanceof Warden warden)) {
-                frozenWardens.remove(id);
-                continue;
-            }
-
+        for (Map.Entry<UUID, Warden> entry : frozenWardens.entrySet()) {
+            UUID id = entry.getKey();
+            Warden warden = entry.getValue();
             plugin.getVanishScheduler().runEntity(warden, () -> {
                 if (!warden.isValid()) {
+                    // Unloaded or removed. If it was only unloaded, frozenKey makes
+                    // onEntitiesLoad thaw it the next time it loads.
                     frozenWardens.remove(id);
                 } else if (!hasOnlyVanishedTargetsNearby(warden)) {
-                    warden.setAware(true);
-                    frozenWardens.remove(id);
+                    thawWarden(warden);
                 }
-            }, null);
+            }, () -> frozenWardens.remove(id));
+        }
+    }
+
+    private void freezeWarden(Warden warden) {
+        warden.getPersistentDataContainer().set(frozenKey, PersistentDataType.BYTE, (byte) 1);
+        warden.setAware(false);
+        frozenWardens.put(warden.getUniqueId(), warden);
+    }
+
+    private void thawWarden(Warden warden) {
+        warden.setAware(true);
+        warden.getPersistentDataContainer().remove(frozenKey);
+        frozenWardens.remove(warden.getUniqueId());
+    }
+
+    /** Thaws a Warden frozen by this plugin that this instance is no longer tracking (see frozenKey). */
+    private void thawIfOrphaned(Entity entity) {
+        if (entity instanceof Warden warden
+                && !frozenWardens.containsKey(warden.getUniqueId())
+                && warden.getPersistentDataContainer().has(frozenKey, PersistentDataType.BYTE)) {
+            thawWarden(warden);
         }
     }
 
@@ -198,9 +227,9 @@ public class MobAiManager implements Listener {
 
     @EventHandler
     public void onEntitiesLoad(EntitiesLoadEvent event) {
-        if (!plugin.hasPaperApi()) return;
         for (Entity entity : event.getEntities()) {
-            if (entity instanceof Mob mob) injectIfMissing(mob);
+            thawIfOrphaned(entity);
+            if (plugin.hasPaperApi() && entity instanceof Mob mob) injectIfMissing(mob);
         }
     }
 
@@ -208,7 +237,10 @@ public class MobAiManager implements Listener {
         for (World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
                 if (entity instanceof Mob mob) {
-                    plugin.getVanishScheduler().runEntity(mob, () -> injectIfMissing(mob), null);
+                    plugin.getVanishScheduler().runEntity(mob, () -> {
+                        thawIfOrphaned(mob);
+                        if (plugin.hasPaperApi()) injectIfMissing(mob);
+                    }, null);
                 }
             }
         }

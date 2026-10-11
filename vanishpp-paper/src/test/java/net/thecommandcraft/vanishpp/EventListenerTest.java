@@ -398,6 +398,35 @@ class EventListenerTest {
         assertFalse(event.isCancelled(), "mob_targeting rule enabled must let Warden anger through");
     }
 
+    // Mob#setAware is persisted to entity NBT but MobAiManager's frozen set is in-memory, so a
+    // Warden frozen across a chunk unload / restart / reload must be thawed when it loads again.
+    @Test
+    void wardenFrozenByPreviousInstance_isThawedOnEntitiesLoad() {
+        Warden warden = (Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        org.bukkit.NamespacedKey key = new org.bukkit.NamespacedKey(plugin, "warden_frozen");
+        warden.getPersistentDataContainer().set(key, org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+        warden.setAware(false);
+
+        server.getPluginManager().callEvent(new org.bukkit.event.world.EntitiesLoadEvent(
+                loc.getChunk(), java.util.List.of(warden)));
+
+        assertTrue(warden.isAware(), "Orphaned frozen Warden must be thawed on load");
+        assertFalse(warden.getPersistentDataContainer().has(key, org.bukkit.persistence.PersistentDataType.BYTE),
+                "Frozen marker must be cleared on thaw");
+    }
+
+    @Test
+    void wardenUnawareWithoutMarker_isLeftAloneOnEntitiesLoad() {
+        // Another plugin (or an admin) froze this Warden - never ours to undo.
+        Warden warden = (Warden) world.spawnEntity(loc, EntityType.WARDEN);
+        warden.setAware(false);
+
+        server.getPluginManager().callEvent(new org.bukkit.event.world.EntitiesLoadEvent(
+                loc.getChunk(), java.util.List.of(warden)));
+
+        assertFalse(warden.isAware(), "Unmarked unaware Warden must not be touched");
+    }
+
     @Test
     void mobAiManager_clearsWardenAnger_whenTargetIsVanished() {
         // NOTE: this test is expected to SKIP (not pass/fail) under the current MockBukkit

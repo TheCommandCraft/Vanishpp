@@ -26,7 +26,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public void init() {
+    public synchronized void init() {
         if (!plugin.getDataFolder().exists()) {
             plugin.getDataFolder().mkdirs();
         }
@@ -47,7 +47,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public void shutdown() {
+    public synchronized void shutdown() {
         save();
         saveHistory();
     }
@@ -65,13 +65,13 @@ public class YamlStorage implements StorageProvider {
     // ── Vanish State ──────────────────────────────────────────────────────────
 
     @Override
-    public boolean isVanished(UUID uuid) {
+    public synchronized boolean isVanished(UUID uuid) {
         List<String> vanished = config.getStringList("vanished-players");
         return vanished.contains(uuid.toString());
     }
 
     @Override
-    public void setVanished(UUID uuid, boolean vanished) {
+    public synchronized void setVanished(UUID uuid, boolean vanished) {
         List<String> list = new ArrayList<>(config.getStringList("vanished-players"));
         if (vanished) {
             if (!list.contains(uuid.toString())) list.add(uuid.toString());
@@ -83,7 +83,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public Set<UUID> getVanishedPlayers() {
+    public synchronized Set<UUID> getVanishedPlayers() {
         return config.getStringList("vanished-players").stream()
                 .filter(s -> {
                     try { UUID.fromString(s); return true; }
@@ -99,18 +99,18 @@ public class YamlStorage implements StorageProvider {
     // ── Rules ─────────────────────────────────────────────────────────────────
 
     @Override
-    public boolean getRule(UUID uuid, String rule, boolean defaultValue) {
+    public synchronized boolean getRule(UUID uuid, String rule, boolean defaultValue) {
         return config.getBoolean("rules." + uuid + "." + rule, defaultValue);
     }
 
     @Override
-    public void setRule(UUID uuid, String rule, Object value) {
+    public synchronized void setRule(UUID uuid, String rule, Object value) {
         config.set("rules." + uuid + "." + rule, value);
         save();
     }
 
     @Override
-    public Map<String, Object> getRules(UUID uuid) {
+    public synchronized Map<String, Object> getRules(UUID uuid) {
         Map<String, Object> rules = new HashMap<>();
         ConfigurationSection section = config.getConfigurationSection("rules." + uuid);
         if (section != null) {
@@ -122,14 +122,14 @@ public class YamlStorage implements StorageProvider {
     // ── Rule Presets ──────────────────────────────────────────────────────────
 
     @Override
-    public void saveRulePreset(UUID uuid, String presetName, Map<String, Boolean> rules) {
+    public synchronized void saveRulePreset(UUID uuid, String presetName, Map<String, Boolean> rules) {
         String base = "presets." + uuid + "." + presetName + ".";
         rules.forEach((rule, value) -> config.set(base + rule, value));
         save();
     }
 
     @Override
-    public Map<String, Boolean> loadRulePreset(UUID uuid, String presetName) {
+    public synchronized Map<String, Boolean> loadRulePreset(UUID uuid, String presetName) {
         ConfigurationSection sec = config.getConfigurationSection("presets." + uuid + "." + presetName);
         if (sec == null) return null;
         Map<String, Boolean> result = new LinkedHashMap<>();
@@ -142,14 +142,14 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public Set<String> listRulePresets(UUID uuid) {
+    public synchronized Set<String> listRulePresets(UUID uuid) {
         ConfigurationSection sec = config.getConfigurationSection("presets." + uuid);
         if (sec == null) return Collections.emptySet();
         return sec.getKeys(false);
     }
 
     @Override
-    public void deleteRulePreset(UUID uuid, String presetName) {
+    public synchronized void deleteRulePreset(UUID uuid, String presetName) {
         config.set("presets." + uuid + "." + presetName, null);
         save();
     }
@@ -157,12 +157,12 @@ public class YamlStorage implements StorageProvider {
     // ── Preferences ───────────────────────────────────────────────────────────
 
     @Override
-    public boolean getAutoVanishOnJoin(UUID uuid) {
+    public synchronized boolean getAutoVanishOnJoin(UUID uuid) {
         return config.getBoolean("preferences." + uuid + ".auto-vanish-join", false);
     }
 
     @Override
-    public void setAutoVanishOnJoin(UUID uuid, boolean value) {
+    public synchronized void setAutoVanishOnJoin(UUID uuid, boolean value) {
         config.set("preferences." + uuid + ".auto-vanish-join", value);
         save();
     }
@@ -170,12 +170,12 @@ public class YamlStorage implements StorageProvider {
     // ── Metadata / Acknowledgements ───────────────────────────────────────────
 
     @Override
-    public boolean hasAcknowledged(UUID uuid, String notificationId) {
+    public synchronized boolean hasAcknowledged(UUID uuid, String notificationId) {
         return config.getStringList("acknowledged-notifications." + uuid).contains(notificationId);
     }
 
     @Override
-    public void addAcknowledgement(UUID uuid, String notificationId) {
+    public synchronized void addAcknowledgement(UUID uuid, String notificationId) {
         List<String> list = new ArrayList<>(config.getStringList("acknowledged-notifications." + uuid));
         if (!list.contains(notificationId)) {
             list.add(notificationId);
@@ -187,12 +187,12 @@ public class YamlStorage implements StorageProvider {
     // ── Permission Levels ─────────────────────────────────────────────────────
 
     @Override
-    public int getVanishLevel(UUID uuid) {
+    public synchronized int getVanishLevel(UUID uuid) {
         return config.getInt("levels." + uuid, 1);
     }
 
     @Override
-    public void setVanishLevel(UUID uuid, int level) {
+    public synchronized void setVanishLevel(UUID uuid, int level) {
         config.set("levels." + uuid, level);
         save();
     }
@@ -200,7 +200,7 @@ public class YamlStorage implements StorageProvider {
     // ── Vanish History ────────────────────────────────────────────────────────
 
     @Override
-    public void addHistoryEntry(VanishHistoryEntry entry) {
+    public synchronized void addHistoryEntry(VanishHistoryEntry entry) {
         List<Map<?, ?>> entries = new ArrayList<>(historyConfig.getMapList("history"));
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("uuid", entry.getPlayerUuid().toString());
@@ -216,7 +216,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public List<VanishHistoryEntry> getPlayerHistory(UUID uuid, int page, int perPage) {
+    public synchronized List<VanishHistoryEntry> getPlayerHistory(UUID uuid, int page, int perPage) {
         String uuidStr = uuid.toString();
         List<VanishHistoryEntry> all = parseHistory().stream()
                 .filter(e -> e.getPlayerUuid().equals(uuid))
@@ -225,7 +225,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public List<VanishHistoryEntry> getAllHistory(int page, int perPage) {
+    public synchronized List<VanishHistoryEntry> getAllHistory(int page, int perPage) {
         return paginate(parseHistory(), page, perPage);
     }
 
@@ -261,7 +261,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public int pruneHistory(int retentionDays) {
+    public synchronized int pruneHistory(int retentionDays) {
         if (retentionDays <= 0) return 0;
         Instant cutoff = Instant.now().minusSeconds((long) retentionDays * 86400);
         List<Map<?, ?>> raw = new ArrayList<>(historyConfig.getMapList("history"));
@@ -283,7 +283,7 @@ public class YamlStorage implements StorageProvider {
     // ── Vanish Statistics ─────────────────────────────────────────────────────
 
     @Override
-    public VanishStats getStats(UUID uuid) {
+    public synchronized VanishStats getStats(UUID uuid) {
         String base = "stats." + uuid + ".";
         long total  = config.getLong(base + "total-ms", 0);
         int count   = config.getInt(base + "count", 0);
@@ -292,7 +292,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public void recordVanishSession(UUID uuid, long durationMs) {
+    public synchronized void recordVanishSession(UUID uuid, long durationMs) {
         if (durationMs <= 0) return;
         String base = "stats." + uuid + ".";
         long total   = config.getLong(base + "total-ms", 0) + durationMs;
@@ -305,7 +305,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public void setStats(UUID uuid, VanishStats stats) {
+    public synchronized void setStats(UUID uuid, VanishStats stats) {
         String base = "stats." + uuid + ".";
         config.set(base + "total-ms", stats.getTotalVanishTimeMs());
         config.set(base + "count", stats.getVanishCount());
@@ -316,7 +316,7 @@ public class YamlStorage implements StorageProvider {
     // ── Cleanup ───────────────────────────────────────────────────────────────
 
     @Override
-    public void removePlayerData(UUID uuid) {
+    public synchronized void removePlayerData(UUID uuid) {
         config.set("rules." + uuid, null);
         config.set("acknowledged-notifications." + uuid, null);
         config.set("levels." + uuid, null);
@@ -329,7 +329,7 @@ public class YamlStorage implements StorageProvider {
     // ── Migration support ─────────────────────────────────────────────────────
 
     @Override
-    public Set<UUID> getAllKnownPlayers() {
+    public synchronized Set<UUID> getAllKnownPlayers() {
         Set<UUID> uuids = new HashSet<>();
         for (String s : config.getStringList("vanished-players")) {
             try { uuids.add(UUID.fromString(s)); } catch (IllegalArgumentException ignored) {}
@@ -346,7 +346,7 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
-    public Set<String> getAcknowledgements(UUID uuid) {
+    public synchronized Set<String> getAcknowledgements(UUID uuid) {
         return new HashSet<>(config.getStringList("acknowledged-notifications." + uuid));
     }
 }
