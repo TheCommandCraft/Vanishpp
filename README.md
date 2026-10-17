@@ -160,7 +160,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 
 **Supported versions:** Minecraft 1.20.6 — 26.2
 
-**Optional integrations:** TAB (NEZNAMY), PlaceholderAPI, Dynmap, EssentialsX, DiscordSRV, Simple Voice Chat
+**Optional integrations:** TAB (NEZNAMY), PlaceholderAPI, Dynmap, EssentialsX, DiscordSRV, Statusbot, Simple Voice Chat
 
 **Storage options:** YAML (default), MySQL 5.7+, PostgreSQL 12+, Redis (cross-server sync)
 

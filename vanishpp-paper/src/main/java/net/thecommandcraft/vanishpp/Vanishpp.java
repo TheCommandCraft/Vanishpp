@@ -1192,6 +1192,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (voiceChatHook != null)
             voiceChatHook.updateVanishState(player, true);
         integrationManager.updateHooks(player, true);
+        if (integrationManager.getStatusbot() != null)
+            integrationManager.getStatusbot().refreshStatus();
         if (tabPluginHook != null)
             tabPluginHook.update(player, true);
         refreshVisibilityWithGlow(player);
@@ -1326,6 +1328,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (voiceChatHook != null)
             voiceChatHook.updateVanishState(player, false);
         integrationManager.updateHooks(player, false);
+        if (integrationManager.getStatusbot() != null)
+            integrationManager.getStatusbot().refreshStatus();
         if (tabPluginHook != null)
             tabPluginHook.update(player, false);
         // Use hide-then-show to force fresh metadata packets — removes stale glow from staff clients
@@ -1417,6 +1421,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (integrationManager.getDiscordSRV() != null) {
                 integrationManager.getDiscordSRV().sendFakeQuit(player);
             }
+            if (integrationManager.getStatusbot() != null) {
+                integrationManager.getStatusbot().sendFakeQuit(player);
+            }
         }
         notifyStaff(player, executor, true);
     }
@@ -1435,6 +1442,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
             // Send to Discord
             if (integrationManager.getDiscordSRV() != null) {
                 integrationManager.getDiscordSRV().sendFakeJoin(player);
+            }
+            if (integrationManager.getStatusbot() != null) {
+                integrationManager.getStatusbot().sendFakeJoin(player);
             }
         }
         removeVanishEffects(player);
