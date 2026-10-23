@@ -116,7 +116,6 @@ scoreboard:
 # --- [ UPDATE CHECKER ] ---
 update-checker:
   enabled: true
-  modrinth-id: "vanishpp"
   notify-mode: "PERMISSION"
   notify-list: []
 

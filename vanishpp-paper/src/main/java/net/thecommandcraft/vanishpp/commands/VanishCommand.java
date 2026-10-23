@@ -165,8 +165,9 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
 
     private void sendVersionInfo(CommandSender sender) {
         sendVersionInfo(plugin, sender);
-        plugin.getMessageManager().sendMessage(sender,
-                plugin.getConfigManager().getLanguageManager().getMessage("version.help-hint"));
+        LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+        plugin.getMessageManager().sendMessage(sender, lm.getMessage("version.modrinth"));
+        plugin.getMessageManager().sendMessage(sender, lm.getMessage("version.help-hint"));
     }
 
     /** Joins args[start..] into a reason string. Returns empty string if none. */

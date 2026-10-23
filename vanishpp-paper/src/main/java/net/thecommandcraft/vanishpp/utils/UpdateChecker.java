@@ -8,21 +8,17 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.thecommandcraft.vanishpp.Vanishpp;
+import net.thecommandcraft.vanishpp.common.update.UpdateSources;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.URL;
 
 public class UpdateChecker {
 
     private final Vanishpp plugin;
-    // Project ID instead of the slug: the slug was renamed and the API only redirects (308) old ones
-    private static final String PROJECT_ID = "kbKpK1bc";
-    private static final String MODRINTH_URL = "https://modrinth.com/plugin/vanish-plus-plus";
-    private static final String API_BASE_URL = "https://api.modrinth.com/v2/project/" + PROJECT_ID + "/version";
 
     private static final String TEST_VERSION = null;
 
@@ -55,13 +51,14 @@ public class UpdateChecker {
 
     private void fetchAndCompare() {
         try {
-            HttpURLConnection connection = open(buildApiUrl());
+            HttpURLConnection connection = UpdateSources.open(buildApiUrl(), userAgent());
 
             try {
                 int responseCode = connection.getResponseCode();
                 if (responseCode != 200) {
-                    lastCheckSucceeded = false;
-                    plugin.getLogger().warning("[UpdateChecker] Modrinth returned HTTP " + responseCode);
+                    plugin.getLogger().warning("[UpdateChecker] Modrinth returned HTTP " + responseCode
+                            + ", checking GitHub instead.");
+                    checkGithub();
                     return;
                 }
                 try (InputStreamReader reader = new InputStreamReader(connection.getInputStream())) {
@@ -122,36 +119,46 @@ public class UpdateChecker {
                 connection.disconnect();
             }
         } catch (Exception e) {
-            lastCheckSucceeded = false;
-            plugin.getLogger().warning("[UpdateChecker] Check failed: " + e.getMessage());
+            plugin.getLogger().warning("[UpdateChecker] Modrinth check failed (" + e.getMessage()
+                    + "), checking GitHub instead.");
+            checkGithub();
         }
     }
 
     /**
-     * Opens a GET connection, following up to 5 redirects. HttpURLConnection doesn't follow
-     * 307/308 on its own, and Modrinth answers renamed slugs with a 308 - which silently broke
-     * update checks for every version before 1.1.9.
+     * Fallback when Modrinth can't be reached: compares against the latest GitHub release. Only
+     * stable releases are listed there as "latest", and the download link still goes to Modrinth.
      */
-    private HttpURLConnection open(String url) throws java.io.IOException {
-        URL current = new URL(url);
-        for (int redirects = 0; ; redirects++) {
-            HttpURLConnection connection = (HttpURLConnection) current.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setRequestProperty("User-Agent",
-                    "TheCommandCraft/Vanishpp/" + plugin.getDescription().getVersion());
-            int code = connection.getResponseCode();
-            String location = connection.getHeaderField("Location");
-            if (code < 300 || code > 399 || code == 304 || location == null)
-                return connection;
-            connection.disconnect();
-            URL next = new URL(current, location);
-            if (redirects >= 5 || !"https".equals(next.getProtocol()))
-                throw new java.io.IOException("Unsafe or too many redirects (HTTP " + code + " to " + next + ")");
-            current = next;
+    private void checkGithub() {
+        try {
+            String remoteVersion = UpdateSources.fetchGithubLatestVersion(userAgent());
+            if (remoteVersion == null) {
+                lastCheckSucceeded = false;
+                return;
+            }
+            lastCheckSucceeded = true;
+            String currentVersion = TEST_VERSION != null ? TEST_VERSION : plugin.getDescription().getVersion();
+            if (UpdateSources.compareVersions(currentVersion, remoteVersion) < 0) {
+                this.latestVersion = remoteVersion;
+                this.latestVersionId = null;
+                this.latestVersionType = "release";
+                this.updateAvailable = true;
+                plugin.getLogger().warning("---------------------------------------------------");
+                plugin.getLogger().warning("A new version of Vanish++ is available: " + remoteVersion + " [release]");
+                plugin.getLogger().warning("Download: " + getDownloadUrl());
+                plugin.getLogger().warning("---------------------------------------------------");
+            } else {
+                this.updateAvailable = false;
+                plugin.getLogger().info("[UpdateChecker] Vanish++ is up to date (running " + currentVersion + ").");
+            }
+        } catch (Exception e) {
+            lastCheckSucceeded = false;
+            plugin.getLogger().warning("[UpdateChecker] Check failed on Modrinth and GitHub: " + e.getMessage());
         }
+    }
+
+    private String userAgent() {
+        return "TheCommandCraft/Vanishpp/" + plugin.getDescription().getVersion();
     }
 
     /** null if no check has finished yet, otherwise whether the last check reached Modrinth. */
@@ -170,9 +177,7 @@ public class UpdateChecker {
 
     /** Link to the exact Modrinth version of the update, or the project page if unknown. */
     public String getDownloadUrl() {
-        if (latestVersionId != null) return MODRINTH_URL + "/version/" + latestVersionId;
-        if (latestVersion != null) return MODRINTH_URL + "/version/" + latestVersion;
-        return MODRINTH_URL;
+        return UpdateSources.downloadPage(latestVersionId);
     }
 
     /**
@@ -209,21 +214,11 @@ public class UpdateChecker {
 
     /** Compares two semver strings. Returns negative if a < b, 0 if equal, positive if a > b. */
     private int compareSemver(String a, String b) {
-        try {
-            String[] pa = a.split("\\.");
-            String[] pb = b.split("\\.");
-            int len = Math.max(pa.length, pb.length);
-            for (int i = 0; i < len; i++) {
-                int va = i < pa.length ? Integer.parseInt(pa[i]) : 0;
-                int vb = i < pb.length ? Integer.parseInt(pb[i]) : 0;
-                if (va != vb) return Integer.compare(va, vb);
-            }
-        } catch (NumberFormatException ignored) {}
-        return a.compareToIgnoreCase(b);
+        return UpdateSources.compareVersions(a, b);
     }
 
     private String buildApiUrl() {
-        return API_BASE_URL + "?loaders=%5B%22" + detectLoader() + "%22%5D";
+        return UpdateSources.modrinthVersionsUrl(detectLoader());
     }
 
     /** Maps the running server's name to its Modrinth loader slug. */

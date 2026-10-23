@@ -35,7 +35,8 @@ version:
   update-checking: "&7Checking for updates..."
   update-check-failed: "&cCouldn't check for updates, see the console for details."
   update-check-disabled: "&7The update checker is disabled."
-  help-hint: "&7Modrinth: &bmodrinth.com/plugin/vanish-plus-plus &8| &7Commands: &b/vhelp"
+  modrinth: "&7Modrinth: &bmodrinth.com/plugin/vanish-plus-plus"
+  help-hint: "&7Commands: &b/vhelp"
 
 # --- [ UPDATE CHECKER ] ---
 update:
