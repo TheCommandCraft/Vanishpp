@@ -19,6 +19,7 @@ public class IntegrationManager {
     private Essentials essentials;
     private DynmapAPI dynmap;
     private DiscordSRVHook discordSRV;
+    private StatusbotHook statusbot;
 
     public IntegrationManager(Vanishpp plugin) {
         this.plugin = plugin;
@@ -55,11 +56,26 @@ public class IntegrationManager {
                 plugin.getLogger().warning("DiscordSRV found but hook failed to load: " + e.getMessage());
             }
         }
+
+        Plugin sb = Bukkit.getPluginManager().getPlugin("Statusbot");
+        if (sb != null && sb.isEnabled()) {
+            try {
+                this.statusbot = new StatusbotHook(plugin, sb);
+                this.statusbot.register();
+                plugin.getLogger().info("Hooked into Statusbot.");
+            } catch (Throwable e) {
+                this.statusbot = null;
+                plugin.getLogger().warning("Statusbot found but hook failed to load (unsupported version?): " + e);
+            }
+        }
     }
 
     public void unregister() {
         if (discordSRV != null) {
             discordSRV.unregister();
+        }
+        if (statusbot != null) {
+            statusbot.unregister();
         }
     }
 
@@ -100,6 +116,10 @@ public class IntegrationManager {
 
     public DiscordSRVHook getDiscordSRV() {
         return discordSRV;
+    }
+
+    public StatusbotHook getStatusbot() {
+        return statusbot;
     }
 
     private static class VanishExpansion extends PlaceholderExpansion {

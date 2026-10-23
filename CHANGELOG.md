@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.9] - 2026-10-23
+
+### Added
+- **Statusbot integration (#35):** [Statusbot](https://modrinth.com/plugin/discord-statusbot) reads `getOnlinePlayers()` directly and has no vanish support, so vanished players showed up in its Discord bot status, embeds (`$amount-of-players$`/`$player-list$`) and join/leave messages. Statusbot has no API, so the new `StatusbotHook` hooks its internals via reflection: Statusbot's own join/quit handlers are swapped for vanish-aware ones, the two embed variables are overridden with visible-only versions, the bot status is refreshed on every vanish change, and vanishing/unvanishing sends a fake leave/join (following `broadcast-fake-quit`/`broadcast-fake-join`). Tested against Statusbot 24.0 - if a different version doesn't match, the hook logs a warning and leaves Statusbot untouched, and a failure at runtime disables the hook and restores Statusbot's defaults. Covered by `StatusbotHookTest` against stand-ins mirroring Statusbot's classes, and verified on a real Paper 26.3 server with Statusbot 24.0 and a live Discord bot: vanishing/unvanishing posts the fake leave/join, and joining or leaving while vanished posts nothing.
+- **Multi-language support (#29):** Every message, GUI text, action button, rule name, TAB prefix, bossbar title and scoreboard label now lives in per-language files (`languages/messages_<lang>.yml`, `languages/scoreboards_<lang>.yml`), picked with the `language` option in `config.yml`. Ships with English (`en-us`) and Simplified Chinese (`zh-cn`); missing keys in a translation fall back to English per key. (Thanks @kanseijo, PR #29)
+
+### Fixed
+- **Update checker never found new versions:** the Modrinth project slug was renamed, so the old slug in the API URL now only gets a `308` redirect (logged as `[UpdateChecker] Modrinth returned HTTP 308`), which Java's `HttpURLConnection` doesn't follow. The checker now uses the project ID, which never changes.
+- **Periodic update check ran its HTTP request on the main thread:** a slow or unreachable Modrinth could freeze the server long enough to trip the Watchdog. It now runs async, like the startup check. (Thanks @kanseijo, PR #30)
+- **"Could not save scoreboards.yml" warning on every startup:** the default `scoreboards.yml` is now only extracted when it doesn't exist yet.
+
 ## [1.1.9] - 2026-08-23
 
 ### Added

@@ -1,0 +1,198 @@
+name: Release
+
+# Publishes a version to Modrinth, then creates a GitHub release that links to it (no jars on GitHub).
+#
+# Runs when a version tag (v1.2.3, v1.2.3-beta, ...) is pushed, or manually from the Actions tab
+# for an existing tag (e.g. to retry a failed run - versions already on Modrinth are skipped).
+#
+# The Modrinth token lives in the "modrinth" environment, which only allows v* tags and needs the
+# repo owner's approval before the publish job can run. The build job has no access to it.
+# Modrinth settings (game versions, loaders, jars) are in .github/modrinth.json, the note at the
+# top of the GitHub release in .github/release-note-header.md.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release, e.g. v1.1.10'
+        required: true
+      version_type:
+        description: 'Modrinth channel (auto: beta/alpha if the tag says so, otherwise release)'
+        type: choice
+        options: [auto, release, beta, alpha]
+        default: auto
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      type: ${{ steps.meta.outputs.type }}
+    steps:
+      - name: Resolve tag and channel
+        id: meta
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          TYPE_INPUT: ${{ inputs.version_type || 'auto' }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$TAG' is not a version tag (expected v1.2.3 or v1.2.3-beta)"; exit 1
+          fi
+          type="$TYPE_INPUT"
+          if [ "$type" = auto ]; then
+            case "$TAG" in
+              *alpha*) type=alpha ;;
+              v*.*.*-*) type=beta ;;
+              *) type=release ;;
+            esac
+          fi
+          { echo "tag=$TAG"; echo "version=${TAG#v}"; echo "type=$type"; } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.meta.outputs.tag }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Check the tag matches the project version
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          pom_version="$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)"
+          if [ "$pom_version" != "$VERSION" ]; then
+            echo "::error::Tag is $VERSION but pom.xml says $pom_version"; exit 1
+          fi
+
+      - name: Build and test
+        run: mvn -B verify
+
+      - name: Collect release files
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir dist
+          for jar in $(jq -r '.uploads[].jar' .github/modrinth.json); do
+            cp "${jar//\{version\}/$VERSION}" dist/
+          done
+          cp .github/modrinth.json .github/release-note-header.md dist/
+          # every CHANGELOG.md section for this version (a version can have several dated sections)
+          awk -v v="$VERSION" '/^## \[/ { p = index($0, "## [" v "]") == 1 } p' CHANGELOG.md > dist/changelog.md
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.meta.outputs.version }}
+          path: dist
+          retention-days: 7
+
+  modrinth:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: modrinth
+      url: ${{ steps.publish.outputs.url }}
+    outputs:
+      url: ${{ steps.publish.outputs.url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: dist
+
+      # plain curl, so the token is never handed to a third-party action
+      - name: Publish to Modrinth
+        id: publish
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+          TYPE: ${{ needs.build.outputs.type }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MODRINTH_TOKEN" ]; then echo "::error::MODRINTH_TOKEN is not set in the modrinth environment"; exit 1; fi
+          cfg=dist/modrinth.json
+          api=https://api.modrinth.com/v2
+          ua="TheCommandCraft/Vanishpp release workflow (github.com/TheCommandCraft/Vanishpp)"
+          project="$(jq -r .project_id "$cfg")"
+          first_url=""
+          for i in $(seq 0 $(( $(jq '.uploads | length' "$cfg") - 1 ))); do
+            jar="$(jq -r ".uploads[$i].jar" "$cfg")"; jar="dist/$(basename "${jar//\{version\}/$VERSION}")"
+            name="$(jq -r ".uploads[$i].name" "$cfg")"; name="${name//\{version\}/$VERSION}"
+            loaders="$(jq -c ".uploads[$i].loaders" "$cfg")"
+
+            id="$(curl -sf -G "$api/project/$project/version" -H "User-Agent: $ua" --data-urlencode "loaders=$loaders" \
+              | jq -r --arg v "$VERSION" '[.[] | select(.version_number == $v)][0].id // empty')"
+            if [ -n "$id" ]; then
+              echo "$name is already on Modrinth, skipping"
+            else
+              jq -n --arg name "$name" --arg v "$VERSION" --arg type "$TYPE" --arg project "$project" \
+                --rawfile changelog dist/changelog.md --argjson loaders "$loaders" --argjson games "$(jq -c .game_versions "$cfg")" \
+                '{name: $name, version_number: $v, changelog: $changelog, dependencies: [], game_versions: $games,
+                  version_type: $type, loaders: $loaders, featured: ($type == "release"), project_id: $project,
+                  file_parts: ["file"], primary_file: "file"}' > data.json
+              code="$(curl -s -o resp.json -w '%{http_code}' -X POST "$api/version" \
+                -H "Authorization: $MODRINTH_TOKEN" -H "User-Agent: $ua" \
+                -F "data=@data.json;type=application/json" -F "file=@$jar;type=application/java-archive")"
+              if [ "$code" != 200 ] && [ "$code" != 201 ]; then
+                echo "::error::Modrinth rejected $name (HTTP $code)"; cat resp.json; exit 1
+              fi
+              id="$(jq -r .id resp.json)"
+              echo "Published $name"
+            fi
+            url="$(jq -r .project_url "$cfg")/version/$id"
+            echo "$name: $url"
+            [ -n "$first_url" ] || first_url="$url"
+          done
+          echo "url=$first_url" >> "$GITHUB_OUTPUT"
+
+  github-release:
+    needs: [build, modrinth]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: dist
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+          TYPE: ${{ needs.build.outputs.type }}
+          MODRINTH_URL: ${{ needs.modrinth.outputs.url }}
+        run: |
+          set -euo pipefail
+          header="$(cat dist/release-note-header.md)"
+          header="${header//\{\{VERSION\}\}/$VERSION}"
+          header="${header//\{\{MODRINTH_URL\}\}/$MODRINTH_URL}"
+          { printf '%s\n\n' "$header"; cat dist/changelog.md; } > notes.md
+          prerelease=$([ "$TYPE" = release ] && echo false || echo true)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Vanish++ $VERSION" --notes-file notes.md --prerelease="$prerelease"
+            # downloads go through Modrinth - drop jars left over from older releases of this tag
+            for asset in $(gh release view "$TAG" --json assets --jq '.assets[].name'); do
+              gh release delete-asset "$TAG" "$asset" --yes
+            done
+          else
+            gh release create "$TAG" --verify-tag --title "Vanish++ $VERSION" --notes-file notes.md --prerelease="$prerelease"
+          fi

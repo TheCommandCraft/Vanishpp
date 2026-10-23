@@ -19,9 +19,10 @@ import java.net.URL;
 public class UpdateChecker {
 
     private final Vanishpp plugin;
-    private static final String PROJECT_SLUG = "vanish%2B%2B";
-    private static final String MODRINTH_URL = "https://modrinth.com/plugin/vanish++";
-    private static final String API_BASE_URL = "https://api.modrinth.com/v2/project/" + PROJECT_SLUG + "/version";
+    // Project ID instead of the slug: the slug was renamed and the API only redirects (308) old ones
+    private static final String PROJECT_ID = "kbKpK1bc";
+    private static final String MODRINTH_URL = "https://modrinth.com/plugin/vanish-plus-plus";
+    private static final String API_BASE_URL = "https://api.modrinth.com/v2/project/" + PROJECT_ID + "/version";
 
     private static final String TEST_VERSION = null;
 
