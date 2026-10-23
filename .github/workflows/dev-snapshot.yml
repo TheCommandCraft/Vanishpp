@@ -80,6 +80,7 @@ jobs:
 
           {
             echo "notes<<SNAPSHOT_EOF"
+            cat .github/release-note-header.md
             echo "Automated dev/snapshot build from commit [\`${{ steps.version.outputs.short_sha }}\`](${repo_url}/commit/${{ github.sha }}) on \`${{ github.ref_name }}\`, triggered by @${{ github.actor }}."
             echo ""
             echo "> [!WARNING]"

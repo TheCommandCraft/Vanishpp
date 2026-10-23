@@ -52,12 +52,37 @@ jobs:
         run: |
           find downloaded-artifacts -type f \( -name 'original-*.jar' -o -name '*-sources.jar' -o -name '*-javadoc.jar' \) -print -delete
 
+      - name: Checkout tagged commit (for release notes)
+        if: steps.check-tag.outputs.is_tag == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: src
+          sparse-checkout: |
+            .github
+            CHANGELOG.md
+
+      - name: Build release notes
+        # Support-on-Modrinth header (.github/release-note-header.md, edit it there)
+        # followed by every CHANGELOG.md section for this version, if there is one.
+        if: steps.check-tag.outputs.is_tag == 'true'
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.workflow_run.head_branch }}"
+          version="$(printf '%s' "${tag#v}" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')"
+          {
+            cat src/.github/release-note-header.md
+            awk -v v="$version" '/^## \[/ { p = index($0, "## [" v "]") == 1 } p' src/CHANGELOG.md
+          } > release-notes.md
+          cat release-notes.md
+
       - name: Create GitHub Pre-release
         if: steps.check-tag.outputs.is_tag == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.workflow_run.head_branch }}
           name: "Pre-release ${{ github.event.workflow_run.head_branch }}"
+          body_path: release-notes.md
           draft: false
           prerelease: true
           files: downloaded-artifacts/**/*.jar

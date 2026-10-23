@@ -265,9 +265,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         registerCommand("vdowngrade", new net.thecommandcraft.vanishpp.commands.DowngradeCommand(this));
 
         // Scoreboard
-        saveResource("scoreboards.yml", false);
-        scoreboardConfig = YamlConfiguration.loadConfiguration(
-                new java.io.File(getDataFolder(), "scoreboards.yml"));
+        java.io.File scoreboardFile = new java.io.File(getDataFolder(), "scoreboards.yml");
+        if (!scoreboardFile.exists())
+            saveResource("scoreboards.yml", false);
+        scoreboardConfig = YamlConfiguration.loadConfiguration(scoreboardFile);
         this.vanishScoreboard = new VanishScoreboard(this);
         vanishScoreboard.reload();
 
