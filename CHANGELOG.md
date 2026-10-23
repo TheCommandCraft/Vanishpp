@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.9.1] - 2026-10-23
+
+### Added
+- **`/vanish version`, `/vanish info` and `/vinfo`:** show the running version, whether an update is available (with a click-to-download link to the exact Modrinth version) and where to find help. `/vhelp` now shows the version at the top too. Needs `vanishpp.vanish`; everyone else gets the usual unknown-command message, so the plugin stays hidden.
+
+### Fixed
+- **Update checker now follows redirects:** Java's `HttpURLConnection` doesn't follow `307`/`308` redirects, which is how Modrinth answered after the project was renamed - so every version up to 1.1.8 silently stopped finding updates. 1.1.9 already switched to the project ID; the checker now also follows up to 5 HTTPS redirects, so a future rename or move on Modrinth's side can't break it the same way.
+- **Update download link could open the Velocity build:** the link pointed at the version number, which the Paper and Velocity uploads share. It now uses the exact Modrinth version ID.
+
 ## [1.1.9] - 2026-10-23
 
 ### Added

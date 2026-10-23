@@ -45,6 +45,29 @@ class CommandTest {
     }
 
     @Test
+    void vanish_versionAndInfo_showVersionWithoutVanishing() {
+        player.setOp(true);
+        for (String cmd : new String[]{"vanish version", "vanish info", "vinfo"}) {
+            player.performCommand(cmd);
+            assertFalse(plugin.isVanished(player), cmd + " must not toggle vanish");
+            String first = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                    .serialize(player.nextComponentMessage());
+            assertTrue(first.contains("Vanish++") && first.contains(plugin.getDescription().getVersion()),
+                    cmd + " should start with the version line, got: " + first);
+            while (player.nextComponentMessage() != null) { }
+        }
+    }
+
+    @Test
+    void vanish_version_hiddenWithoutPermission() {
+        player.setOp(false);
+        player.performCommand("vanish version");
+        String first = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(player.nextComponentMessage());
+        assertFalse(first.contains(plugin.getDescription().getVersion()), "non-staff must not see the version");
+    }
+
+    @Test
     void vanish_self_deniedWithoutPermission() {
         player.setOp(false);
         player.performCommand("vanish");

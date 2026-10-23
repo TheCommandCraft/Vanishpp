@@ -26,6 +26,17 @@ vperms:
   perm-get-has: '&a%player% 拥有权限 ''%perm%''。'
   perm-get-does-not-have: '&c%player% 没有权限 ''%perm%''。'
 
+
+# --- [ VERSION INFO ] (/vanish version, /vanish info, /vhelp) ---
+version:
+  header: '&6&lVanish++ &fv%version% &7作者 %authors%'
+  up-to-date: '&a已是最新版本。'
+  update-available: '&e有新版本可用：&f%version% &6&l[点击下载]'
+  update-checking: '&7正在检查更新...'
+  update-check-failed: '&c无法检查更新，详情请查看控制台。'
+  update-check-disabled: '&7更新检查已禁用。'
+  help-hint: '&7Modrinth：&bmodrinth.com/plugin/vanish-plus-plus &8| &7命令：&b/vhelp'
+
 # --- [ 更新检查器 ] ---
 update:
   available: '&a&lVanish++ 有新版本可用！'

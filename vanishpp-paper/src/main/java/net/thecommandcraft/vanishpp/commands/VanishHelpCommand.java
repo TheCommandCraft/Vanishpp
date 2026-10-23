@@ -102,6 +102,7 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
         }
 
         plugin.getMessageManager().sendMessage(sender, lm.getMessage("help.header"));
+        VanishCommand.sendVersionInfo(plugin, sender);
         plugin.getMessageManager().sendMessage(sender, lm.getMessage("help.subheader"));
 
         addHelpLine(sender, "vanish", "/vanish", lm.getMessage("help.cmd-vanish"));

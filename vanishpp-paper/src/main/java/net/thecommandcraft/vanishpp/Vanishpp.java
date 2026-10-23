@@ -260,6 +260,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         registerCommand("vadmin", new VanishAdminCommand(this));
         registerCommand("vwand", new VanishWandCommand(this));
         registerCommand("vchangelog", new VanishChangelogCommand(this));
+        registerCommand("vinfo", (sender, command, label, args) ->
+                getCommand("vanish").execute(sender, "vanish", new String[]{"info"}));
         registerCommand("vzone", new VanishZoneCommand(this));
         registerCommand("vincognito", new IncognitoCommand(this));
         registerCommand("vdowngrade", new net.thecommandcraft.vanishpp.commands.DowngradeCommand(this));

@@ -26,6 +26,17 @@ vperms:
   perm-get-has: "&a%player% HAS the permission '%perm%'."
   perm-get-does-not-have: "&c%player% DOES NOT HAVE the permission '%perm%'."
 
+
+# --- [ VERSION INFO ] (/vanish version, /vanish info, /vhelp) ---
+version:
+  header: "&6&lVanish++ &fv%version% &7by %authors%"
+  up-to-date: "&aYou're on the latest version."
+  update-available: "&eUpdate available: &f%version% &6&l[CLICK TO DOWNLOAD]"
+  update-checking: "&7Checking for updates..."
+  update-check-failed: "&cCouldn't check for updates, see the console for details."
+  update-check-disabled: "&7The update checker is disabled."
+  help-hint: "&7Modrinth: &bmodrinth.com/plugin/vanish-plus-plus &8| &7Commands: &b/vhelp"
+
 # --- [ UPDATE CHECKER ] ---
 update:
   available: "&a&lVanish++ Update Available!"

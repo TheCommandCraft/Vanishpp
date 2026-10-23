@@ -10,7 +10,7 @@ softdepend: [ProtocolLib, PlaceholderAPI, dynmap, Essentials, SimpleVoiceChat, T
 commands:
   vanish:
     description: Toggles your or another player's vanish state.
-    usage: /vanish [player]
+    usage: /vanish [player|all|world|version|info]
     aliases: [ v, sv ]
   vperms:
     description: Manages Vanish++ specific permissions for players.
@@ -35,6 +35,9 @@ commands:
     description: Shows the interactive help menu.
     usage: /vanishhelp [command]
     aliases: [ vhelp ]
+  vinfo:
+    description: Shows the Vanish++ version and update status.
+    usage: /vinfo
   vanishconfig:
     description: Edit config settings in-game.
     usage: /vanishconfig <key> [value] [--confirm]

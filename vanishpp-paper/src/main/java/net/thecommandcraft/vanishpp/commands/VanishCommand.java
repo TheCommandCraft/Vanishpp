@@ -1,8 +1,12 @@
 package net.thecommandcraft.vanishpp.commands;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.thecommandcraft.vanishpp.Vanishpp;
+import net.thecommandcraft.vanishpp.utils.LanguageManager;
+import net.thecommandcraft.vanishpp.utils.UpdateChecker;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.command.Command;
@@ -24,6 +28,7 @@ import java.util.List;
  * - player:            toggle a specific player (requires vanishpp.vanish.others)
  * - all:               vanish/unvanish all online players (requires vanishpp.vanish.bulk)
  * - world:             vanish/unvanish all players in the sender's world (requires vanishpp.vanish.bulk)
+ * - version / info:    show the running version and update status (requires vanishpp.vanish), also /vinfo
  * - Reason support:    any trailing tokens after the player name become the vanish reason
  */
 public class VanishCommand implements CommandExecutor, TabCompleter {
@@ -55,6 +60,17 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
         }
 
         String first = args[0].toLowerCase();
+
+        // Info: /vanish version, /vanish info
+        if (first.equals("version") || first.equals("info")) {
+            if (!sender.hasPermission("vanishpp.vanish")) {
+                plugin.getMessageManager().sendMessage(sender,
+                        plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
+                return true;
+            }
+            sendVersionInfo(sender);
+            return true;
+        }
 
         // Bulk: /vanish all
         if (first.equals("all")) {
@@ -120,6 +136,39 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    /** Version, update status and where to find help. Also used by /vhelp. */
+    public static void sendVersionInfo(Vanishpp plugin, CommandSender sender) {
+        LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+        plugin.getMessageManager().sendMessage(sender, lm.getMessage("version.header")
+                .replace("%version%", plugin.getDescription().getVersion())
+                .replace("%authors%", String.join(", ", plugin.getDescription().getAuthors())));
+
+        UpdateChecker checker = plugin.getUpdateChecker();
+        Boolean checked = checker != null ? checker.getLastCheckSucceeded() : null;
+        if (checker == null || !plugin.getConfigManager().updateCheckerEnabled) {
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("version.update-check-disabled"));
+        } else if (checker.isUpdateAvailable()) {
+            String latest = checker.getLatestVersion();
+            sender.sendMessage(plugin.getMessageManager()
+                    .parse(lm.getMessage("version.update-available").replace("%version%", latest), null)
+                    .clickEvent(ClickEvent.openUrl(checker.getDownloadUrl()))
+                    .hoverEvent(HoverEvent.showText(plugin.getMessageManager()
+                            .parse(lm.getMessage("update.hover").replace("%version%", latest), null))));
+        } else if (checked == null) {
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("version.update-checking"));
+        } else if (!checked) {
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("version.update-check-failed"));
+        } else {
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("version.up-to-date"));
+        }
+    }
+
+    private void sendVersionInfo(CommandSender sender) {
+        sendVersionInfo(plugin, sender);
+        plugin.getMessageManager().sendMessage(sender,
+                plugin.getConfigManager().getLanguageManager().getMessage("version.help-hint"));
+    }
+
     /** Joins args[start..] into a reason string. Returns empty string if none. */
     private String buildReason(String[] args, int start) {
         if (args.length <= start) return "";
@@ -136,6 +185,10 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
             @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
+            if (sender.hasPermission("vanishpp.vanish")) {
+                completions.add("version");
+                completions.add("info");
+            }
             if (sender.hasPermission("vanishpp.vanish.bulk")) {
                 completions.add("all");
                 completions.add("world");
