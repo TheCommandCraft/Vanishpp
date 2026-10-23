@@ -189,6 +189,10 @@ jobs:
           prerelease=$([ "$TYPE" = release ] && echo false || echo true)
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "Vanish++ $VERSION" --notes-file notes.md --prerelease="$prerelease"
+            # downloads go through Modrinth - drop jars left over from older releases of this tag
+            for asset in $(gh release view "$TAG" --json assets --jq '.assets[].name'); do
+              gh release delete-asset "$TAG" "$asset" --yes
+            done
           else
             gh release create "$TAG" --verify-tag --title "Vanish++ $VERSION" --notes-file notes.md --prerelease="$prerelease"
           fi

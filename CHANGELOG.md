@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.10] - 2026-10-23
+## [1.1.9] - 2026-10-23
 
 ### Added
 - **Statusbot integration (#35):** [Statusbot](https://modrinth.com/plugin/discord-statusbot) reads `getOnlinePlayers()` directly and has no vanish support, so vanished players showed up in its Discord bot status, embeds (`$amount-of-players$`/`$player-list$`) and join/leave messages. Statusbot has no API, so the new `StatusbotHook` hooks its internals via reflection: Statusbot's own join/quit handlers are swapped for vanish-aware ones, the two embed variables are overridden with visible-only versions, the bot status is refreshed on every vanish change, and vanishing/unvanishing sends a fake leave/join (following `broadcast-fake-quit`/`broadcast-fake-join`). Tested against Statusbot 24.0 - if a different version doesn't match, the hook logs a warning and leaves Statusbot untouched, and a failure at runtime disables the hook and restores Statusbot's defaults. Covered by `StatusbotHookTest` against stand-ins mirroring Statusbot's classes, and verified on a real Paper 26.3 server with Statusbot 24.0 and a live Discord bot: vanishing/unvanishing posts the fake leave/join, and joining or leaving while vanished posts nothing.
