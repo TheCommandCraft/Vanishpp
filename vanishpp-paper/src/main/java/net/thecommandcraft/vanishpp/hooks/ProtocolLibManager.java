@@ -584,10 +584,27 @@ public class ProtocolLibManager {
                                 if (event.isCancelled())
                                     return;
                                 try {
+                                    // Cheapest possible pre-filter: with no vanished players in the
+                                    // observer's world there is nothing to subtract, and this listener
+                                    // sees essentially every chat line on 1.19+ (all delivered as
+                                    // SYSTEM_CHAT). Bailing here keeps the common case at a couple of
+                                    // map lookups and skips all component serialisation entirely.
+                                    int vanishedHere = ProtocolLibManager.this.vanishedCountIn(event.getPlayer().getWorld());
+                                    if (vanishedHere <= 0)
+                                        return;
+
                                     PacketContainer packet = event.getPacket();
                                     if (packet.getChatComponents().size() == 0)
                                         return;
                                     WrappedChatComponent wrapped = packet.getChatComponents().read(0);
+                                    // Second pre-filter: the serialized component carries the key as
+                                    // "translate":"sleep.players_sleeping". Checking the JSON string
+                                    // first means we only build a full Adventure component tree for the
+                                    // sleep message itself. Deliberately does NOT depend on the packet's
+                                    // overlay field layout, so it can never skip the message we care about.
+                                    String json = wrapped == null ? null : wrapped.getJson();
+                                    if (json == null || !json.contains("sleep.players_sleeping"))
+                                        return;
                                     net.kyori.adventure.text.Component component =
                                             com.comphenix.protocol.wrappers.AdventureComponentConverter.fromWrapper(wrapped);
                                     if (!(component instanceof net.kyori.adventure.text.TranslatableComponent tc))
@@ -605,7 +622,6 @@ public class ProtocolLibManager {
                                     } catch (NumberFormatException nfe) {
                                         return;
                                     }
-                                    int vanishedHere = ProtocolLibManager.this.vanishedCountIn(event.getPlayer().getWorld());
                                     int[] newArgs = ProtocolLibManager.rewriteSleepingArgs(numerator, denominator, vanishedHere);
                                     if (newArgs == null)
                                         return;
@@ -629,14 +645,18 @@ public class ProtocolLibManager {
         }
     }
 
-    /** Counts how many players in the given world are currently vanished (included in the sleep count). */
+    /**
+     * Counts how many players in the given world are currently vanished (and therefore included in
+     * that world's sleep count). Deliberately iterates the world's online players rather than the
+     * plugin's vanished-UUID set: the latter can hold many offline entries, and this runs on every
+     * SYSTEM_CHAT packet, so the cost must stay bounded by the number of online players.
+     */
     private int vanishedCountIn(org.bukkit.World world) {
         if (world == null)
             return 0;
         int count = 0;
-        for (UUID uuid : ProtocolLibManager.this.plugin.getRawVanishedPlayers()) {
-            org.bukkit.entity.Player p = Bukkit.getPlayer(uuid);
-            if (p != null && p.getWorld() == world)
+        for (Player p : world.getPlayers()) {
+            if (ProtocolLibManager.this.plugin.isVanished(p))
                 count++;
         }
         return count;
