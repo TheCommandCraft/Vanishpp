@@ -61,6 +61,11 @@ public class PlayerListener implements Listener {
     // PlayerJoinEvent can apply vanish instantly without an async round-trip.
     private final Map<UUID, Boolean> preFetchedVanishState = new ConcurrentHashMap<>();
 
+    // Pre-fetched auto-vanish-on-join preference, same reasoning as preFetchedVanishState:
+    // onJoin needs it synchronously (to suppress the join broadcast), but with MySQL/Postgres
+    // that would otherwise be a blocking DB query on the main thread for every staff join.
+    private final Map<UUID, Boolean> preFetchedAutoVanish = new ConcurrentHashMap<>();
+
     // Private-message detection prevention
     private static final Set<String> MSG_COMMANDS = Set.of(
             "msg", "tell", "w", "whisper",
@@ -87,6 +92,14 @@ public class PlayerListener implements Listener {
         } catch (Exception ignored) {
             // If DB read fails, fall back to existing in-memory state at join
         }
+        // Also prefetch the auto-vanish preference here (async thread): onJoin needs it
+        // synchronously to suppress the join broadcast, and a MySQL/Postgres round-trip on the
+        // main thread would stall the server on every staff join.
+        try {
+            preFetchedAutoVanish.put(uuid, plugin.getStorageProvider().getAutoVanishOnJoin(uuid));
+        } catch (Exception ignored) {
+            // If the read fails, onJoin falls back to the in-memory/async path below.
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -109,8 +122,15 @@ public class PlayerListener implements Listener {
         // player who manually unvanished before logging off comes back with isVanished=false: the
         // join broadcast fires as a normal join, yet the (async) auto-vanish preference then hides
         // them moments later — a jarring "joined, but not in the list" inconsistency.
+        //
+        // The preference is read from the AsyncPlayerPreLoginEvent prefetch, never from the
+        // storage provider directly: with MySQL/Postgres a direct read here would be a blocking
+        // DB query on the main thread for every staff join. If the prefetch is missing (storage
+        // not ready yet), we simply don't suppress the join here — the async auto-vanish block
+        // further down still applies vanish, just without the silent-join tweak.
+        Boolean prefetchedAutoVanish = preFetchedAutoVanish.remove(joinUuid);
         boolean autoVanishPref = plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")
-                && plugin.getStorageProvider().getAutoVanishOnJoin(joinUuid);
+                && Boolean.TRUE.equals(prefetchedAutoVanish);
 
         if (plugin.isVanished(player) || autoVanishPref) {
             if (autoVanishPref) {
@@ -439,6 +459,7 @@ public class PlayerListener implements Listener {
         hasSeenDisableTip.remove(uuid);
         lastSneakTime.remove(uuid);
         preFetchedVanishState.remove(uuid);
+        preFetchedAutoVanish.remove(uuid);
         msgReplyTargets.remove(uuid);
         msgReplyTargets.values().removeIf(v -> v.equals(uuid));
         org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(uuid);

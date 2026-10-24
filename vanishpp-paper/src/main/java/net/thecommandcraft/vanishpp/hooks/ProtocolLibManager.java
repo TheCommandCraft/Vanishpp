@@ -30,6 +30,17 @@ public class ProtocolLibManager {
      */
     private final Map<UUID, Set<String>> knownVanishTeamMembers = new ConcurrentHashMap<>();
 
+    /**
+     * Set once the first PLAYER_INFO parse failure has been reported at WARNING with a full stack
+     * trace. On servers where ProtocolLib cannot parse the packet shape (e.g. Purpur 1.21.11,
+     * which ProtocolLib logs as untested) that failure fires on essentially every packet, so a
+     * per-packet warning would flood the console. The first occurrence is logged loudly (with the
+     * stack trace, via {@code log(Level, String, Throwable)} — appending {@code e} to a message
+     * would only print its message); every later one drops to FINE.
+     */
+    private final java.util.concurrent.atomic.AtomicBoolean playerInfoParseFailureLogged =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
     public ProtocolLibManager(Vanishpp plugin) {
         this.plugin = plugin;
     }
@@ -263,17 +274,28 @@ public class ProtocolLibManager {
                             // PLAYER_INFO packet destroys every player's skin/tab entry for every
                             // observer — on servers where ProtocolLib cannot parse the 1.21.x packet
                             // shape (e.g. Purpur 1.21.11, which ProtocolLib logs as untested) this
-                            // throws on every player join, blanking all skins. Bukkit's own hidePlayer()
-                            // remains the primary vanish-visibility layer, so leaving the packet alone
-                            // on a parse error is far less harmful than blanking everyone's display.
-                            // Log the full stack trace so we can see exactly where it throws (TCC
-                            // review follow-up), and note if a vanished entry may have slipped through
-                            // because the failure happened after we identified one (e.g. at write).
+                            // throws on essentially every player join, blanking all skins. Bukkit's
+                            // own hidePlayer() remains the primary vanish-visibility layer, so leaving
+                            // the packet alone on a parse error is far less harmful than blanking
+                            // everyone's display.
                             if (VanishPlayerInfoPolicy.failOpenOnParseFailure(identifiedVanished)) {
-                                // Intentionally fall through and send the original packet untouched.
-                                ProtocolLibManager.this.plugin.getLogger().warning(
-                                        "PLAYER_INFO scrub skipped (parse error; fail-open). identifiedVanished="
-                                                + identifiedVanished + " — " + e);
+                                // Log the full stack trace (log(Level,String,Throwable) — appending e
+                                // to a message would only print its message) exactly once, then drop
+                                // to FINE: on affected servers this fires per packet, so a per-packet
+                                // WARNING would flood the console.
+                                if (ProtocolLibManager.this.playerInfoParseFailureLogged
+                                        .compareAndSet(false, true)) {
+                                    ProtocolLibManager.this.plugin.getLogger().log(
+                                            java.util.logging.Level.WARNING,
+                                            "PLAYER_INFO scrub skipped (parse error; failing open)."
+                                                    + " identifiedVanished=" + identifiedVanished
+                                                    + " — further occurrences log at FINE.", e);
+                                } else {
+                                    ProtocolLibManager.this.plugin.getLogger().fine(
+                                            "PLAYER_INFO scrub skipped (parse error; fail-open)."
+                                                    + " identifiedVanished=" + identifiedVanished
+                                                    + " — " + e);
+                                }
                             } else {
                                 event.setCancelled(true);
                             }
