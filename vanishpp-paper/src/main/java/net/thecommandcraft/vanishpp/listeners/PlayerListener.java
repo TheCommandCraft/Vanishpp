@@ -61,6 +61,11 @@ public class PlayerListener implements Listener {
     // PlayerJoinEvent can apply vanish instantly without an async round-trip.
     private final Map<UUID, Boolean> preFetchedVanishState = new ConcurrentHashMap<>();
 
+    // Pre-fetched auto-vanish-on-join preference, same reasoning as preFetchedVanishState:
+    // onJoin needs it synchronously (to suppress the join broadcast), but with MySQL/Postgres
+    // that would otherwise be a blocking DB query on the main thread for every staff join.
+    private final Map<UUID, Boolean> preFetchedAutoVanish = new ConcurrentHashMap<>();
+
     // Private-message detection prevention
     private static final Set<String> MSG_COMMANDS = Set.of(
             "msg", "tell", "w", "whisper",
@@ -87,6 +92,14 @@ public class PlayerListener implements Listener {
         } catch (Exception ignored) {
             // If DB read fails, fall back to existing in-memory state at join
         }
+        // Also prefetch the auto-vanish preference here (async thread): onJoin needs it
+        // synchronously to suppress the join broadcast, and a MySQL/Postgres round-trip on the
+        // main thread would stall the server on every staff join.
+        try {
+            preFetchedAutoVanish.put(uuid, plugin.getStorageProvider().getAutoVanishOnJoin(uuid));
+        } catch (Exception ignored) {
+            // If the read fails, onJoin falls back to the in-memory/async path below.
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -104,9 +117,26 @@ public class PlayerListener implements Listener {
         }
 
         // Immediate Vanish Logic
-        if (plugin.isVanished(player)) {
-            plugin.applyVanishEffects(player);
-            plugin.updateVanishVisibility(player);
+        // If the player has the auto-vanish-on-join preference, treat them as vanished right now
+        // (before the join broadcast is sent) so the join is silent. Without this, an auto-vanish
+        // player who manually unvanished before logging off comes back with isVanished=false: the
+        // join broadcast fires as a normal join, yet the (async) auto-vanish preference then hides
+        // them moments later — a jarring "joined, but not in the list" inconsistency.
+        //
+        // The preference is read from the AsyncPlayerPreLoginEvent prefetch, never from the
+        // storage provider directly: with MySQL/Postgres a direct read here would be a blocking
+        // DB query on the main thread for every staff join. If the prefetch is missing (storage
+        // not ready yet), we simply don't suppress the join here — the async auto-vanish block
+        // further down still applies vanish, just without the silent-join tweak.
+        Boolean prefetchedAutoVanish = preFetchedAutoVanish.remove(joinUuid);
+        boolean autoVanishPref = plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")
+                && Boolean.TRUE.equals(prefetchedAutoVanish);
+
+        if (plugin.isVanished(player) || autoVanishPref) {
+            if (autoVanishPref) {
+                plugin.applyVanishEffects(player);
+                plugin.updateVanishVisibility(player);
+            }
             if (config.hideRealJoin)
                 event.joinMessage(null);
             // Notify staff that a vanished player silently joined
@@ -134,10 +164,12 @@ public class PlayerListener implements Listener {
                         plugin.getIntegrationManager().updateHooks(player, true);
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
-                        // Rebuild the scoreboard from scratch at these later points too:
-                        // a player restored as vanished via reconciliation (not just auto-vanish)
-                        // is equally exposed to TAB overwriting the sidebar after join.
-                        if (plugin.getVanishScoreboard() != null)
+                        // Rebuild the scoreboard from scratch at the final stage only, so TAB has
+                        // settled: a player restored as vanished via reconciliation (not just
+                        // auto-vanish) is equally exposed to TAB overwriting the sidebar after join.
+                        // Rebuilding at every stage races TAB's async pipeline and causes the
+                        // sidebar to flicker or get re-overwritten.
+                        if (delay == 60L && plugin.getVanishScoreboard() != null)
                             plugin.getVanishScoreboard().forceReshow(player);
                     }
                 }, delay);
@@ -177,12 +209,11 @@ public class PlayerListener implements Listener {
                     plugin.getVanishScheduler().runGlobal(() -> {
                         if (!player.isOnline()) return;
                         if (plugin.isVanished(player)) {
-                            // Logged off while vanished — the DB restore path already
-                            // applied vanish effects at join, but another plugin
-                            // (e.g. TAB) may have overwritten the sidebar right after
-                            // join. Force-rebuild it at this later point in time.
-                            if (plugin.getVanishScoreboard() != null)
-                                plugin.getVanishScoreboard().forceReshow(player);
+                            // The synchronous block above already applied vanish effects and
+                            // silent-join for auto-vanish players, so by the time this async task
+                            // runs the player is normally already vanished. This is purely a
+                            // safety net for the edge case where the sync check failed (e.g. a
+                            // storage read error at join): only then vanish them silently here.
                         } else {
                             plugin.vanishPlayerSilently(player);
                         }
@@ -428,6 +459,7 @@ public class PlayerListener implements Listener {
         hasSeenDisableTip.remove(uuid);
         lastSneakTime.remove(uuid);
         preFetchedVanishState.remove(uuid);
+        preFetchedAutoVanish.remove(uuid);
         msgReplyTargets.remove(uuid);
         msgReplyTargets.values().removeIf(v -> v.equals(uuid));
         org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(uuid);

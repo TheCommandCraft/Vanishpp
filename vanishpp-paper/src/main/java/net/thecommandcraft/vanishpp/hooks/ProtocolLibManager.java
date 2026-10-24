@@ -30,6 +30,17 @@ public class ProtocolLibManager {
      */
     private final Map<UUID, Set<String>> knownVanishTeamMembers = new ConcurrentHashMap<>();
 
+    /**
+     * Set once the first PLAYER_INFO parse failure has been reported at WARNING with a full stack
+     * trace. On servers where ProtocolLib cannot parse the packet shape (e.g. Purpur 1.21.11,
+     * which ProtocolLib logs as untested) that failure fires on essentially every packet, so a
+     * per-packet warning would flood the console. The first occurrence is logged loudly (with the
+     * stack trace, via {@code log(Level, String, Throwable)} — appending {@code e} to a message
+     * would only print its message); every later one drops to FINE.
+     */
+    private final java.util.concurrent.atomic.AtomicBoolean playerInfoParseFailureLogged =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
     public ProtocolLibManager(Vanishpp plugin) {
         this.plugin = plugin;
     }
@@ -46,6 +57,7 @@ public class ProtocolLibManager {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         plugin.getLogger().info("Hooked into ProtocolLib.");
         registerSilentChestListeners();
+        registerSleepStatusListener();
 
         // Each listener below is registered in its own try-catch: a single unsupported
         // PacketType on a given server/ProtocolLib version must not silently take down
@@ -237,6 +249,7 @@ public class ProtocolLibManager {
                                 "vanishpp.see"))
                             return;
 
+                        boolean identifiedVanished = false; // set true if we parsed and found a vanished entry
                         try {
                             PacketContainer packet = event.getPacket();
                             List<PlayerInfoData> entries = packet.getPlayerInfoDataLists().read(0);
@@ -249,17 +262,43 @@ public class ProtocolLibManager {
 
                             if (!result.changed())
                                 return;
+                            // We now know at least one entry is vanished.
+                            identifiedVanished = true;
                             if (result.cancel()) {
                                 event.setCancelled(true);
                             } else {
                                 packet.getPlayerInfoDataLists().write(0, result.kept());
                             }
                         } catch (Exception e) {
-                            // Fail closed, same reasoning as the SCOREBOARD_TEAM scrub above -
-                            // an unrecognized packet shape must not be forwarded unfiltered.
-                            event.setCancelled(true);
-                            ProtocolLibManager.this.plugin.getLogger().warning(
-                                    "Failed to scrub PLAYER_INFO packet, cancelling for safety: " + e.getMessage());
+                            // Fail open here, unlike the SCOREBOARD_TEAM scrub. Cancelling the whole
+                            // PLAYER_INFO packet destroys every player's skin/tab entry for every
+                            // observer — on servers where ProtocolLib cannot parse the 1.21.x packet
+                            // shape (e.g. Purpur 1.21.11, which ProtocolLib logs as untested) this
+                            // throws on essentially every player join, blanking all skins. Bukkit's
+                            // own hidePlayer() remains the primary vanish-visibility layer, so leaving
+                            // the packet alone on a parse error is far less harmful than blanking
+                            // everyone's display.
+                            if (VanishPlayerInfoPolicy.failOpenOnParseFailure(identifiedVanished)) {
+                                // Log the full stack trace (log(Level,String,Throwable) — appending e
+                                // to a message would only print its message) exactly once, then drop
+                                // to FINE: on affected servers this fires per packet, so a per-packet
+                                // WARNING would flood the console.
+                                if (ProtocolLibManager.this.playerInfoParseFailureLogged
+                                        .compareAndSet(false, true)) {
+                                    ProtocolLibManager.this.plugin.getLogger().log(
+                                            java.util.logging.Level.WARNING,
+                                            "PLAYER_INFO scrub skipped (parse error; failing open)."
+                                                    + " identifiedVanished=" + identifiedVanished
+                                                    + " — further occurrences log at FINE.", e);
+                                } else {
+                                    ProtocolLibManager.this.plugin.getLogger().fine(
+                                            "PLAYER_INFO scrub skipped (parse error; fail-open)."
+                                                    + " identifiedVanished=" + identifiedVanished
+                                                    + " — " + e);
+                                }
+                            } else {
+                                event.setCancelled(true);
+                            }
                         }
                     }
                 });
@@ -515,6 +554,134 @@ public class ProtocolLibManager {
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to register silent-chest sound listener: " + e.getMessage());
         }
+    }
+
+    /**
+     * Intercepts the vanilla action-bar "X/Y players are sleeping" message
+     * ({@code sleep.players_sleeping} TranslatableComponent) and corrects the displayed count so
+     * vanished players do not appear in it.
+     *
+     * <p>Background (verified against Paper/Purpur {@code ServerLevel#announceSleepStatus()}): the
+     * server broadcasts the same component to every player in the world, with args
+     * {@code [amountSleeping, sleepersNeeded]}. {@code setSleepingIgnored(true)} marks a vanished
+     * player as sleeping ({@code fauxSleeping}), so they are counted in BOTH the numerator and the
+     * denominator — yielding "2/3" for a world with one vanished player plus one real sleeper among
+     * three online, instead of the desired "1/2". Paper/Purpur offer no API to drop a player from
+     * the {@code activePlayers} denominator (only spectator or a different dimension does), so the
+     * cleanest plugin-side fix is to rewrite the broadcast component's args: subtract the count of
+     * vanished players in the world from both the numerator and the denominator.
+     *
+     * <p>This only ever affects a cosmetic action-bar message, so it fails open on error — unlike the
+     * leak-prevention listeners, leaving the original message untouched is always safe here.
+     */
+    private void registerSleepStatusListener() {
+        try {
+            if (PacketType.Play.Server.SYSTEM_CHAT.isSupported()) {
+                protocolManager.addPacketListener(
+                        new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Server.SYSTEM_CHAT) {
+                            @Override
+                            public void onPacketSending(PacketEvent event) {
+                                if (event.isCancelled())
+                                    return;
+                                try {
+                                    // Cheapest possible pre-filter: with no vanished players in the
+                                    // observer's world there is nothing to subtract, and this listener
+                                    // sees essentially every chat line on 1.19+ (all delivered as
+                                    // SYSTEM_CHAT). Bailing here keeps the common case at a couple of
+                                    // map lookups and skips all component serialisation entirely.
+                                    int vanishedHere = ProtocolLibManager.this.vanishedCountIn(event.getPlayer().getWorld());
+                                    if (vanishedHere <= 0)
+                                        return;
+
+                                    PacketContainer packet = event.getPacket();
+                                    if (packet.getChatComponents().size() == 0)
+                                        return;
+                                    WrappedChatComponent wrapped = packet.getChatComponents().read(0);
+                                    // Second pre-filter: the serialized component carries the key as
+                                    // "translate":"sleep.players_sleeping". Checking the JSON string
+                                    // first means we only build a full Adventure component tree for the
+                                    // sleep message itself. Deliberately does NOT depend on the packet's
+                                    // overlay field layout, so it can never skip the message we care about.
+                                    String json = wrapped == null ? null : wrapped.getJson();
+                                    if (json == null || !json.contains("sleep.players_sleeping"))
+                                        return;
+                                    net.kyori.adventure.text.Component component =
+                                            com.comphenix.protocol.wrappers.AdventureComponentConverter.fromWrapper(wrapped);
+                                    if (!(component instanceof net.kyori.adventure.text.TranslatableComponent tc))
+                                        return;
+                                    if (!"sleep.players_sleeping".equals(tc.key()))
+                                        return;
+                                    java.util.List<net.kyori.adventure.text.Component> args = tc.args();
+                                    if (args.size() < 2)
+                                        return;
+                                    int numerator = 0;
+                                    int denominator = 0;
+                                    try {
+                                        numerator = Integer.parseInt(adventurePlain(args.get(0)));
+                                        denominator = Integer.parseInt(adventurePlain(args.get(1)));
+                                    } catch (NumberFormatException nfe) {
+                                        return;
+                                    }
+                                    int[] newArgs = ProtocolLibManager.rewriteSleepingArgs(numerator, denominator, vanishedHere);
+                                    if (newArgs == null)
+                                        return;
+
+                                    net.kyori.adventure.text.Component fixed = net.kyori.adventure.text.Component.translatable(
+                                            tc.key(), tc.style(), java.util.Arrays.asList(
+                                                    net.kyori.adventure.text.Component.text(newArgs[0]),
+                                                    net.kyori.adventure.text.Component.text(newArgs[1])));
+                                    packet.getChatComponents().write(0,
+                                            com.comphenix.protocol.wrappers.AdventureComponentConverter.fromComponent(fixed));
+                                } catch (Exception e) {
+                                    // Fail open: this is a cosmetic message, never block it.
+                                    ProtocolLibManager.this.plugin.getLogger().fine(
+                                            "Sleep-status rewrite skipped: " + e.getMessage());
+                                }
+                            }
+                        });
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to register sleep-status display listener: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Counts how many players in the given world are currently vanished (and therefore included in
+     * that world's sleep count). Deliberately iterates the world's online players rather than the
+     * plugin's vanished-UUID set: the latter can hold many offline entries, and this runs on every
+     * SYSTEM_CHAT packet, so the cost must stay bounded by the number of online players.
+     */
+    private int vanishedCountIn(org.bukkit.World world) {
+        if (world == null)
+            return 0;
+        int count = 0;
+        for (Player p : world.getPlayers()) {
+            if (ProtocolLibManager.this.plugin.isVanished(p))
+                count++;
+        }
+        return count;
+    }
+
+    /**
+     * Pure decision logic for rewriting the {@code sleep.players_sleeping} action-bar component args,
+     * extracted out of the packet listener so it can be unit-tested without ProtocolLib. A vanished
+     * player counts in both the numerator (via {@code fauxSleeping}) and the denominator (via
+     * {@code activePlayers}), so to show e.g. "1/2" instead of "2/3" we subtract the vanished count
+     * from both. Never lets either number drop below 1, and returns null when nothing needs to change.
+     */
+    static int[] rewriteSleepingArgs(int numerator, int denominator, int vanishedCount) {
+        if (vanishedCount <= 0)
+            return null;
+        int newNum = Math.max(1, numerator - vanishedCount);
+        int newDen = Math.max(1, denominator - vanishedCount);
+        if (newNum == numerator && newDen == denominator)
+            return null;
+        return new int[]{newNum, newDen};
+    }
+
+    /** Serializes a simple adventure component (text or translatable-with-text-args) to its plain text. */
+    private static String adventurePlain(net.kyori.adventure.text.Component c) {
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(c);
     }
 
     /**
