@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ProtocolLibManager {
 
     private final Vanishpp plugin;
+    private long lastPlayerInfoWarning;
     private ProtocolManager protocolManager;
 
     /**
@@ -243,8 +244,16 @@ public class ProtocolLibManager {
                             if (entries == null || entries.isEmpty())
                                 return;
 
+                            // an entry without a readable profile (update-only entries, packets
+                            // rewritten by ViaVersion/TAB) is kept instead of failing the whole packet
                             VanishPlayerInfoPolicy.FilterResult<PlayerInfoData> result = VanishPlayerInfoPolicy.filter(
-                                    entries, PlayerInfoData::getProfileId,
+                                    entries, entry -> {
+                                        try {
+                                            return entry == null ? null : entry.getProfileId();
+                                        } catch (RuntimeException e) {
+                                            return null;
+                                        }
+                                    },
                                     ProtocolLibManager.this.plugin::isVanished);
 
                             if (!result.changed())
@@ -255,11 +264,13 @@ public class ProtocolLibManager {
                                 packet.getPlayerInfoDataLists().write(0, result.kept());
                             }
                         } catch (Exception e) {
-                            // Fail closed, same reasoning as the SCOREBOARD_TEAM scrub above -
-                            // an unrecognized packet shape must not be forwarded unfiltered.
-                            event.setCancelled(true);
-                            ProtocolLibManager.this.plugin.getLogger().warning(
-                                    "Failed to scrub PLAYER_INFO packet, cancelling for safety: " + e.getMessage());
+                            // Fail closed only while someone is actually vanished (nothing to leak
+                            // otherwise) - cancelling every tab-list packet of a server with nobody
+                            // vanished just breaks the tab list for everyone.
+                            boolean leakPossible = !ProtocolLibManager.this.plugin.getRawVanishedPlayers().isEmpty();
+                            if (leakPossible)
+                                event.setCancelled(true);
+                            ProtocolLibManager.this.logPlayerInfoFailure(e, leakPossible);
                         }
                     }
                 });
@@ -549,5 +560,18 @@ public class ProtocolLibManager {
                 names.add(p.getName());
         }
         return names;
+    }
+
+    /** One warning with a stack trace every 10 minutes - this fires per packet, so it must not spam the log. */
+    private void logPlayerInfoFailure(Exception e, boolean cancelled) {
+        long now = System.currentTimeMillis();
+        if (now - lastPlayerInfoWarning < 600_000L)
+            return;
+        lastPlayerInfoWarning = now;
+        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                "Failed to scrub a PLAYER_INFO packet (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")"
+                        + (cancelled ? ", cancelled it so a vanished player can't leak." : ", sent it unchanged: nobody is vanished.")
+                        + " Further occurrences are hidden for 10 minutes. Please report this with the stack trace"
+                        + " and your ProtocolLib/ViaVersion/TAB versions.", e);
     }
 }
