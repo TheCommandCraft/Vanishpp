@@ -11,10 +11,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -44,6 +41,7 @@ public class VanishLookGoal implements Goal<Mob> {
 
     private final Mob mob;
     private final Predicate<Player> isVanished;
+    /** On Folia an entity's state may only be read from the region thread that owns it. */
     private final Predicate<Entity> ownedByCurrentRegion;
     // A supplier, not a stored instance: ThreadLocalRandom.current() belongs to the calling
     // thread, and on Folia the mob's region thread can change.
@@ -78,7 +76,7 @@ public class VanishLookGoal implements Goal<Mob> {
 
     @Override
     public boolean shouldStayActive() {
-        return lookTime > 0 && isLookable(lookTarget);
+        return lookTime > 0 && lookTarget != null && isLookable(lookTarget, mob.getLocation());
     }
 
     @Override
@@ -89,7 +87,7 @@ public class VanishLookGoal implements Goal<Mob> {
 
     @Override
     public void tick() {
-        if (lookTarget != null) {
+        if (lookTarget != null && ownedByCurrentRegion.test(lookTarget)) {
             mob.lookAt(lookTarget);
         }
         lookTime--;
@@ -105,11 +103,17 @@ public class VanishLookGoal implements Goal<Mob> {
         return EnumSet.of(GoalType.LOOK);
     }
 
+    /**
+     * Candidates are the players whose view includes the mob's chunk: Paper reads them from the
+     * chunk map's per-chunk player list, so the search never visits other entities or players
+     * outside view distance. Every player within LOOK_DISTANCE is in the mob's chunk or a
+     * neighbour of it, so none is missed.
+     */
     private Player nearestVisiblePlayer() {
         Location origin = mob.getLocation();
         Player nearest = null;
         double nearestSq = Double.MAX_VALUE;
-        for (Player player : regionLocalPlayers()) {
+        for (Player player : mob.getWorld().getPlayersSeeingChunk(origin.getBlockX() >> 4, origin.getBlockZ() >> 4)) {
             if (!isLookable(player, origin)) continue;
             double distSq = player.getLocation().distanceSquared(origin);
             if (distSq < nearestSq) {
@@ -120,28 +124,12 @@ public class VanishLookGoal implements Goal<Mob> {
         return nearest;
     }
 
-    private boolean isLookable(Player player) {
-        return player != null && isLookable(player, mob.getLocation());
-    }
-
     private boolean isLookable(Player player, Location origin) {
-        return player.isValid()
+        return ownedByCurrentRegion.test(player)
+                && player.isValid()
                 && !player.isDead()
                 && player.getWorld().equals(origin.getWorld())
                 && player.getLocation().distanceSquared(origin) <= LOOK_DISTANCE * LOOK_DISTANCE
                 && !isVanished.test(player);
-    }
-
-    /**
-     * Players in the mob's world that the current region thread owns. A player within
-     * LOOK_DISTANCE of the mob is always in the mob's region, so the filter only skips players
-     * whose state this thread must not read on Folia.
-     */
-    private List<Player> regionLocalPlayers() {
-        List<Player> local = new ArrayList<>();
-        for (Player player : mob.getWorld().getPlayers()) {
-            if (ownedByCurrentRegion.test(player)) local.add(player);
-        }
-        return local;
     }
 }
