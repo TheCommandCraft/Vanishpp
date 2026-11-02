@@ -5,6 +5,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
+import org.bukkit.util.BoundingBox;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Array;
@@ -15,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import java.util.random.RandomGenerator;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,22 +24,32 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * VanishLookGoal against stand-in entities: the goal only reads location, world, validity and
  * death state, so interface proxies stand in for the mob, players and world and no server is needed.
+ * The world answers box queries from each player's position, the way the server's entity lookup does.
  */
 class VanishLookGoalTest {
 
+    private final List<FakePlayer> fakes = new ArrayList<>();
     private final List<Player> chunkViewers = new ArrayList<>();
-    private final List<Player> worldPlayers = new ArrayList<>();
-    private final List<int[]> chunkLookups = new ArrayList<>();
-    private int worldPlayerListCalls;
+    private final List<BoundingBox> boxQueries = new ArrayList<>();
+    private int audienceLookups;
 
+    @SuppressWarnings("unchecked")
     private final World world = proxy(World.class, (method, args) -> switch (method.getName()) {
-        case "getPlayersSeeingChunk" -> {
-            if (args.length == 2) chunkLookups.add(new int[] {(int) args[0], (int) args[1]});
-            yield new ArrayList<>(chunkViewers);
+        case "getNearbyEntities" -> {
+            if (args.length != 2 || !(args[0] instanceof BoundingBox box)) yield null;
+            boxQueries.add(box.clone());
+            Predicate<? super Entity> filter = (Predicate<? super Entity>) args[1];
+            List<Entity> found = new ArrayList<>();
+            for (FakePlayer fake : fakes) {
+                if (box.contains(fake.location.toVector()) && (filter == null || filter.test(fake.player))) {
+                    found.add(fake.player);
+                }
+            }
+            yield found;
         }
-        case "getPlayers" -> {
-            worldPlayerListCalls++;
-            yield new ArrayList<>(worldPlayers);
+        case "getPlayersSeeingChunk", "getPlayers" -> {
+            audienceLookups++;
+            yield new ArrayList<>(chunkViewers);
         }
         default -> null;
     });
@@ -63,64 +75,93 @@ class VanishLookGoalTest {
 
     @Test
     void shouldActivate_rollAtOrAboveTwoPercent_failsWithoutSearching() {
-        FakePlayer nearby = viewer(2);
+        FakePlayer nearby = nearby(2);
         for (float roll : new float[] {0.02f, 0.5f, 0.99f}) {
             random.nextFloat = roll;
             assertFalse(goal.shouldActivate(), "roll " + roll + " must not activate the goal");
         }
-        assertTrue(chunkLookups.isEmpty(), "a failed roll must not search for players");
+        assertTrue(boxQueries.isEmpty(), "a failed roll must not search for players");
         assertEquals(0, nearby.reads, "a failed roll must not read any player");
     }
 
     @Test
     void shouldActivate_rollBelowTwoPercent_searchesOnceAndTargetsVisiblePlayer() {
         assertEquals(0.02f, VanishLookGoal.LOOK_PROBABILITY, "vanilla LookAtPlayerGoal's default probability");
-        Player visible = viewer(3).player;
+        Player visible = nearby(3).player;
         random.nextFloat = 0.0199f;
 
         assertTrue(goal.shouldActivate());
-        assertEquals(1, chunkLookups.size());
+        assertEquals(1, boxQueries.size());
         startAndTick();
         assertEquals(List.of(visible), lookedAt);
     }
 
     @Test
-    void search_readsOnlyPlayersSeeingTheMobsChunk() {
+    void search_isTheEightBlockBoxAroundTheMob() {
         mobLocation = new Location(world, 40.5, 64, -20.5);
-        Player near = viewerAt(new Location(world, 43, 64, -20)).player;
+        Player near = at(new Location(world, 43, 64, -20)).player;
         random.nextFloat = 0f;
 
         assertTrue(goal.shouldActivate());
-        assertArrayEquals(new int[] {2, -2}, chunkLookups.get(0), "lookup is keyed by the mob's chunk");
+        assertEquals(1, boxQueries.size());
+        BoundingBox box = boxQueries.get(0);
+        assertEquals(32.5, box.getMinX(), 1e-9);
+        assertEquals(56, box.getMinY(), 1e-9);
+        assertEquals(-28.5, box.getMinZ(), 1e-9);
+        assertEquals(48.5, box.getMaxX(), 1e-9);
+        assertEquals(72, box.getMaxY(), 1e-9);
+        assertEquals(-12.5, box.getMaxZ(), 1e-9);
         startAndTick();
         assertEquals(List.of(near), lookedAt);
-        assertEquals(0, worldPlayerListCalls, "the search must not enumerate the world's players");
+        assertEquals(0, audienceLookups, "the search must not use the world's or a chunk's player list");
     }
 
     @Test
-    void search_distantPlayersDoNotAddWork() {
-        vanished.add(viewer(1).player);
+    void search_nearestLocalPlayerMissingFromTheChunksViewers_isStillTheTarget() {
+        Player nearest = nearby(2).player;
+        FakePlayer fartherViewer = nearby(5);
+        chunkViewers.add(fartherViewer.player);
+        random.nextFloat = 0f;
+
+        assertTrue(goal.shouldActivate());
+        startAndTick();
+        assertEquals(List.of(nearest), lookedAt, "candidates must not depend on which clients were sent the chunk");
+    }
+
+    @Test
+    void search_playerInsideTheBoxButBeyondLookDistance_isNotTheTarget() {
+        at(new Location(world, 7, 64, 7));
+        random.nextFloat = 0f;
+
+        assertFalse(goal.shouldActivate(), "a box corner is farther than 8 blocks");
+    }
+
+    @Test
+    void search_distantPlayersAndViewersDoNotAddWork() {
+        vanished.add(nearby(1).player);
         random.nextFloat = 0f;
         assertFalse(goal.shouldActivate());
         int readsWithoutDistant = totalReads();
 
         List<FakePlayer> distant = new ArrayList<>();
-        for (int i = 0; i < 50; i++) {
-            FakePlayer far = new FakePlayer(new Location(world, 500 + i, 64, 500));
-            distant.add(far);
-            worldPlayers.add(far.player);
+        for (int i = 0; i < 25; i++) {
+            FakePlayer viewer = at(new Location(world, 64 + i, 64, 0));
+            chunkViewers.add(viewer.player);
+            distant.add(viewer);
+            distant.add(at(new Location(world, 0, 64 + 40 + i, 0)));
+            distant.add(at(new Location(world, 500 + i, 64, 500)));
         }
         resetReads();
         assertFalse(goal.shouldActivate());
 
         assertEquals(readsWithoutDistant, totalReads(), "distant players must not increase the search's reads");
         assertTrue(distant.stream().allMatch(far -> far.reads == 0), "distant players are never read");
-        assertEquals(0, worldPlayerListCalls);
+        assertEquals(0, audienceLookups);
     }
 
     @Test
     void shouldActivate_onlyVanishedPlayerInRange_doesNotActivate() {
-        vanished.add(viewer(1).player);
+        vanished.add(nearby(1).player);
         random.nextFloat = 0f;
 
         assertFalse(goal.shouldActivate(), "a vanished player must never become the look target");
@@ -128,9 +169,9 @@ class VanishLookGoalTest {
 
     @Test
     void shouldActivate_vanishedPlayerNearer_targetsNearestVisiblePlayer() {
-        vanished.add(viewer(1).player);
-        viewer(6);
-        Player nearestVisible = viewer(4).player;
+        vanished.add(nearby(1).player);
+        nearby(6);
+        Player nearestVisible = nearby(4).player;
         random.nextFloat = 0f;
 
         assertTrue(goal.shouldActivate());
@@ -140,7 +181,7 @@ class VanishLookGoalTest {
 
     @Test
     void shouldActivate_playerBeyondLookDistance_doesNotActivate() {
-        viewer(8.5);
+        nearby(8.5);
         random.nextFloat = 0f;
 
         assertFalse(goal.shouldActivate());
@@ -148,7 +189,7 @@ class VanishLookGoalTest {
 
     @Test
     void shouldActivate_playerOwnedByAnotherRegion_isNeverRead() {
-        FakePlayer foreign = viewer(2);
+        FakePlayer foreign = nearby(2);
         otherRegion.add(foreign.player);
         random.nextFloat = 0f;
 
@@ -165,21 +206,21 @@ class VanishLookGoalTest {
 
     @Test
     void shouldStayActive_targetVanishes_endsTheGoal() {
-        Player target = viewer(3).player;
+        Player target = nearby(3).player;
         random.nextFloat = 0f;
         assertTrue(goal.shouldActivate());
         startAndTick();
 
         vanished.add(target);
-        chunkLookups.clear();
+        boxQueries.clear();
 
         assertFalse(goal.shouldStayActive(), "a target that vanishes mid-look must end the goal");
-        assertTrue(chunkLookups.isEmpty(), "shouldStayActive must not search for players");
+        assertTrue(boxQueries.isEmpty(), "shouldStayActive must not search for players");
     }
 
     @Test
     void shouldStayActive_targetMovesToAnotherRegion_endsWithoutReadingOrLooking() {
-        FakePlayer target = viewer(3);
+        FakePlayer target = nearby(3);
         random.nextFloat = 0f;
         assertTrue(goal.shouldActivate());
         startAndTick();
@@ -197,7 +238,7 @@ class VanishLookGoalTest {
 
     @Test
     void shouldStayActive_targetLeavesRange_endsTheGoal() {
-        FakePlayer target = viewer(3);
+        FakePlayer target = nearby(3);
         random.nextFloat = 0f;
         assertTrue(goal.shouldActivate());
         startAndTick();
@@ -209,7 +250,7 @@ class VanishLookGoalTest {
 
     @Test
     void shouldStayActive_targetDies_endsTheGoal() {
-        FakePlayer target = viewer(3);
+        FakePlayer target = nearby(3);
         random.nextFloat = 0f;
         assertTrue(goal.shouldActivate());
         startAndTick();
@@ -220,9 +261,9 @@ class VanishLookGoalTest {
     }
 
     private void assertLookLasts(int randomResult, int expectedTicks) {
-        chunkViewers.clear();
+        fakes.clear();
         lookedAt.clear();
-        viewer(3);
+        nearby(3);
         random.nextFloat = 0f;
         random.nextInt = randomResult;
 
@@ -244,17 +285,13 @@ class VanishLookGoalTest {
         goal.tick();
     }
 
-    private final List<FakePlayer> fakes = new ArrayList<>();
-
-    private FakePlayer viewer(double distance) {
-        return viewerAt(new Location(world, distance, 64, 0));
+    private FakePlayer nearby(double distance) {
+        return at(new Location(world, distance, 64, 0));
     }
 
-    private FakePlayer viewerAt(Location location) {
+    private FakePlayer at(Location location) {
         FakePlayer fake = new FakePlayer(location);
         fakes.add(fake);
-        chunkViewers.add(fake.player);
-        worldPlayers.add(fake.player);
         return fake;
     }
 
