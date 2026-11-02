@@ -7,6 +7,7 @@ import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
@@ -43,7 +44,7 @@ public class VanishLookGoal implements Goal<Mob> {
 
     private final Mob mob;
     private final Predicate<Player> isVanished;
-    private final Supplier<? extends Collection<? extends Player>> candidates;
+    private final Predicate<Entity> ownedByCurrentRegion;
     // A supplier, not a stored instance: ThreadLocalRandom.current() belongs to the calling
     // thread, and on Folia the mob's region thread can change.
     private final Supplier<? extends RandomGenerator> random;
@@ -52,15 +53,14 @@ public class VanishLookGoal implements Goal<Mob> {
     private int lookTime;
 
     public VanishLookGoal(Vanishpp plugin, Mob mob) {
-        this(mob, plugin::isVanished, () -> regionLocalPlayers(mob), ThreadLocalRandom::current);
+        this(mob, plugin::isVanished, Bukkit::isOwnedByCurrentRegion, ThreadLocalRandom::current);
     }
 
-    VanishLookGoal(Mob mob, Predicate<Player> isVanished,
-                   Supplier<? extends Collection<? extends Player>> candidates,
+    VanishLookGoal(Mob mob, Predicate<Player> isVanished, Predicate<Entity> ownedByCurrentRegion,
                    Supplier<? extends RandomGenerator> random) {
         this.mob = mob;
         this.isVanished = isVanished;
-        this.candidates = candidates;
+        this.ownedByCurrentRegion = ownedByCurrentRegion;
         this.random = random;
     }
 
@@ -109,7 +109,7 @@ public class VanishLookGoal implements Goal<Mob> {
         Location origin = mob.getLocation();
         Player nearest = null;
         double nearestSq = Double.MAX_VALUE;
-        for (Player player : candidates.get()) {
+        for (Player player : regionLocalPlayers()) {
             if (!isLookable(player, origin)) continue;
             double distSq = player.getLocation().distanceSquared(origin);
             if (distSq < nearestSq) {
@@ -137,10 +137,10 @@ public class VanishLookGoal implements Goal<Mob> {
      * LOOK_DISTANCE of the mob is always in the mob's region, so the filter only skips players
      * whose state this thread must not read on Folia.
      */
-    private static List<Player> regionLocalPlayers(Mob mob) {
+    private List<Player> regionLocalPlayers() {
         List<Player> local = new ArrayList<>();
         for (Player player : mob.getWorld().getPlayers()) {
-            if (Bukkit.isOwnedByCurrentRegion(player)) local.add(player);
+            if (ownedByCurrentRegion.test(player)) local.add(player);
         }
         return local;
     }
