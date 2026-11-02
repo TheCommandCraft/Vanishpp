@@ -4,55 +4,95 @@ import com.destroystokyo.paper.entity.ai.Goal;
 import com.destroystokyo.paper.entity.ai.GoalKey;
 import com.destroystokyo.paper.entity.ai.GoalType;
 import net.thecommandcraft.vanishpp.Vanishpp;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.random.RandomGenerator;
 
 /**
- * Replaces the vanilla LOOK_AT_PLAYER goal on a per-mob basis. Activation mirrors vanilla exactly
- * (any player in range, vanished or not) so the LOOK goal slot is never freed for the vanilla goal
- * to reclaim; only the actual look target excludes vanished players. Registered at a fixed low
- * priority (see MobAiManager.LOOK_GOAL_PRIORITY) so it can never preempt attack goals, which also
- * claim GoalType.LOOK while attacking.
+ * Replaces the vanilla LOOK_AT_PLAYER goal on a per-mob basis and behaves like it: a 2% roll per
+ * activation check, the nearest player in range as the target, and a 40-79 tick look. Vanished
+ * players are never picked, and a target that vanishes mid-look ends the goal at once.
+ * <p>
+ * MobAiManager removes the vanilla goal before adding this one, so while this goal is idle the
+ * LOOK slot can only go to the mob's other LOOK goals (e.g. RandomLookAroundGoal), never to a
+ * vanish-unaware look-at-player goal.
+ * <p>
+ * Registered at a fixed low priority (see MobAiManager.LOOK_GOAL_PRIORITY) so it can never preempt
+ * attack goals, which also claim GoalType.LOOK while attacking.
  */
 public class VanishLookGoal implements Goal<Mob> {
 
     public static final GoalKey<Mob> KEY = GoalKey.of(Mob.class, new NamespacedKey("vanishpp", "vanish_look"));
 
     private static final double LOOK_DISTANCE = 8.0;
+    /** Vanilla LookAtPlayerGoal's default probability. */
+    static final float LOOK_PROBABILITY = 0.02f;
+    static final int MIN_LOOK_TICKS = 40;
+    static final int LOOK_TICKS_SPREAD = 40;
 
-    private final Vanishpp plugin;
     private final Mob mob;
+    private final Predicate<Player> isVanished;
+    private final Supplier<? extends Collection<? extends Player>> candidates;
+    // A supplier, not a stored instance: ThreadLocalRandom.current() belongs to the calling
+    // thread, and on Folia the mob's region thread can change.
+    private final Supplier<? extends RandomGenerator> random;
 
-    private Player anyNearbyPlayer;
-    private Player visibleLookTarget;
+    private Player lookTarget;
+    private int lookTime;
 
     public VanishLookGoal(Vanishpp plugin, Mob mob) {
-        this.plugin = plugin;
+        this(mob, plugin::isVanished, () -> regionLocalPlayers(mob), ThreadLocalRandom::current);
+    }
+
+    VanishLookGoal(Mob mob, Predicate<Player> isVanished,
+                   Supplier<? extends Collection<? extends Player>> candidates,
+                   Supplier<? extends RandomGenerator> random) {
         this.mob = mob;
+        this.isVanished = isVanished;
+        this.candidates = candidates;
+        this.random = random;
     }
 
     @Override
     public boolean shouldActivate() {
-        refreshCandidates();
-        return anyNearbyPlayer != null;
+        if (random.get().nextFloat() >= LOOK_PROBABILITY) return false;
+        lookTarget = nearestVisiblePlayer();
+        return lookTarget != null;
+    }
+
+    @Override
+    public void start() {
+        lookTime = MIN_LOOK_TICKS + random.get().nextInt(LOOK_TICKS_SPREAD);
     }
 
     @Override
     public boolean shouldStayActive() {
-        refreshCandidates();
-        return anyNearbyPlayer != null;
+        return lookTime > 0 && isLookable(lookTarget);
+    }
+
+    @Override
+    public void stop() {
+        lookTarget = null;
+        lookTime = 0;
     }
 
     @Override
     public void tick() {
-        if (visibleLookTarget != null) {
-            mob.lookAt(visibleLookTarget);
+        if (lookTarget != null) {
+            mob.lookAt(lookTarget);
         }
-        // Only vanished players nearby: do nothing, leave the mob's head where it is.
+        lookTime--;
     }
 
     @Override
@@ -65,24 +105,43 @@ public class VanishLookGoal implements Goal<Mob> {
         return EnumSet.of(GoalType.LOOK);
     }
 
-    private void refreshCandidates() {
-        anyNearbyPlayer = null;
-        visibleLookTarget = null;
-        double nearestAnySq = Double.MAX_VALUE;
-        double nearestVisibleSq = Double.MAX_VALUE;
-
-        for (Entity entity : mob.getLocation().getNearbyEntities(LOOK_DISTANCE, LOOK_DISTANCE, LOOK_DISTANCE)) {
-            if (!(entity instanceof Player player)) continue;
-            double distSq = player.getLocation().distanceSquared(mob.getLocation());
-
-            if (distSq < nearestAnySq) {
-                nearestAnySq = distSq;
-                anyNearbyPlayer = player;
-            }
-            if (!plugin.isVanished(player) && distSq < nearestVisibleSq) {
-                nearestVisibleSq = distSq;
-                visibleLookTarget = player;
+    private Player nearestVisiblePlayer() {
+        Location origin = mob.getLocation();
+        Player nearest = null;
+        double nearestSq = Double.MAX_VALUE;
+        for (Player player : candidates.get()) {
+            if (!isLookable(player, origin)) continue;
+            double distSq = player.getLocation().distanceSquared(origin);
+            if (distSq < nearestSq) {
+                nearestSq = distSq;
+                nearest = player;
             }
         }
+        return nearest;
+    }
+
+    private boolean isLookable(Player player) {
+        return player != null && isLookable(player, mob.getLocation());
+    }
+
+    private boolean isLookable(Player player, Location origin) {
+        return player.isValid()
+                && !player.isDead()
+                && player.getWorld().equals(origin.getWorld())
+                && player.getLocation().distanceSquared(origin) <= LOOK_DISTANCE * LOOK_DISTANCE
+                && !isVanished.test(player);
+    }
+
+    /**
+     * Players in the mob's world that the current region thread owns. A player within
+     * LOOK_DISTANCE of the mob is always in the mob's region, so the filter only skips players
+     * whose state this thread must not read on Folia.
+     */
+    private static List<Player> regionLocalPlayers(Mob mob) {
+        List<Player> local = new ArrayList<>();
+        for (Player player : mob.getWorld().getPlayers()) {
+            if (Bukkit.isOwnedByCurrentRegion(player)) local.add(player);
+        }
+        return local;
     }
 }
