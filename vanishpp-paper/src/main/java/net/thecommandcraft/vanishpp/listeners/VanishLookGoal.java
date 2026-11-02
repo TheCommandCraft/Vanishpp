@@ -10,6 +10,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
+import org.bukkit.util.BoundingBox;
 
 import java.util.EnumSet;
 import java.util.concurrent.ThreadLocalRandom;
@@ -104,16 +105,17 @@ public class VanishLookGoal implements Goal<Mob> {
     }
 
     /**
-     * Candidates are the players whose view includes the mob's chunk: Paper reads them from the
-     * chunk map's per-chunk player list, so the search never visits other entities or players
-     * outside view distance. Every player within LOOK_DISTANCE is in the mob's chunk or a
-     * neighbour of it, so none is missed.
+     * Candidates come from the server's entity lookup for the LOOK_DISTANCE box around the mob, so
+     * every player standing there is found whatever chunks their client has been sent, and players
+     * outside the box are never visited.
      */
     private Player nearestVisiblePlayer() {
         Location origin = mob.getLocation();
+        BoundingBox box = BoundingBox.of(origin, LOOK_DISTANCE, LOOK_DISTANCE, LOOK_DISTANCE);
         Player nearest = null;
         double nearestSq = Double.MAX_VALUE;
-        for (Player player : mob.getWorld().getPlayersSeeingChunk(origin.getBlockX() >> 4, origin.getBlockZ() >> 4)) {
+        for (Entity entity : mob.getWorld().getNearbyEntities(box, candidate -> candidate instanceof Player)) {
+            Player player = (Player) entity;
             if (!isLookable(player, origin)) continue;
             double distSq = player.getLocation().distanceSquared(origin);
             if (distSq < nearestSq) {
