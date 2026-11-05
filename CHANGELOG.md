@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Mobs look at players like in vanilla, but never at vanished players.** Each mob keeps its own look range and chance, for example 6 blocks for cows and 10 for cats. Like vanilla, mobs need line of sight, ignore spectators, and notice sneaking or invisible players from closer. Look goals aimed at other mobs are left untouched. (Thanks @Marzionz, PR #39)
+- **No invisibility potion while vanished.** The invisible flag already keeps mobs from noticing vanished players. Unvanishing removes the hidden potion from older versions, but keeps an invisibility potion you drank yourself.
+
+### Fixed
+- **Mobs looked at players for twice as long as in vanilla.** A look now lasts 2-4 seconds again.
+
+### Performance
+- **Less work per tick for mob AI.** The mob target check no longer schedules a task per mob every tick, and mobs scan their goals once instead of three times when they spawn or load.
+
 ## [1.1.10] - 2026-11-05
 
 ### Fixed

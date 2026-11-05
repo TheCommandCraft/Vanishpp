@@ -1,5 +1,7 @@
 package net.thecommandcraft.vanishpp.listeners;
 
+import com.destroystokyo.paper.entity.ai.Goal;
+import com.destroystokyo.paper.entity.ai.GoalType;
 import com.destroystokyo.paper.entity.ai.MobGoals;
 import com.destroystokyo.paper.entity.ai.VanillaGoal;
 import net.thecommandcraft.vanishpp.Vanishpp;
@@ -13,6 +15,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MobAiManager implements Listener {
 
@@ -53,8 +58,9 @@ public class MobAiManager implements Listener {
             // Only enforce clearing if mob_targeting rule is OFF
             if (plugin.getRuleManager().getRule(p, RuleManager.MOB_TARGETING)) continue;
 
-            // getNearbyEntities() requires the owning region thread (Folia safety) — dispatch per player.
-            plugin.getVanishScheduler().runEntity(p, () -> sweepForPlayer(p), null);
+            // getNearbyEntities() requires the owning region thread (Folia safety). Runs inline when
+            // this thread already owns the player (always on Paper/Spigot), so no task per player per tick.
+            plugin.getVanishScheduler().runEntityNow(p, () -> sweepForPlayer(p));
         }
     }
 
@@ -65,14 +71,15 @@ public class MobAiManager implements Listener {
 
             // A mob near a region boundary may belong to a different region than the
             // player — its target/pathfinder must be touched on its own owning thread.
-            plugin.getVanishScheduler().runEntity(mob, () -> {
+            // Everything else is checked inline instead of scheduling a task per mob per tick.
+            plugin.getVanishScheduler().runEntityNow(mob, () -> {
                 if (p.equals(mob.getTarget())) {
                     mob.setTarget(null);
                     try {
                         mob.getPathfinder().stopPathfinding();
                     } catch (Throwable ignored) {}
                 }
-            }, null);
+            });
         }
     }
 
@@ -102,18 +109,28 @@ public class MobAiManager implements Listener {
     }
 
     /**
-     * Removes the vanilla LOOK_AT_PLAYER goal and replaces it with a vanish-aware equivalent.
+     * Replaces each vanilla LOOK_AT_PLAYER goal that looks at players with a vanish-aware copy
+     * using the same range, chance and head movement. Ones that look at other mobs (e.g. illagers
+     * looking at Mob) stay vanilla, they never pick a player.
      * Never touches any other GoalType (MOVE/JUMP/TARGET) - those belong to attack/movement
      * goals and must never be touched (doing so previously broke vanilla combat, see CHANGELOG).
      */
     private void injectIfMissing(Mob mob) {
         try {
             MobGoals goals = Bukkit.getMobGoals();
-            if (!goals.hasGoal(mob, VanillaGoal.LOOK_AT_PLAYER)) return; // mob type has no look goal
-            if (goals.hasGoal(mob, VanishLookGoal.KEY)) return; // already injected
+            // one pass over the LOOK goals instead of a full goal scan per hasGoal/getGoals call
+            List<Goal<Mob>> vanilla = new ArrayList<>(2);
+            for (Goal<Mob> goal : goals.getAllGoals(mob, GoalType.LOOK)) {
+                if (goal.getKey().equals(VanishLookGoal.KEY)) return; // already injected
+                if (goal.getKey().equals(VanillaGoal.LOOK_AT_PLAYER)) vanilla.add(goal);
+            }
 
-            goals.removeGoal(mob, VanillaGoal.LOOK_AT_PLAYER);
-            goals.addGoal(mob, LOOK_GOAL_PRIORITY, new VanishLookGoal(plugin, mob));
+            for (Goal<Mob> goal : vanilla) {
+                VanishLookGoal.Settings settings = VanishLookGoal.Settings.of(goal);
+                if (settings == null) continue; // looks at other mobs, not players
+                goals.removeGoal(mob, goal);
+                goals.addGoal(mob, LOOK_GOAL_PRIORITY, new VanishLookGoal(plugin, mob, settings));
+            }
         } catch (Throwable ignored) {
             // MobGoals API unavailable for this mob type/platform - fall back to vanilla look behavior
         }

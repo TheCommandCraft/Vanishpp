@@ -749,7 +749,18 @@ public class Vanishpp extends JavaPlugin implements Listener {
         downgradeFromVersion = null;
     }
 
+    /**
+     * Versions up to 1.1.9.1 gave vanished players an infinite, hidden invisibility potion, and it's
+     * saved with the player. Removes only that one, a potion the player drank themselves stays.
+     */
+    private void removeLegacyInvisibility(Player player) {
+        PotionEffect effect = player.getPotionEffect(PotionEffectType.INVISIBILITY);
+        if (effect != null && effect.isInfinite() && !effect.hasParticles() && !effect.isAmbient())
+            player.removePotionEffect(PotionEffectType.INVISIBILITY);
+    }
+
     private void forceEnsureVisible(Player player) {
+        removeLegacyInvisibility(player);
         player.setInvisible(false);
         try {
             player.setVisibleByDefault(true);
@@ -1145,16 +1156,16 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
-        // Invisibility so mobs cannot see the player at all
-        player.addPotionEffect(
-                new PotionEffect(PotionEffectType.INVISIBILITY, PotionEffect.INFINITE_DURATION, 0, false, false));
-
+        // The invisible flag alone shrinks how far mobs notice the player, the same as the
+        // invisibility potion did (vanilla checks the flag, and Paper keeps it set). No potion, so
+        // it doesn't show up for the player and a real one they drank isn't taken away on unvanish.
         player.setInvisible(true);
 
         // DO NOT change gamemode — player should remain in their original mode
         // Combat targeting is prevented by EntityTargetEvent cancellation (PlayerListener).
         // Visual head/body look-at is a separate AI goal, handled by VanishLookGoal
-        // (injected via MobAiManager, replacing the vanilla LOOK_AT_PLAYER goal).
+        // (injected via MobAiManager, replacing the vanilla LOOK_AT_PLAYER goals), which never
+        // picks a vanished player.
 
         player.setCollidable(false);
 
@@ -1315,8 +1326,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 }, 1L);
             }, 1L);
         }
-        if (player.hasPotionEffect(PotionEffectType.INVISIBILITY))
-            player.removePotionEffect(PotionEffectType.INVISIBILITY);
+        removeLegacyInvisibility(player);
         player.setInvisible(false);
         if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
                 && player.getGameMode() != GameMode.SPECTATOR) {

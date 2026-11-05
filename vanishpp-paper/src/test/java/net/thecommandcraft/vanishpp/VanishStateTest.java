@@ -6,6 +6,8 @@ import be.seeseemelk.mockbukkit.entity.PlayerMock;
 import net.thecommandcraft.vanishpp.config.PermissionManager;
 import net.thecommandcraft.vanishpp.config.RuleManager;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -304,5 +306,34 @@ class VanishStateTest {
 
         assertFalse(player.isInvisible(),
                 "A player who is not vanished per DB+memory must have the invisible flag cleared");
+    }
+
+    // -------------------------------------------------------------------------
+    // No invisibility potion: the invisible flag + VanishLookGoal cover mobs
+    // -------------------------------------------------------------------------
+
+    @Test
+    void vanish_setsInvisibleFlag_withoutPotion() {
+        plugin.applyVanishEffects(player);
+        assertTrue(player.isInvisible());
+        assertFalse(player.hasPotionEffect(PotionEffectType.INVISIBILITY), "no invisibility potion while vanished");
+    }
+
+    @Test
+    void unvanish_removesOldVersionsHiddenPotion() {
+        plugin.applyVanishEffects(player);
+        // what versions up to 1.1.9.1 gave vanished players, saved with the player
+        player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, PotionEffect.INFINITE_DURATION, 0, false, false));
+        plugin.removeVanishEffects(player);
+        assertFalse(player.hasPotionEffect(PotionEffectType.INVISIBILITY));
+        assertFalse(player.isInvisible());
+    }
+
+    @Test
+    void unvanish_keepsAPotionThePlayerDrank() {
+        player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 3600, 0));
+        plugin.applyVanishEffects(player);
+        plugin.removeVanishEffects(player);
+        assertTrue(player.hasPotionEffect(PotionEffectType.INVISIBILITY), "a drunk potion isn't taken away on unvanish");
     }
 }

@@ -12,6 +12,9 @@ public interface VanishScheduler {
 
     void runEntity(Entity entity, Runnable runnable, Runnable retired);
 
+    /** Like runEntity, but runs right away when the current thread already owns the entity. */
+    void runEntityNow(Entity entity, Runnable runnable);
+
     void runAsync(Runnable runnable);
 
     void cancelAllTasks();

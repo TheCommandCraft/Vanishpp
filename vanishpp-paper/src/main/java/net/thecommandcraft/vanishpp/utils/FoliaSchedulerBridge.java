@@ -34,6 +34,12 @@ public class FoliaSchedulerBridge implements VanishScheduler {
     }
 
     @Override
+    public void runEntityNow(Entity entity, Runnable runnable) {
+        if (Bukkit.isOwnedByCurrentRegion(entity)) runnable.run();
+        else runEntity(entity, runnable, null);
+    }
+
+    @Override
     public void runAsync(Runnable runnable) {
         Bukkit.getAsyncScheduler().runNow(plugin, task -> runnable.run());
     }
