@@ -9,7 +9,8 @@ name: Release Announce
 # Pre-releases (v1.2.3-beta etc.) are never announced.
 #
 # The webhook is the DISCORD_RELEASE_WEBHOOK secret in the "discord-release" environment (main only).
-# Who gets pinged is the DISCORD_RELEASE_PING repository variable: "@everyone" (default), a role id,
+# Only bigger releases (1.2.0, 2.0.0) ping, fixes are posted without one. Who gets pinged is the
+# DISCORD_RELEASE_PING repository variable: "@everyone" (default), a role id,
 # or "none".
 
 on:

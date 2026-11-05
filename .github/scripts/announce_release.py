@@ -177,6 +177,12 @@ def build_message(cfg, project, version, found, repo, ping):
     return message
 
 
+def is_big_release(version):
+    """1.2.0 / 2.0.0 (first or second number changed) - the only releases that ping."""
+    parts = version.split(".")
+    return len(parts) < 3 or all(p == "0" for p in parts[2:])
+
+
 def check_limits(message):
     """Discord's documented embed limits - fail here instead of getting a 400 from the live channel."""
     e = message["embeds"][0]
@@ -224,8 +230,10 @@ def main():
     found = wait_for_modrinth(cfg, version, int(os.environ.get("WAIT_MINUTES", "15")))
     print("Verified on Modrinth: " + ", ".join(f"{v['name']} ({v['id']})" for v in found.values()))
     project = get_json(f"{API}/project/{cfg['project_id']}")
-    message = build_message(cfg, project, version, found, os.environ.get("REPO", "TheCommandCraft/Vanishpp"),
-                            os.environ.get("PING", "@everyone").strip())
+    # pings are kept for bigger releases so nobody mutes the channel; fixes are posted silently
+    ping = os.environ.get("PING", "@everyone").strip() if is_big_release(version) else ""
+    print(f"{version}: " + (f"pinging {ping}" if ping else "posting without a ping (fix release)"))
+    message = build_message(cfg, project, version, found, os.environ.get("REPO", "TheCommandCraft/Vanishpp"), ping)
     check_limits(message)
     if os.environ.get("DRY_RUN") == "1":
         print(json.dumps(message, indent=2, ensure_ascii=False))

@@ -49,3 +49,4 @@ server-data/
 # Test server data
 testserver_clean/
 testserver_folia/
+__pycache__/
