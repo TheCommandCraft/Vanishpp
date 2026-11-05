@@ -1,0 +1,73 @@
+name: Release Announce
+
+# Posts a new release in the Discord updates channel, but only after .github/scripts/announce_release.py
+# has verified that every upload is listed and downloadable on Modrinth (waits up to 15 minutes).
+# If it never shows up, nothing is posted and this run fails.
+#
+# Runs after a successful Release run that was started by pushing a tag. Retries of Release from the
+# Actions tab don't announce again, so nobody gets pinged twice - use workflow_dispatch for that.
+# Pre-releases (v1.2.3-beta etc.) are never announced.
+#
+# The webhook is the DISCORD_RELEASE_WEBHOOK secret in the "discord-release" environment (main only).
+# Who gets pinged is the DISCORD_RELEASE_PING repository variable: "@everyone" (default), a role id,
+# or "none".
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to announce, e.g. v1.1.10'
+        required: true
+      dry_run:
+        description: 'Only print the message, do not post it'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-announce
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: discord-release
+    steps:
+      - name: Resolve tag
+        id: meta
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$TAG' is not a version tag"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # the tag's CHANGELOG.md and modrinth.json, the script itself always from main
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.meta.outputs.tag }}
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+          sparse-checkout: .github/scripts
+
+      - name: Announce on Discord
+        env:
+          VERSION: ${{ steps.meta.outputs.tag }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          PING: ${{ vars.DISCORD_RELEASE_PING || '@everyone' }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: python3 -I main/.github/scripts/announce_release.py
