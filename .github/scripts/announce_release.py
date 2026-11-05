@@ -82,12 +82,50 @@ def changelog_section(version):
     return "\n".join(lines).strip()
 
 
-def shorten(text, limit, more):
-    if len(text) <= limit:
+# How much changelog fits on a phone with the top and the bottom of the message still on screen:
+# the 1.1.10 changelog (~25 lines at the ~38 characters a phone shows next to the thumbnail) was
+# the most that fit, so it's capped a bit below that.
+PHONE_LINE_CHARS = 38
+PHONE_MAX_LINES = 22
+
+
+def visible(text):
+    """Text as Discord shows it: no markdown markers, masked links as their label."""
+    return re.sub(r"\*\*|`|\[([^\]]*)\]\([^)]*\)", lambda m: m.group(1) or "", text)
+
+
+def phone_lines(text):
+    lines = 0
+    for line in visible(text).split("\n"):
+        lines += max(1, -(-len(line) // PHONE_LINE_CHARS))  # rough, word wrap adds a bit
+    return lines
+
+
+def close_markdown(text):
+    """Closes a ** or ` that the cut left open, and drops a masked link that was cut in half."""
+    link = text.rfind("[")
+    if link != -1 and not re.search(r"\]\([^)]*\)", text[link:]):
+        text = text[:link].rstrip()
+    if text.count("`") % 2:
+        text += "`"
+    if text.count("**") % 2:
+        text += "**"
+    return text
+
+
+def shorten(text, more):
+    """Cuts the changelog to PHONE_MAX_LINES at a word boundary and ends it with the read-more link."""
+    if phone_lines(text) <= PHONE_MAX_LINES:
         return text
-    cut = text[:limit - len(more) - 2]
-    cut = cut[:cut.rfind("\n")] if "\n" in cut else cut
-    return cut.rstrip() + "\n\n" + more
+    budget = PHONE_MAX_LINES - phone_lines(more)
+    words = re.split(r"(\s+)", text)
+    cut = ""
+    for i in range(0, len(words), 2):
+        candidate = cut + "".join(words[i:i + 2])
+        if phone_lines(candidate.rstrip() + "…") > budget:
+            break
+        cut = candidate
+    return close_markdown(cut.rstrip().rstrip(",;:-")) + "…\n" + more
 
 
 def game_range(games):
@@ -106,7 +144,7 @@ def build_message(cfg, project, version, found, repo, ping):
         "author": {"name": "Vanish++ update", "url": cfg["project_url"], "icon_url": project["icon_url"]},
         "title": f"Vanish++ {version} is out",
         "url": url,
-        "description": shorten(changelog, 3500, f"*…more in the [full changelog]({release_url}).*"),
+        "description": shorten(changelog, f"**[Read the full changelog →]({release_url})**"),
         "color": COLOR,
         "thumbnail": {"url": project["icon_url"]},
         "fields": [
