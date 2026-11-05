@@ -7,6 +7,7 @@ import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
+import com.comphenix.protocol.reflect.StructureModifier;
 import com.comphenix.protocol.wrappers.*;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
@@ -239,21 +240,20 @@ public class ProtocolLibManager {
                             return;
 
                         try {
-                            PacketContainer packet = event.getPacket();
-                            List<PlayerInfoData> entries = packet.getPlayerInfoDataLists().read(0);
+                            // The raw entry list, not getPlayerInfoDataLists(): ProtocolLib's
+                            // converter maps index 0 to a different field depending on its
+                            // version (5.3/5.4 read the action set there and return a bogus
+                            // entry), so it can't be trusted to find the entries.
+                            @SuppressWarnings("rawtypes")
+                            StructureModifier<List> lists = event.getPacket().getModifier().withType(List.class);
+                            if (lists.size() == 0)
+                                return;
+                            List<?> entries = lists.read(0);
                             if (entries == null || entries.isEmpty())
                                 return;
 
-                            // an entry without a readable profile (update-only entries, packets
-                            // rewritten by ViaVersion/TAB) is kept instead of failing the whole packet
-                            VanishPlayerInfoPolicy.FilterResult<PlayerInfoData> result = VanishPlayerInfoPolicy.filter(
-                                    entries, entry -> {
-                                        try {
-                                            return entry == null ? null : entry.getProfileId();
-                                        } catch (RuntimeException e) {
-                                            return null;
-                                        }
-                                    },
+                            VanishPlayerInfoPolicy.FilterResult<Object> result = VanishPlayerInfoPolicy.filter(
+                                    new ArrayList<Object>(entries), ProtocolLibManager::entryProfileId,
                                     ProtocolLibManager.this.plugin::isVanished);
 
                             if (!result.changed())
@@ -261,16 +261,14 @@ public class ProtocolLibManager {
                             if (result.cancel()) {
                                 event.setCancelled(true);
                             } else {
-                                packet.getPlayerInfoDataLists().write(0, result.kept());
+                                lists.write(0, result.kept());
                             }
                         } catch (Exception e) {
-                            // Fail closed only while someone is actually vanished (nothing to leak
-                            // otherwise) - cancelling every tab-list packet of a server with nobody
-                            // vanished just breaks the tab list for everyone.
-                            boolean leakPossible = !ProtocolLibManager.this.plugin.getRawVanishedPlayers().isEmpty();
-                            if (leakPossible)
-                                event.setCancelled(true);
-                            ProtocolLibManager.this.logPlayerInfoFailure(e, leakPossible);
+                            // Fail open: hidePlayer() already keeps vanished players out of the tab
+                            // list, this is only a second layer. Cancelling here would drop the
+                            // whole packet - including every other player in it - so nobody would
+                            // see each other anymore.
+                            ProtocolLibManager.this.logPlayerInfoFailure(e);
                         }
                     }
                 });
@@ -562,15 +560,42 @@ public class ProtocolLibManager {
         return names;
     }
 
+    private static volatile java.lang.reflect.Field entryIdField;
+
+    /** The profile UUID of a raw player info entry: its only UUID field, found by type so it works on Spigot's obfuscated names too. */
+    static UUID entryProfileId(Object entry) {
+        if (entry == null)
+            return null;
+        try {
+            java.lang.reflect.Field f = entryIdField;
+            if (f == null || f.getDeclaringClass() != entry.getClass()) {
+                f = null;
+                for (java.lang.reflect.Field candidate : entry.getClass().getDeclaredFields()) {
+                    if (candidate.getType() == UUID.class && !java.lang.reflect.Modifier.isStatic(candidate.getModifiers())) {
+                        f = candidate;
+                        break;
+                    }
+                }
+                if (f == null)
+                    return null;
+                f.setAccessible(true);
+                entryIdField = f;
+            }
+            return (UUID) f.get(entry);
+        } catch (Exception | LinkageError e) {
+            return null;
+        }
+    }
+
     /** One warning with a stack trace every 10 minutes - this fires per packet, so it must not spam the log. */
-    private void logPlayerInfoFailure(Exception e, boolean cancelled) {
+    private void logPlayerInfoFailure(Exception e) {
         long now = System.currentTimeMillis();
         if (now - lastPlayerInfoWarning < 600_000L)
             return;
         lastPlayerInfoWarning = now;
         plugin.getLogger().log(java.util.logging.Level.WARNING,
                 "Failed to scrub a PLAYER_INFO packet (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")"
-                        + (cancelled ? ", cancelled it so a vanished player can't leak." : ", sent it unchanged: nobody is vanished.")
+                        + ", sent it unchanged (vanished players are still hidden by the server itself)."
                         + " Further occurrences are hidden for 10 minutes. Please report this with the stack trace"
                         + " and your ProtocolLib/ViaVersion/TAB versions.", e);
     }

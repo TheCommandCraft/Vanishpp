@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.10] - 2026-11-05
+
+### Fixed
+- **Players couldn't see each other with ProtocolLib 5.3.0/5.4.0 installed** (log spam `Failed to scrub PLAYER_INFO packet, cancelling for safety: null`): those ProtocolLib releases hand out the wrong field of the tab-list packet, Vanish++ failed on it and dropped the whole packet, so players never got added to each other's tab list and weren't shown. The tab-list scrub now reads the packet's raw entry list, which works the same on every ProtocolLib version, and if it ever fails it sends the packet unchanged instead of dropping it (vanished players are still hidden by the server itself), and the warning shows up at most once every 10 minutes with a stack trace instead of on every packet. Tested on Paper 1.20.6, 1.21.4, 1.21.8, 1.21.10, 1.21.11, 26.1.2, 26.2 and 26.3 with ProtocolLib 5.3.0, 5.4.0 and the current dev builds.
+
 ## [1.1.9.1] - 2026-10-23
 
 ### Added
