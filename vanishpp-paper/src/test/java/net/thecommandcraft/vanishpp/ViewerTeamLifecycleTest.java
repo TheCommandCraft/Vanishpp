@@ -12,6 +12,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import org.bukkit.scoreboard.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import net.thecommandcraft.vanishpp.utils.ViewerTeams;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -257,6 +259,42 @@ class ViewerTeamLifecycleTest {
                 };
             }
         };
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void unregisteredSnapshotMembersDoNotStopLaterCopies(boolean removedTeam) {
+        plugin.applyVanishEffects(subject);
+        ScoreboardManager nativeManager = server.getScoreboardManager();
+        Scoreboard original = spy(formattingScoreboard(nativeManager.getNewScoreboard()));
+        Objective live = original.registerNewObjective("points", "dummy", Component.text("Points"));
+        live.getScore("public").setScore(3);
+        Team builders = original.registerNewTeam("builders");
+        for (Team.Option option : Team.Option.values()) builders.setOption(option, Team.OptionStatus.ALWAYS);
+        builders.addEntry("public");
+        if (removedTeam) {
+            Team gone = mock(Team.class);
+            when(gone.getName()).thenThrow(new IllegalStateException("Unregistered team"));
+            when(gone.getScoreboard()).thenReturn(null);
+            doReturn(new LinkedHashSet<>(List.of(gone, builders))).when(original).getTeams();
+        } else {
+            Objective gone = mock(Objective.class);
+            when(gone.getName()).thenThrow(new IllegalStateException("Unregistered objective"));
+            when(gone.getScoreboard()).thenReturn(null);
+            doReturn(new LinkedHashSet<>(List.of(gone, live))).when(original).getObjectives();
+        }
+        doReturn(Set.of("public")).when(original).getEntries();
+        viewer.setScoreboard(original);
+        ScoreboardManager manager = mock(ScoreboardManager.class);
+        when(manager.getNewScoreboard()).thenAnswer(call -> formattingScoreboard(nativeManager.getNewScoreboard()));
+        ViewerTeams teams = new ViewerTeams(plugin);
+        try (var bukkit = mockStatic(Bukkit.class, CALLS_REAL_METHODS)) {
+            bukkit.when(Bukkit::getScoreboardManager).thenReturn(manager);
+            assertDoesNotThrow(() -> { for (int pass = 0; pass < 80; pass++) teams.refresh(); },
+                    "a snapshot member unregistered before traversal must not stop reconciliation");
+            assertEquals(3, viewer.getScoreboard().getObjective("points").getScore("public").getScore());
+            assertTrue(viewer.getScoreboard().getTeam("builders").hasEntry("public"));
+        } finally { teams.close(); }
     }
 
     private Scoreboard countedSnapshots(Scoreboard delegate, AtomicInteger snapshots) {
