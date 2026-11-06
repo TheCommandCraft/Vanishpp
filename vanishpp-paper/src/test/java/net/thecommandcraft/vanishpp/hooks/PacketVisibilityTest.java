@@ -129,6 +129,37 @@ class PacketVisibilityTest {
     }
 
     @Test
+    void teamFilteringUsesTargetLevelAndRetainsRemovalKnowledge() {
+        plugin.getConfigManager().layeredPermsEnabled = true;
+        viewer.addAttachment(plugin, "vanishpp.see", true);
+        viewer.addAttachment(plugin, "vanishpp.see.level.1", true);
+        subject.addAttachment(plugin, "vanishpp.vanish.level.10", true);
+        TeamData hidden = new TeamData(3, subject.getName());
+        PacketEvent denied = dispatch(PacketType.Play.Server.SCOREBOARD_TEAM, teamPacket(hidden));
+        assertTrue(denied.isCancelled() || hidden.names.isEmpty(), "team membership must respect target visibility levels");
+        viewer.setOp(true);
+        TeamData shown = new TeamData(3, subject.getName());
+        assertFalse(dispatch(PacketType.Play.Server.SCOREBOARD_TEAM, teamPacket(shown)).isCancelled());
+        assertTrue(shown.names.contains(subject.getName()));
+        viewer.setOp(false);
+        TeamData removal = new TeamData(4, subject.getName());
+        assertFalse(dispatch(PacketType.Play.Server.SCOREBOARD_TEAM, teamPacket(removal)).isCancelled(),
+                "demoted viewer must receive removal of a name their client knows");
+        TeamData duplicate = new TeamData(4, subject.getName());
+        assertTrue(dispatch(PacketType.Play.Server.SCOREBOARD_TEAM, teamPacket(duplicate)).isCancelled(),
+                "client must never receive removal of an unknown membership");
+    }
+
+    private PacketContainer teamPacket(TeamData data) {
+        PacketContainer packet = mock(PacketContainer.class);
+        StructureModifier<Object> modifier = new StructureModifier<>(TeamData.class).withTarget(data);
+        when(packet.getStrings()).thenReturn(modifier.withType(String.class));
+        when(packet.getIntegers()).thenReturn(modifier.withType(int.class));
+        when(packet.getSpecificModifier(Collection.class)).thenReturn(modifier.withType(Collection.class));
+        return packet;
+    }
+
+    @Test
     void offlineVanishStateDoesNotReducePacketPingCount() {
         plugin.handleNetworkVanishSync(UUID.randomUUID(), true);
         plugin.getConfigManager().adjustServerListCount = true;
@@ -203,6 +234,12 @@ class PacketVisibilityTest {
     }
     public record Entry(UUID profileId) {}
     public record SuggestionEntry(String text, Optional<Object> tooltip) {}
+    public static class TeamData {
+        public String team = "Vanishpp_Vanished";
+        public int action;
+        public Collection<String> names;
+        TeamData(int action, String name) { this.action = action; this.names = List.of(name); }
+    }
     public static class NativeSuggestions {
         public int id = 1, start = 5, length = 3;
         public List<Object> suggestions;
