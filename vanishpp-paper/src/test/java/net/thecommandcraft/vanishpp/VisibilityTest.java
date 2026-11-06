@@ -278,6 +278,15 @@ class VisibilityTest {
         assertFalse(allowed.isCancelled(), "enabled pickup must still accept experience");
     }
 
+    @Test
+    void projectileHandlingDoesNotRegisterDeprecatedCollisionEvent() {
+        boolean deprecated = Arrays.stream(PlayerListener.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(org.bukkit.event.EventHandler.class))
+                .flatMap(method -> Arrays.stream(method.getParameterTypes()))
+                .anyMatch(type -> type.getName().equals("com.destroystokyo.paper.event.entity.ProjectileCollideEvent"));
+        assertFalse(deprecated, "projectile handling must not register the deprecated collision event");
+    }
+
     private String plain(Component component) {
         return PlainTextComponentSerializer.plainText().serialize(component);
     }
