@@ -6,10 +6,15 @@ import be.seeseemelk.mockbukkit.entity.PlayerMock;
 import net.kyori.adventure.text.Component;
 import net.thecommandcraft.vanishpp.listeners.PlayerListener;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.Bukkit;
+import java.lang.reflect.Proxy;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
 import org.bukkit.scoreboard.*;
 import org.junit.jupiter.api.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class ViewerTeamLifecycleTest {
     private ServerMock server;
@@ -96,7 +101,14 @@ class ViewerTeamLifecycleTest {
 
     @Test
     void originalScoreboardUpdatesRemainVisibleThroughOverlay() {
-        Scoreboard original = viewer.getScoreboard();
+        ScoreboardManager nativeManager = server.getScoreboardManager();
+        ScoreboardManager manager = mock(ScoreboardManager.class);
+        Scoreboard original = formattingScoreboard(nativeManager.getMainScoreboard());
+        when(manager.getMainScoreboard()).thenReturn(original);
+        when(manager.getNewScoreboard()).thenAnswer(call -> formattingScoreboard(nativeManager.getNewScoreboard()));
+        viewer.setScoreboard(original);
+        try (var bukkit = mockStatic(Bukkit.class, CALLS_REAL_METHODS)) {
+            bukkit.when(Bukkit::getScoreboardManager).thenReturn(manager);
         Objective score = original.registerNewObjective("points", "dummy", Component.text("Points"));
         score.getScore("public").setScore(5);
         Team team = original.registerNewTeam("builders");
@@ -122,5 +134,56 @@ class ViewerTeamLifecycleTest {
         assertNull(shown.getObjective("points"));
         assertNull(shown.getTeam("builders"));
         assertTrue(shown.getTeam("Vanishpp_Vanished").hasEntry(subject.getName()));
+        }
+    }
+
+    // Delegate implemented scoreboard behavior; supply the formatting methods missing in MockBukkit 3.
+    private Scoreboard formattingScoreboard(Scoreboard delegate) {
+        Map<Objective, Objective> objectives = new IdentityHashMap<>();
+        return (Scoreboard) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Scoreboard.class},
+                (proxy, method, args) -> {
+                    Object result;
+                    try { result = method.invoke(delegate, args); }
+                    catch (InvocationTargetException error) { throw error.getCause(); }
+                    if (result instanceof Objective objective)
+                        return objectives.computeIfAbsent(objective, this::formattingObjective);
+                    if (method.getName().equals("getObjectives")) {
+                        Set<Objective> wrapped = new HashSet<>();
+                        for (Objective objective : delegate.getObjectives()) wrapped.add(objectives.computeIfAbsent(objective, this::formattingObjective));
+                        return wrapped;
+                    }
+                    return result;
+                });
+    }
+
+    private Objective formattingObjective(Objective delegate) {
+        Map<Score, Score> scores = new IdentityHashMap<>();
+        Object[] format = {null};
+        return (Objective) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Objective.class},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("numberFormat")) {
+                        if (args == null || args.length == 0) return format[0];
+                        format[0] = args[0];
+                        return null;
+                    }
+                    Object result;
+                    try { result = method.invoke(delegate, args); }
+                    catch (InvocationTargetException error) { throw error.getCause(); }
+                    return result instanceof Score score ? scores.computeIfAbsent(score, this::formattingScore) : result;
+                });
+    }
+
+    private Score formattingScore(Score delegate) {
+        Map<String, Object> properties = new HashMap<>();
+        return (Score) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Score.class},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("numberFormat") || method.getName().equals("customName")) {
+                        if (args == null || args.length == 0) return properties.get(method.getName());
+                        properties.put(method.getName(), args[0]);
+                        return null;
+                    }
+                    try { return method.invoke(delegate, args); }
+                    catch (InvocationTargetException error) { throw error.getCause(); }
+                });
     }
 }
