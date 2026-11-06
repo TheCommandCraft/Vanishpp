@@ -50,6 +50,19 @@ class ViewerTeamLifecycleTest {
     }
 
     @Test
+    void subjectQuitAlsoRetiresPacketFilteredSharedMembership() throws Exception {
+        var field = Vanishpp.class.getDeclaredField("hasProtocolLib");
+        field.setAccessible(true);
+        field.set(plugin, true);
+        plugin.applyVanishEffects(subject);
+        Team team = server.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished");
+        assertTrue(team.hasEntry(subject.getName()));
+        new PlayerListener(plugin).onQuit(new PlayerQuitEvent(subject, Component.empty()));
+        assertFalse(team.hasEntry(subject.getName()), "quit must retire shared membership before new viewers learn offline names");
+        assertTrue(plugin.isVanished(subject));
+    }
+
+    @Test
     void personalTeamMembershipAndOptionsSurviveVanishAndUnvanish() {
         Scoreboard original = server.getScoreboardManager().getNewScoreboard();
         Team team = original.registerNewTeam("builders");

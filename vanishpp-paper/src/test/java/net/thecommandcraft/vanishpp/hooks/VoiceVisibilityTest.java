@@ -77,6 +77,14 @@ class VoiceVisibilityTest {
         LocationalSoundPacketEvent revoked = packet(speaker, listener);
         audioThread(handlers, revoked);
         verify(revoked).cancel();
+        plugin.getPermissionManager().addPermission(listener.getUniqueId(), "vanishpp.see");
+        plugin.updateVanishVisibility(speaker);
+        new net.thecommandcraft.vanishpp.listeners.PlayerListener(plugin).onQuit(
+                new org.bukkit.event.player.PlayerQuitEvent(listener, net.kyori.adventure.text.Component.empty()));
+        plugin.updateVanishVisibility(speaker);
+        LocationalSoundPacketEvent departed = packet(speaker, listener);
+        audioThread(handlers, departed);
+        verify(departed).cancel();
     }
 
     private void audioThread(Map<Class<?>, Consumer<Object>> handlers, Object event) throws Exception {
