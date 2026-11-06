@@ -48,7 +48,7 @@ public class VanishStatsCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             Player online = Bukkit.getPlayer(args[0]);
-            if (online != null) {
+            if (online != null && plugin.getPermissionManager().canSee(sender, online)) {
                 targetUuid = online.getUniqueId();
                 targetName = online.getName();
             } else {
@@ -80,6 +80,7 @@ public class VanishStatsCommand implements CommandExecutor, TabCompleter {
             final String name = targetName;
 
             plugin.getVanishScheduler().runGlobal(() -> {
+                if (!plugin.getPermissionManager().canSee(sender, targetUuid)) return;
                 var lm = plugin.getConfigManager().getLanguageManager();
                 plugin.getMessageManager().sendMessage(sender,
                         lm.getMessage("stats.header").replace("%player%", name));

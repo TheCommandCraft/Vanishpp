@@ -37,7 +37,7 @@ public class VanishReloadCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.reload")) return new ArrayList<>();
+        if (!sender.hasPermission("vanishpp.reload")) return java.util.Collections.emptyList();
         return Collections.emptyList();
     }
 }

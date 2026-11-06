@@ -47,7 +47,7 @@ public class ProtocolLibManager {
             return;
 
         this.protocolManager = ProtocolLibrary.getProtocolManager();
-        plugin.getLogger().info("Hooked into ProtocolLib.");
+        ProtocolLibManager.this.plugin.getLogger().info("Hooked into ProtocolLib.");
         registerSilentChestListeners();
 
         // Each listener below is registered in its own try-catch: a single unsupported
@@ -99,7 +99,7 @@ public class ProtocolLibManager {
                     }
                 });
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register tab-complete scrubbing listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register tab-complete scrubbing listener: " + e.getMessage());
         }
 
         // 2. Comprehensive Reveal/Block for Metadata, Updates, and Movement
@@ -140,7 +140,7 @@ public class ProtocolLibManager {
                         if (observer.getEntityId() == entityId) {
                             return;
                         }
-                        if (!plugin.getPermissionManager().canSee(observer, target)) {
+                        if (!ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, target)) {
                             event.setCancelled(true);
                             return;
                         }
@@ -158,7 +158,7 @@ public class ProtocolLibManager {
                             int collectorId = packet.getIntegers().read(1);
                             Entity collector = protocolManager.getEntityFromID(observer.getWorld(), collectorId);
                             if (collector instanceof Player p
-                                    && !plugin.getPermissionManager().canSee(observer, p)) {
+                                    && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, p)) {
                                 event.setCancelled(true);
                             }
                         } else if (type == PacketType.Play.Server.MOUNT) {
@@ -170,7 +170,7 @@ public class ProtocolLibManager {
                                 for (int id : passengers) {
                                     Entity e = protocolManager.getEntityFromID(observer.getWorld(), id);
                                     if (e instanceof Player p
-                                            && !plugin.getPermissionManager().canSee(observer, p)) {
+                                            && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, p)) {
                                         hasVanished = true;
                                     } else {
                                         filtered.add(id);
@@ -220,7 +220,7 @@ public class ProtocolLibManager {
             }
         });
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register entity reveal/block listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register entity reveal/block listener: " + e.getMessage());
         }
 
         // 3. PLAYER_INFO backstop: hidePlayer() only sends a one-shot PLAYER_INFO_REMOVE at
@@ -257,7 +257,7 @@ public class ProtocolLibManager {
 
                             VanishPlayerInfoPolicy.FilterResult<Object> result = VanishPlayerInfoPolicy.filter(
                                     new ArrayList<Object>(entries), ProtocolLibManager::entryProfileId,
-                                    uuid -> !plugin.getPermissionManager().canSee(observer, uuid));
+                                    uuid -> !ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, uuid));
 
                             if (!result.changed())
                                 return;
@@ -277,7 +277,7 @@ public class ProtocolLibManager {
                 });
         }
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register PLAYER_INFO scrubbing listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register PLAYER_INFO scrubbing listener: " + e.getMessage());
         }
 
         // 4. Ghost-Proof Spawning (Hiding SPAWN_ENTITY — NAMED_ENTITY_SPAWN removed in 1.21)
@@ -294,7 +294,7 @@ public class ProtocolLibManager {
                     Entity entity = protocolManager.getEntityFromID(event.getPlayer().getWorld(), entityId);
 
                     if (entity instanceof Player target
-                            && !plugin.getPermissionManager().canSee(event.getPlayer(), target)) {
+                            && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(event.getPlayer(), target)) {
                         event.setCancelled(true);
                     }
                 } catch (Exception ignored) {
@@ -302,7 +302,7 @@ public class ProtocolLibManager {
             }
         });
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register ghost-proof spawning listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register ghost-proof spawning listener: " + e.getMessage());
         }
 
         // 5. Final Stealth Fix: Scrub SCOREBOARD_TEAM packets
@@ -379,7 +379,7 @@ public class ProtocolLibManager {
                             boolean changed = false;
                             for (String name : players) {
                                 Player p = Bukkit.getPlayer(name);
-                                if (p != null && !plugin.getPermissionManager().canSee(event.getPlayer(), p)) {
+                                if (p != null && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(event.getPlayer(), p)) {
                                     changed = true;
                                 } else {
                                     scrubbed.add(name);
@@ -404,7 +404,7 @@ public class ProtocolLibManager {
                     }
                 });
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register scoreboard team scrubbing listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register scoreboard team scrubbing listener: " + e.getMessage());
         }
 
         // 6. Server List Ping
@@ -429,14 +429,14 @@ public class ProtocolLibManager {
                             }
                             ping.setPlayers(players);
 
-                            ping.setPlayersOnline(plugin.getPermissionManager().publicOnlineCount());
+                            ping.setPlayersOnline(ProtocolLibManager.this.plugin.getPermissionManager().publicOnlineCount());
                         } catch (Exception e) {
                             // Ignore
                         }
                     }
                 });
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register server-list-ping listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register server-list-ping listener: " + e.getMessage());
         }
 
         // Native vanishTeam.prefix() handles the nametag prefix for staff already.
@@ -448,15 +448,15 @@ public class ProtocolLibManager {
                     PacketType.Play.Server.BLOCK_CHANGE, PacketType.Play.Server.MULTI_BLOCK_CHANGE) {
                 @Override
                 public void onPacketSending(PacketEvent event) {
-                    if (event.isCancelled() || plugin.silentlyOpenedBlocks.isEmpty()) return;
+                    if (event.isCancelled() || ProtocolLibManager.this.plugin.silentlyOpenedBlocks.isEmpty()) return;
                     Player viewer = event.getPlayer();
                     UUID world = viewer.getWorld().getUID();
                     PacketContainer packet = event.getPacket();
                     try {
                         if (event.getPacketType() == PacketType.Play.Server.BLOCK_CHANGE) {
                             BlockPosition pos = packet.getBlockPositionModifier().read(0);
-                            if (!plugin.silentContainers.suppress(viewer.getUniqueId(), world, pos.getX(), pos.getY(), pos.getZ())) return;
-                            var closed = plugin.silentContainers.closedBarrel(world, pos.getX(), pos.getY(), pos.getZ());
+                            if (!ProtocolLibManager.this.plugin.silentContainers.suppress(viewer.getUniqueId(), world, pos.getX(), pos.getY(), pos.getZ())) return;
+                            var closed = ProtocolLibManager.this.plugin.silentContainers.closedBarrel(world, pos.getX(), pos.getY(), pos.getZ());
                             if (closed != null && packet.getBlockData().read(0).getType() == org.bukkit.Material.BARREL)
                                 copyForObserver(event).getBlockData().write(0, WrappedBlockData.createData(closed));
                         } else {
@@ -468,8 +468,8 @@ public class ProtocolLibManager {
                                 int x = (section.getX() << 4) + ((positions[i] >> 8) & 15);
                                 int y = (section.getY() << 4) + (positions[i] & 15);
                                 int z = (section.getZ() << 4) + ((positions[i] >> 4) & 15);
-                                if (!plugin.silentContainers.suppress(viewer.getUniqueId(), world, x, y, z)) continue;
-                                var closed = plugin.silentContainers.closedBarrel(world, x, y, z);
+                                if (!ProtocolLibManager.this.plugin.silentContainers.suppress(viewer.getUniqueId(), world, x, y, z)) continue;
+                                var closed = ProtocolLibManager.this.plugin.silentContainers.closedBarrel(world, x, y, z);
                                 if (closed != null && data[i].getType() == org.bukkit.Material.BARREL) {
                                     data[i] = WrappedBlockData.createData(closed);
                                     changed = true;
@@ -483,7 +483,7 @@ public class ProtocolLibManager {
                 }
             });
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register silent-barrel block update listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register silent-barrel block update listener: " + e.getMessage());
         }
         // Suppress BLOCK_ACTION (chest open/close animation, shulker open/close animation)
         // for non-seers when the block is in the silently-opened set
@@ -498,13 +498,13 @@ public class ProtocolLibManager {
                 try {
                     PacketContainer packet = event.getPacket();
                     BlockPosition pos = packet.getBlockPositionModifier().read(0);
-                    if (plugin.silentContainers.suppress(observer.getUniqueId(), observer.getWorld().getUID(), pos.getX(), pos.getY(), pos.getZ()))
+                    if (ProtocolLibManager.this.plugin.silentContainers.suppress(observer.getUniqueId(), observer.getWorld().getUID(), pos.getX(), pos.getY(), pos.getZ()))
                         event.setCancelled(true);
                 } catch (Exception ignored) {}
             }
         });
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register silent-chest animation listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register silent-chest animation listener: " + e.getMessage());
         }
 
         // Suppress sound effects originating at silently-opened block positions.
@@ -534,7 +534,7 @@ public class ProtocolLibManager {
                         int bx = packet.getIntegers().read(offset) >> 3;
                         int by = packet.getIntegers().read(offset + 1) >> 3;
                         int bz = packet.getIntegers().read(offset + 2) >> 3;
-                        if (plugin.silentContainers.suppress(observer.getUniqueId(), observer.getWorld().getUID(), bx, by, bz))
+                        if (ProtocolLibManager.this.plugin.silentContainers.suppress(observer.getUniqueId(), observer.getWorld().getUID(), bx, by, bz))
                             return true;
                     } catch (Exception ignored) {}
                 }
@@ -543,7 +543,7 @@ public class ProtocolLibManager {
         };
         protocolManager.addPacketListener(soundListener);
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register silent-chest sound listener: " + e.getMessage());
+            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register silent-chest sound listener: " + e.getMessage());
         }
     }
 
@@ -553,11 +553,11 @@ public class ProtocolLibManager {
      * metadata change (like sneaking).
      */
     public void sendGlowMetadata(Player vanished) {
-        if (!plugin.getConfigManager().staffGlowEnabled) return;
+        if (!ProtocolLibManager.this.plugin.getConfigManager().staffGlowEnabled) return;
         try {
             for (Player observer : new java.util.ArrayList<>(Bukkit.getOnlinePlayers())) {
                 if (observer.equals(vanished)) continue;
-                if (!plugin.getPermissionManager().canSee(observer, vanished)) continue;
+                if (!ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, vanished)) continue;
                 if (!observer.canSee(vanished)) continue; // not yet shown
                 PacketContainer packet = new PacketContainer(PacketType.Play.Server.ENTITY_METADATA);
                 packet.getIntegers().write(0, vanished.getEntityId());
@@ -575,7 +575,7 @@ public class ProtocolLibManager {
         Set<String> names = new java.util.HashSet<>();
         for (UUID uuid : ProtocolLibManager.this.plugin.getRawVanishedPlayers()) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null && p.getName() != null && !plugin.getPermissionManager().canSee(observer, p))
+            if (p != null && p.getName() != null && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, p))
                 names.add(p.getName().toLowerCase(Locale.ROOT));
         }
         return names;
@@ -583,7 +583,7 @@ public class ProtocolLibManager {
 
     private boolean visibleName(Player observer, String name) {
         Player target = Bukkit.getPlayerExact(name);
-        return target == null || plugin.getPermissionManager().canSee(observer, target);
+        return target == null || ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, target);
     }
 
     private PacketContainer copyForObserver(PacketEvent event) {
@@ -625,7 +625,7 @@ public class ProtocolLibManager {
         if (now - lastPlayerInfoWarning < 600_000L)
             return;
         lastPlayerInfoWarning = now;
-        plugin.getLogger().log(java.util.logging.Level.WARNING,
+        ProtocolLibManager.this.plugin.getLogger().log(java.util.logging.Level.WARNING,
                 "Failed to scrub a PLAYER_INFO packet (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")"
                         + ", sent it unchanged (vanished players are still hidden by the server itself)."
                         + " Further occurrences are hidden for 10 minutes. Please report this with the stack trace"

@@ -183,6 +183,14 @@ public class PermissionManager {
         return !plugin.isVanished(target) || (observer != null && observer.getUniqueId().equals(target));
     }
 
+    public boolean canSee(CommandSender observer, UUID target) {
+        return !(observer instanceof Player player) || canSee(player, target);
+    }
+
+    public int vanishLevel(Player target) {
+        return getLevel(target, "vanishpp.vanish.level.", plugin.getConfigManager().defaultVanishLevel);
+    }
+
     public boolean canSee(CommandSender observer, NetworkVanishState target) {
         if (!(observer instanceof Player player)) return true;
         Player local = Bukkit.getPlayer(target.uuid());

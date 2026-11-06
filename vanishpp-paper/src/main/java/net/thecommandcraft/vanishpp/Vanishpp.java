@@ -59,6 +59,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private MessageManager messageManager;
 
     public final net.thecommandcraft.vanishpp.utils.MessageRecipients messageRecipients = new net.thecommandcraft.vanishpp.utils.MessageRecipients();
+    private final Map<UUID, Integer> publishedVisibilityLevels = new ConcurrentHashMap<>();
     private Team vanishTeam;
     private final net.thecommandcraft.vanishpp.utils.ViewerTeams viewerTeams = new net.thecommandcraft.vanishpp.utils.ViewerTeams(this);
     private VanishScheduler vanishScheduler;
@@ -913,11 +914,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
             return;
         }
         cmd.setExecutor(executor);
+        if (!(executor instanceof org.bukkit.command.TabCompleter))
+            cmd.setTabCompleter((sender, command, alias, args) -> java.util.Collections.emptyList());
     }
 
     /** Cleans up per-player cached state. Call on player quit. */
     public void cleanupPlayerCache(UUID uuid) {
         viewerTeams.forget(uuid);
+        publishedVisibilityLevels.remove(uuid);
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
         ignoredWarningPlayers.remove(uuid);
@@ -1058,6 +1062,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
             for (UUID uuid : vanishedCopy) {
                 Player vanished = Bukkit.getPlayer(uuid);
                 if (vanished == null || !vanished.isOnline()) continue;
+                if (proxyBridge != null && proxyBridge.isProxyDetected()) {
+                    int level = permissionManager.vanishLevel(vanished);
+                    Integer previous = publishedVisibilityLevels.put(uuid, level);
+                    if (!java.util.Objects.equals(previous, level))
+                        proxyBridge.sendVanishEvent(uuid, vanished.getName(), true, level);
+                }
 
                 // Reapply team entry + tab prefix (catches TAB plugin or scoreboard overrides)
                 if (hasProtocolLib && vanishTeam != null && !vanishTeam.hasEntry(vanished.getName()))
@@ -1229,7 +1239,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         UUID persistUuid = player.getUniqueId();
         String persistName = player.getName();
-        int persistLevel = storageProvider.getVanishLevel(persistUuid);
+        int persistLevel = permissionManager.vanishLevel(player);
+        publishedVisibilityLevels.put(persistUuid, persistLevel);
         String reason = vanishReasons.getOrDefault(persistUuid, null);
         vanishScheduler.runAsync(() -> {
             storageProvider.setVanished(persistUuid, true);
@@ -1266,6 +1277,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void removeVanishEffects(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
         messageRecipients.forget(player.getUniqueId());
+        publishedVisibilityLevels.remove(player.getUniqueId());
         viewerTeams.update(player, false);
         try {
             player.setSleepingIgnored(false);
