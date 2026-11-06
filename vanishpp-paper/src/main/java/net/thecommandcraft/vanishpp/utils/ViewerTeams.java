@@ -19,7 +19,7 @@ public final class ViewerTeams {
     public void update(Player subject, boolean vanished) {
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             Scoreboard board = viewer.getScoreboard();
-            boolean visible = vanished && plugin.getPermissionManager().canSee(viewer, subject);
+            boolean visible = vanished && !viewer.equals(subject) && plugin.getPermissionManager().canSee(viewer, subject);
             Team team = board.getTeam(NAME);
             Scoreboard current = board;
             boolean shared = board == Bukkit.getScoreboardManager().getMainScoreboard()
@@ -42,6 +42,10 @@ public final class ViewerTeams {
                 team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
                 team.addEntry(subject.getName());
             } else team.removeEntry(subject.getName());
+            if (team.getEntries().isEmpty() && board == copies.get(viewer.getUniqueId())) {
+                viewer.setScoreboard(originals.get(viewer.getUniqueId()));
+                forget(viewer.getUniqueId());
+            }
         }
     }
 

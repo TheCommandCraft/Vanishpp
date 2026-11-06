@@ -1278,7 +1278,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         vanishedPlayers.remove(player.getUniqueId());
         messageRecipients.forget(player.getUniqueId());
         publishedVisibilityLevels.remove(player.getUniqueId());
-        viewerTeams.update(player, false);
+        if (!hasProtocolLib) viewerTeams.update(player, false);
         try {
             player.setSleepingIgnored(false);
         } catch (Throwable ignored) {
