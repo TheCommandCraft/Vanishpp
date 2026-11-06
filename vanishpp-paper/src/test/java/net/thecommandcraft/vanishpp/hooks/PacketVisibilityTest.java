@@ -25,6 +25,7 @@ import org.mockito.MockedStatic;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -139,11 +140,29 @@ class PacketVisibilityTest {
         StructureModifier<BlockPosition> positions = mock(StructureModifier.class);
         when(positions.read(0)).thenReturn(new BlockPosition(3, 64, 7));
         when(packet.getBlockPositionModifier()).thenReturn(positions);
-        PacketEvent event = dispatch(PacketType.Play.Server.BLOCK_CHANGE, packet);
-        assertTrue(event.isCancelled(), "silent barrel block update must not expose its open state");
+        WrappedBlockData open = mock(WrappedBlockData.class);
+        WrappedBlockData closed = mock(WrappedBlockData.class);
+        when(open.getType()).thenReturn(Material.BARREL);
+        AtomicReference<WrappedBlockData> sent = new AtomicReference<>(open);
+        StructureModifier<WrappedBlockData> data = mock(StructureModifier.class);
+        when(packet.getBlockData()).thenReturn(data);
+        when(data.read(0)).thenAnswer(call -> sent.get());
+        doAnswer(call -> { sent.set(call.getArgument(1)); return data; }).when(data).write(eq(0), any());
+        try (var wrapped = mockStatic(WrappedBlockData.class)) {
+            wrapped.when(() -> WrappedBlockData.createData(any(Object.class))).thenAnswer(call -> {
+                Object state = call.getArgument(0);
+                assertTrue(state instanceof org.bukkit.block.data.Openable);
+                assertFalse(((org.bukkit.block.data.Openable) state).isOpen());
+                return closed;
+            });
+            PacketEvent event = dispatch(PacketType.Play.Server.BLOCK_CHANGE, packet);
+            assertFalse(event.isCancelled(), "barrel filtering should preserve the rest of the block update");
+            assertSame(closed, sent.get(), "silent barrel block update must preserve the observer's closed state");
+        }
     }
 
     private PacketEvent dispatch(PacketType type, PacketContainer packet) {
+        when(packet.shallowClone()).thenReturn(packet);
         PacketEvent event = mock(PacketEvent.class);
         when(event.getPlayer()).thenReturn(viewer);
         when(event.getPacket()).thenReturn(packet);
