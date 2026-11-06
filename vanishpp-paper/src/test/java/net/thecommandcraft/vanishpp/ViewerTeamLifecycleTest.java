@@ -188,6 +188,8 @@ class ViewerTeamLifecycleTest {
     @Test
     void largeScoreboardDiscoveryAndCopyAdvanceWithinEachPassBudget() {
         plugin.applyVanishEffects(subject);
+        PlayerMock secondViewer = server.addPlayer("OtherStaff");
+        secondViewer.setOp(true);
         ScoreboardManager nativeManager = server.getScoreboardManager();
         Scoreboard raw = nativeManager.getNewScoreboard();
         Objective objective = raw.registerNewObjective("points", "dummy", Component.text("Points"));
@@ -202,6 +204,7 @@ class ViewerTeamLifecycleTest {
         doReturn(counted(names, visited)).when(source).getEntries();
         Scoreboard original = countedSnapshots(source, snapshots);
         viewer.setScoreboard(original);
+        secondViewer.setScoreboard(original);
         ScoreboardManager manager = mock(ScoreboardManager.class);
         when(manager.getNewScoreboard()).thenAnswer(call -> countedSnapshots(
                 formattingScoreboard(nativeManager.getNewScoreboard()), snapshots));
@@ -218,10 +221,15 @@ class ViewerTeamLifecycleTest {
                 assertTrue(viewer.getScoreboard().getTeam("Vanishpp_Vanished").hasEntry(subject.getName()));
             }
             Objective shown = viewer.getScoreboard().getObjective("points");
-            for (int i = 0; i < 10000; i++) assertEquals(i + 1, shown.getScore("entry" + i).getScore());
+            Objective other = secondViewer.getScoreboard().getObjective("points");
+            for (int i = 0; i < 10000; i++) {
+                assertEquals(i + 1, shown.getScore("entry" + i).getScore());
+                assertEquals(i + 1, other.getScore("entry" + i).getScore());
+            }
             objective.getScore("entry9999").setScore(42);
             for (int pass = 0; pass < 250; pass++) teams.refresh();
             assertEquals(42, shown.getScore("entry9999").getScore(), "later cycles must keep mirroring changes");
+            assertEquals(42, other.getScore("entry9999").getScore());
         } finally { teams.close(); }
     }
 
