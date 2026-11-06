@@ -87,6 +87,7 @@ class ViewerTeamLifecycleTest {
         Objective score = original.registerNewObjective("points", "dummy", Component.text("Points"));
         score.getScore("public").setScore(5);
         Team team = original.registerNewTeam("builders");
+        for (Team.Option option : Team.Option.values()) team.setOption(option, Team.OptionStatus.ALWAYS);
         team.prefix(Component.text("Before"));
         plugin.applyVanishEffects(subject);
         score.getScore("public").setScore(9);
