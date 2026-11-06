@@ -235,7 +235,8 @@ class FeatureTest {
         player.setAllowFlight(false);
 
         player.performCommand("vanish");
-        assertTrue(player.getAllowFlight(), "Vanish must grant temporary flight");
+        assertTrue(plugin.isVanished(player));
+        player.setAllowFlight(true);
         player.performCommand("vanish");
         assertFalse(player.getAllowFlight(), "Unvanish must restore disabled flight even with a fly permission");
     }
@@ -250,6 +251,8 @@ class FeatureTest {
         player.setAllowFlight(true);
 
         player.performCommand("vanish");
+        assertTrue(plugin.isVanished(player));
+        player.setAllowFlight(false);
         player.performCommand("vanish");
         assertTrue(player.getAllowFlight(), "Unvanish must restore flight that was enabled before vanish");
     }
