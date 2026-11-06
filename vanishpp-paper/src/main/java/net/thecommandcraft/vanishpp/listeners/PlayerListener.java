@@ -379,9 +379,6 @@ public class PlayerListener implements Listener {
         if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
-            var closing = plugin.silentContainers.close(uuid);
-            if (closing != null) plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentContainers.retire(closing), 60L);
-            silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
             // Notify staff that a vanished player silently left
             String quitMsg = config.getLanguageManager().getMessage("staff.silent-quit")
@@ -393,6 +390,9 @@ public class PlayerListener implements Listener {
             }
             Bukkit.getConsoleSender().sendMessage(quitComp);
         }
+        var closing = plugin.silentContainers.close(uuid);
+        if (closing != null) plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentContainers.retire(closing), 60L);
+        silentChestViewers.remove(uuid);
         ruleNotificationCooldowns.remove(uuid);
         invseeHintCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
@@ -922,13 +922,19 @@ public class PlayerListener implements Listener {
 
             if (type == Material.ENDER_CHEST) {
                 // Each player has their own ender chest inventory — open it directly.
-                player.openInventory(player.getEnderChest());
+                if (player.openInventory(player.getEnderChest()) == null) {
+                    plugin.silentContainers.retire(session);
+                    silentChestViewers.remove(player.getUniqueId());
+                }
             } else if (block.getState() instanceof Container c) {
                 // Open the real container inventory directly.
-                // ProtocolLib suppresses the animation/sound for non-seers via silentlyOpenedBlocks.
+                // Session suppression applies to other viewers, including unrelated vanished staff.
                 // This is vanilla-correct: no snapshot, no sync-back race, hoppers/plugins see
                 // live changes immediately as they happen.
-                player.openInventory(c.getInventory());
+                if (player.openInventory(c.getInventory()) == null) {
+                    plugin.silentContainers.retire(session);
+                    silentChestViewers.remove(player.getUniqueId());
+                }
             } else {
                 // Not a recognised container state — roll back registration
                 plugin.silentContainers.retire(session);

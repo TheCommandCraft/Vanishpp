@@ -76,6 +76,19 @@ public class ProtocolLibManager {
                                     if (kept.size() != suggestions.getList().size())
                                         copyForObserver(event).getSpecificModifier(Suggestions.class).write(0, new Suggestions(suggestions.getRange(), kept));
                                 }
+                            } else {
+                                // 1.21.5+ stores native text/tooltip entries beside the range integers.
+                                StructureModifier<List> lists = packet.getModifier().withType(List.class);
+                                if (lists.size() > 0) {
+                                    List<?> entries = lists.read(0);
+                                    if (entries != null) {
+                                        List<Object> kept = new ArrayList<>();
+                                        for (Object entry : entries)
+                                            if (visibleName(event.getPlayer(), suggestionText(entry))) kept.add(entry);
+                                        if (kept.size() != entries.size())
+                                            copyForObserver(event).getModifier().withType(List.class).write(0, kept);
+                                    }
+                                }
                             }
                             if (packet.getStringArrays().size() > 0) {
                                 String[] suggestions = packet.getStringArrays().read(0);
@@ -95,6 +108,7 @@ public class ProtocolLibManager {
                                     copyForObserver(event).getStringArrays().write(0, filtered.toArray(new String[0]));
                             }
                         } catch (Exception ignored) {
+                            event.setCancelled(true);
                         }
                     }
                 });
@@ -584,6 +598,16 @@ public class ProtocolLibManager {
     private boolean visibleName(Player observer, String name) {
         Player target = Bukkit.getPlayerExact(name);
         return target == null || ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, target);
+    }
+
+    private static String suggestionText(Object entry) throws ReflectiveOperationException {
+        for (var field : entry.getClass().getDeclaredFields()) {
+            if (field.getType() == String.class && !java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                field.setAccessible(true);
+                return (String) field.get(entry);
+            }
+        }
+        throw new NoSuchFieldException("Command suggestion text");
     }
 
     private PacketContainer copyForObserver(PacketEvent event) {
