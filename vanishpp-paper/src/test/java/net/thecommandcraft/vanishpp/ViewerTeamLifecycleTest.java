@@ -137,8 +137,10 @@ class ViewerTeamLifecycleTest {
         assertTrue(shown.getTeam("builders").hasEntry("Visible"));
         score.unregister();
         team.unregister();
-        plugin.reapplyTeamEntry(subject);
-        reconcile();
+        assertDoesNotThrow(() -> {
+            plugin.reapplyTeamEntry(subject);
+            reconcile();
+        }, "removing original metadata during a copy cycle must keep reconciliation running");
         assertNull(shown.getObjective("points"));
         assertNull(shown.getTeam("builders"));
         assertTrue(shown.getTeam("Vanishpp_Vanished").hasEntry(subject.getName()));
