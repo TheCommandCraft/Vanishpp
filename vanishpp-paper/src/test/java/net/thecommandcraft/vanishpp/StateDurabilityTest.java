@@ -281,7 +281,7 @@ class StateDurabilityTest {
     }
 
     private static void field(Object object, String name, Object value) throws Exception {
-        Field field = object.getClass().getDeclaredField(name);
+        Field field = Vanishpp.class.getDeclaredField(name);
         field.setAccessible(true);
         field.set(object, value);
     }
