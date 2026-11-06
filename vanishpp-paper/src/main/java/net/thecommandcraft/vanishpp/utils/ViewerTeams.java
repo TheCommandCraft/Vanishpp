@@ -154,7 +154,7 @@ public final class ViewerTeams {
                 case 2 -> {
                     if (removedObjectives.hasNext()) {
                         Objective value = removedObjectives.next();
-                        if (original.getObjective(value.getName()) == null) value.unregister();
+                        if (value.getScoreboard() != null && original.getObjective(value.getName()) == null) value.unregister();
                     } else phase++;
                 }
                 case 3 -> {
@@ -171,7 +171,9 @@ public final class ViewerTeams {
                 }
                 case 5 -> {
                     if (objectives.hasNext()) {
-                        name = objectives.next().getName();
+                        Objective value = objectives.next();
+                        if (value.getScoreboard() == null) return true;
+                        name = value.getName();
                         syncObjective(original, target, name);
                         entries = source.entries.iterator();
                         phase++;
@@ -201,12 +203,15 @@ public final class ViewerTeams {
                 case 10 -> {
                     if (removedTeams.hasNext()) {
                         Team value = removedTeams.next();
-                        if (!value.getName().equals(NAME) && original.getTeam(value.getName()) == null) value.unregister();
+                        if (value.getScoreboard() != null && !value.getName().equals(NAME)
+                                && original.getTeam(value.getName()) == null) value.unregister();
                     } else phase++;
                 }
                 case 11 -> {
                     if (!teams.hasNext()) { done = true; return false; }
-                    name = teams.next().getName();
+                    Team value = teams.next();
+                    if (value.getScoreboard() == null) return true;
+                    name = value.getName();
                     if (!name.equals(NAME)) { syncTeam(original, target, name); phase++; }
                 }
                 case 12 -> {
