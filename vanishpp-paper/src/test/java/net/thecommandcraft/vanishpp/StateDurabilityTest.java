@@ -67,6 +67,24 @@ class StateDurabilityTest {
     }
 
     @Test
+    void failedLoginReadKeepsKnownStateAndRetries() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenThrow(new IllegalStateException("still unavailable"))
+                .thenReturn(true);
+        field(plugin, "storageProvider", storage);
+        plugin.handleNetworkVanishSync(player.getUniqueId(), true);
+        login();
+        assertTrue(plugin.isVanished(player), "failed prelogin must retain known hidden state");
+        assertDoesNotThrow(scheduler::drainAsync, "failed fallback read must schedule a retry instead of abandoning reconciliation");
+        scheduler.runDelayedPass();
+        scheduler.drainAsync();
+        assertTrue(plugin.isVanished(player));
+        verify(storage, atLeast(3)).isVanished(player.getUniqueId());
+    }
+
+    @Test
     void proxyLoginDoesNotReplaceNetworkStateWithMissingLocalRecord() throws Exception {
         ProxyBridge proxy = mock(ProxyBridge.class);
         when(proxy.isProxyDetected()).thenReturn(true);
@@ -177,6 +195,17 @@ class StateDurabilityTest {
     }
 
     @Test
+    void paperDoesNotResolveAnAlreadyResolvedSnapshotAgain() {
+        ProxyConfigSnapshot config = new ProxyConfigSnapshot();
+        config.serverOverrides.put("all", Map.of("invisibility-features.god-mode", true));
+        config.serverOverrides.put("survival", Map.of("invisibility-features.god-mode", false));
+        ProxyConfigSnapshot resolved = config.applyOverride("survival");
+        assertFalse(resolved.godMode, "Velocity resolution control");
+        plugin.getProxyConfigCache().update(resolved.toJson(), "127.0.0.1:25565");
+        assertFalse(plugin.getProxyConfigCache().get().godMode, "Paper must apply server overrides exactly once");
+    }
+
+    @Test
     void migrationCopiesPreferencesPresetsHistoryAndStatistics() throws Exception {
         UUID id = player.getUniqueId();
         StorageProvider source = plugin.getStorageProvider();
@@ -229,6 +258,14 @@ class StateDurabilityTest {
         field(plugin, "storageProvider", reopened);
         login();
         assertTrue(plugin.isWarningIgnored(player), "persisted warning acknowledgement must load on login");
+    }
+
+    @Test
+    void reEnablingWarningsRemovesThePersistedAcknowledgement() {
+        plugin.setWarningIgnored(player, true);
+        plugin.setWarningIgnored(player, false);
+        assertFalse(plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), "protocol-lib-warning"),
+                "re-enabling warnings must persist the newer preference");
     }
 
     private void login() {
