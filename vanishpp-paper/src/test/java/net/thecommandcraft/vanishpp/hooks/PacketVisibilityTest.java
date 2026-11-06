@@ -95,6 +95,25 @@ class PacketVisibilityTest {
     }
 
     @Test
+    void nativeSuggestionEntriesPreserveVisibleTooltipAndRangeFields() {
+        PacketContainer packet = mock(PacketContainer.class);
+        StructureModifier<String[]> legacy = mock(StructureModifier.class);
+        when(packet.getStringArrays()).thenReturn(legacy);
+        NativeSuggestions data = new NativeSuggestions();
+        Object tooltip = new Object();
+        SuggestionEntry visible = new SuggestionEntry(viewer.getName(), Optional.of(tooltip));
+        data.suggestions = new ArrayList<>(List.of(new SuggestionEntry(subject.getName(), Optional.empty()), visible));
+        StructureModifier<Object> modifier = new StructureModifier<>(NativeSuggestions.class).withTarget(data);
+        when(packet.getModifier()).thenReturn(modifier);
+        when(packet.getSpecificModifier(Suggestions.class)).thenReturn(modifier.withType(Suggestions.class));
+        dispatch(PacketType.Play.Server.TAB_COMPLETE, packet);
+        assertEquals(List.of(visible), data.suggestions, "native suggestion entries must exclude hidden names");
+        assertEquals(5, data.start);
+        assertEquals(3, data.length);
+        assertSame(tooltip, ((SuggestionEntry) data.suggestions.get(0)).tooltip().orElseThrow());
+    }
+
+    @Test
     void playerInfoDoesNotBypassLayeredVisibility() {
         plugin.getConfigManager().layeredPermsEnabled = true;
         viewer.addAttachment(plugin, "vanishpp.see", true);
@@ -132,8 +151,11 @@ class PacketVisibilityTest {
         var field = Vanishpp.class.getDeclaredField("hasProtocolLib");
         field.setAccessible(true);
         field.set(plugin, true);
-        var block = subject.getWorld().getBlockAt(3, 64, 7);
+        var block = spy(subject.getWorld().getBlockAt(3, 64, 7));
         block.setType(Material.BARREL);
+        org.bukkit.block.data.Openable barrel = mock(org.bukkit.block.data.Openable.class);
+        when(barrel.clone()).thenReturn(barrel);
+        when(block.getBlockData()).thenReturn(barrel);
         new PlayerListener(plugin).onInteract(new PlayerInteractEvent(subject, Action.RIGHT_CLICK_BLOCK, null,
                 block, BlockFace.UP, EquipmentSlot.HAND));
         PacketContainer packet = mock(PacketContainer.class);
@@ -180,4 +202,9 @@ class PacketVisibilityTest {
         public List<Object> entries;
     }
     public record Entry(UUID profileId) {}
+    public record SuggestionEntry(String text, Optional<Object> tooltip) {}
+    public static class NativeSuggestions {
+        public int id = 1, start = 5, length = 3;
+        public List<Object> suggestions;
+    }
 }
