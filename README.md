@@ -71,11 +71,11 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 
 - **Spectator Quick-Switch:** Double-tap Shift while vanished to enter Spectator mode instantly. Requires `vanishpp.spectator`.
 - **Vanish Scoreboard (`/vscoreboard`):** Fully configurable sidebar scoreboard showing world, TPS, player counts, real-time coordinates, direction, biome, ping, health, food, armor, time, date, and more. `%time%`/`%date%` respect `timezone` (IANA ID or `"default"` for server time) and `timezone-offset-hours` in `scoreboards.yml`. Coordinates refresh on movement via ProtocolLib packet listening. Supports all built-in placeholders plus full PlaceholderAPI.
-- **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` directly in-game.
+- **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` directly in-game. Command completion requires `vanishpp.config` and never suggests database passwords, webhook authorization values, or webhook URLs. Applying local settings network-wide with `/vack apply_proxy` also requires `vanishpp.config`; dismissing notifications does not.
 - **Personal Rules System (`/vrules`):** Per-player toggles for block breaking, entity interaction, chat confirmation, item pickup, mob targeting, and more.
 - **Async Data Persistence:** All data saved asynchronously. State is preserved across restarts.
 - **Database Connection Monitoring:** Staff notified in-game when database connectivity fails.
-- **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Timed rule expiry notifications are delivered to whichever server the player is currently on — no reconnect required. Servers auto-detect the proxy on startup and fall back to standalone mode if none is found. See [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).
+- **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Timed rule expiry notifications are delivered to whichever server the player is currently on — no reconnect required. Set `proxy.enabled: true` on secured Velocity backends and restart Paper to enable the handshake; standalone servers leave it off. Upgrade both jars together. See [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).
 
 </details>
 

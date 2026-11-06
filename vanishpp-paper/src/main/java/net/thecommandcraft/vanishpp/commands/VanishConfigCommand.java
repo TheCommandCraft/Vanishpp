@@ -30,6 +30,10 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
             "storage.type", "storage.mysql.", "storage.redis.", "storage.postgresql.",
             "permissions.layered-permissions-enabled");
 
+    private static final Set<String> SECRET_PATHS = Set.of(
+            "storage.mysql.password", "storage.postgresql.password", "storage.redis.password",
+            "webhook.auth-header", "webhook.authorization", "webhook.urls");
+
     public VanishConfigCommand(Vanishpp plugin) {
         this.plugin = plugin;
         this.configGUI = new ConfigGUI(plugin);
@@ -128,6 +132,7 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.config")) return new ArrayList<>();
         if (args.length == 1) {
             var cfg = plugin.getConfigManager().getConfig();
             List<String> keys = new ArrayList<>(cfg.getKeys(true));
@@ -135,6 +140,7 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
             return StringUtil.copyPartialMatches(args[0], keys, new ArrayList<>());
         }
         if (args.length == 2) {
+            if (SECRET_PATHS.contains(args[0])) return new ArrayList<>();
             var cfg = plugin.getConfigManager().getConfig();
             if (cfg.contains(args[0])) {
                 Object current = cfg.get(args[0]);

@@ -40,10 +40,9 @@ public class PaperChannelListener {
     @Subscribe
     public void onPluginMessage(PluginMessageEvent event) {
         if (!event.getIdentifier().getId().equals(VppChannel.CHANNEL)) return;
-        if (!(event.getSource() instanceof ServerConnection serverConn)) return;
-
-        // Mark handled so Velocity does not forward it to players
+        // Consume client messages too, so they cannot impersonate the proxy on Paper.
         event.setResult(PluginMessageEvent.ForwardResult.handled());
+        if (!(event.getSource() instanceof ServerConnection serverConn)) return;
 
         DecodedPacket packet;
         try {

@@ -40,6 +40,9 @@ public final class VppPacket {
             }
             VppMessage type = values[typeOrdinal];
             int length = in.readInt();
+            if (length < 0 || length > in.available()) {
+                throw new IllegalArgumentException("Invalid VppPacket payload length: " + length);
+            }
             byte[] payloadBytes = new byte[length];
             in.readFully(payloadBytes);
             String json = new String(payloadBytes, StandardCharsets.UTF_8);

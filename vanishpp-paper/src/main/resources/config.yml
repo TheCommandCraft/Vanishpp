@@ -282,6 +282,15 @@ vanish-history:
 #     mob_targeting: true
 world-rules: {}
 
+# --- [ VELOCITY PROXY ] ---
+proxy:
+  # Enable only behind a secured Velocity proxy with the companion plugin installed.
+  # Upgrade both Vanish++ jars together. Restart Paper after changing this setting.
+  # Standalone servers leave this off and do not register the proxy control channel.
+  enabled: false
+  # Optional backend name; otherwise the server IP and port are used.
+  server-name: ""
+
 # --- [ WEBHOOK ] ---
 # POST vanish/unvanish events to external URLs (e.g., Discord bots, dashboards).
 webhook:

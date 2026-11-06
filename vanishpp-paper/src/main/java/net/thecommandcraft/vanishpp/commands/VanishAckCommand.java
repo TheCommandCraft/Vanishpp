@@ -64,6 +64,10 @@ public class VanishAckCommand implements TabExecutor {
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
             }
             case "apply_proxy" -> {
+                if (!p.hasPermission("vanishpp.config")) {
+                    plugin.getMessageManager().sendMessage(p, lm.getMessage("unknown-command"));
+                    return true;
+                }
                 var bridge = plugin.getProxyBridge();
                 if (bridge == null || !bridge.isProxyDetected()) {
                     plugin.getMessageManager().sendMessage(p, lm.getMessage("config.proxy-not-connected"));

@@ -2,6 +2,16 @@
 
 ## Overview
 
+### Native Velocity companion
+
+Install matching current Vanish++ jars on Velocity and each Paper backend. Secure the backends with Velocity modern forwarding and prevent direct client connections. Set `proxy.enabled: true` in each backend's Vanish++ `config.yml`, then restart Paper. Leave this setting off on standalone servers; they do not register the `vanishpp:proxy` channel.
+
+The Velocity companion consumes this channel before checking the sender, so client messages cannot be forwarded as proxy commands. Paper accepts control messages only after its HELLO/PONG exchange completes. If no reply arrives within five seconds of sending HELLO, Paper closes the channel and runs standalone until restarted. The handshake relies on the secured backend connection and the installed Velocity companion; it is not a substitute for either. Upgrade both jars together before enabling the channel.
+
+`/vack apply_proxy` requires `vanishpp.config` to apply local settings across the network. Notification acknowledgements retain their existing permissions. Configuration completion also requires `vanishpp.config` and does not suggest passwords, authorization values, or webhook URLs.
+
+### Database integrations
+
 Vanish++ stores all vanish state in a **persistent, always-up-to-date database**. Proxy plugins (Velocity, BungeeCord) can reliably sync vanish status across multiple backend servers without any plugin-to-plugin integration.
 
 ## Database Schema
