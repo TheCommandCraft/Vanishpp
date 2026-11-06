@@ -200,8 +200,12 @@ class ViewerTeamLifecycleTest {
             objective.getScore(name).setScore(i + 1);
         }
         AtomicInteger visited = new AtomicInteger(), snapshots = new AtomicInteger();
+        AtomicInteger sourceEntrySnapshots = new AtomicInteger();
         Scoreboard source = spy(formattingScoreboard(raw));
-        doReturn(counted(names, visited)).when(source).getEntries();
+        doAnswer(call -> {
+            sourceEntrySnapshots.incrementAndGet();
+            return counted(names, visited);
+        }).when(source).getEntries();
         Scoreboard original = countedSnapshots(source, snapshots);
         viewer.setScoreboard(original);
         secondViewer.setScoreboard(original);
@@ -211,6 +215,7 @@ class ViewerTeamLifecycleTest {
         ViewerTeams teams = new ViewerTeams(plugin);
         try (var bukkit = mockStatic(Bukkit.class, CALLS_REAL_METHODS)) {
             bukkit.when(Bukkit::getScoreboardManager).thenReturn(manager);
+            boolean bothComplete = false;
             for (int pass = 0; pass < 250; pass++) {
                 visited.set(0);
                 snapshots.set(0);
@@ -219,7 +224,15 @@ class ViewerTeamLifecycleTest {
                         "scoreboard preparation must not traverse an entire 10000-entry snapshot in one pass: " + visited.get());
                 assertTrue(snapshots.get() <= 1, "a pass must acquire at most one scoreboard snapshot: " + snapshots.get());
                 assertTrue(viewer.getScoreboard().getTeam("Vanishpp_Vanished").hasEntry(subject.getName()));
+                Objective first = viewer.getScoreboard().getObjective("points");
+                Objective second = secondViewer.getScoreboard().getObjective("points");
+                if (!bothComplete && first != null && second != null
+                        && first.getScore("entry9999").isScoreSet() && second.getScore("entry9999").isScoreSet()) {
+                    assertEquals(1, sourceEntrySnapshots.get(), "viewers of one source must share its discovery snapshot");
+                    bothComplete = true;
+                }
             }
+            assertTrue(bothComplete, "bounded passes must eventually reach both viewers");
             Objective shown = viewer.getScoreboard().getObjective("points");
             Objective other = secondViewer.getScoreboard().getObjective("points");
             for (int i = 0; i < 10000; i++) {
