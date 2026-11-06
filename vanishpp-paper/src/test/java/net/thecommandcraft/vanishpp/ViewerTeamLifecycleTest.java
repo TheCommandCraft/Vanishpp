@@ -89,7 +89,9 @@ class ViewerTeamLifecycleTest {
         Team team = original.registerNewTeam("builders");
         for (Team.Option option : Team.Option.values()) team.setOption(option, Team.OptionStatus.ALWAYS);
         team.prefix(Component.text("Before"));
+        team.addEntry("public");
         plugin.applyVanishEffects(subject);
+        assertEquals(5, viewer.getScoreboard().getObjective("points").getScore("public").getScore());
         score.getScore("public").setScore(9);
         score.displayName(Component.text("Updated"));
         team.prefix(Component.text("After"));

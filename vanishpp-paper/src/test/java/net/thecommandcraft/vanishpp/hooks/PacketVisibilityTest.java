@@ -229,7 +229,7 @@ class PacketVisibilityTest {
         else when(broken.getSpecificModifier(Suggestions.class)).thenThrow(failure);
         List<java.util.logging.LogRecord> records = new ArrayList<>();
         var handler = new java.util.logging.Handler() {
-            public void publish(java.util.logging.LogRecord record) { records.add(record); }
+            public void publish(java.util.logging.LogRecord record) { if (record.getThrown() == failure) records.add(record); }
             public void flush() {}
             public void close() {}
         };
