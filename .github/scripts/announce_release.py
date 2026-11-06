@@ -48,7 +48,7 @@ def wait_for_modrinth(cfg, version, minutes):
                 match = next((v for v in versions if v["version_number"] == version
                               and set(v["loaders"]) == loaders), None)
                 if match is None:
-                    missing.append(f"{cfg['uploads'][i]['name']}: not on Modrinth yet")
+                    missing.append(f"{cfg['uploads'][i]['name'].replace('{version}', version)}: not on Modrinth yet")
                 elif match.get("status") != "listed":
                     missing.append(f"{match['name']}: status {match.get('status')}")
                 else:

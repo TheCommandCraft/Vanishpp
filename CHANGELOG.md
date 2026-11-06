@@ -2,13 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.1.11] - 2026-11-06
 
 ### Changed
 - **Mobs look at players like in vanilla, but never at vanished players.** Each mob keeps its own look range and chance, for example 6 blocks for cows and 10 for cats. Like vanilla, mobs need line of sight, ignore spectators, and notice sneaking or invisible players from closer. Look goals aimed at other mobs are left untouched. (Thanks @Marzionz, PR #39)
 - **No invisibility potion while vanished.** The invisible flag already keeps mobs from noticing vanished players. Unvanishing removes the hidden potion from older versions, but keeps an invisibility potion you drank yourself.
 
 ### Fixed
+- **Vanish++ didn't load on Paper 1.20.6.** The plugin required API version 1.21, so Paper 1.20.6 rejected it even though 1.20.6 is supported. It now loads on 1.20.6.
 - **Mobs looked at players for twice as long as in vanilla.** A look now lasts 2-4 seconds again.
 
 ### Performance
