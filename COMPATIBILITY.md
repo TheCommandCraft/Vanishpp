@@ -28,8 +28,10 @@ Upgrade the Paper and Velocity Vanish++ jars together. Native proxy messaging is
 
 Visibility levels apply to entity and tab packets, command suggestions, lists, placeholders, staff notices, and command targets. Console access remains administrative. Anonymous server-list counts include only online, non-vanished players, on Paper and Velocity.
 
-Without ProtocolLib, Vanish++ keeps hidden names off the shared scoreboard and gives authorized viewers private teams. Existing scoreboard contents are copied when a private scoreboard is needed; subsequent changes made to the original shared board by another plugin are not mirrored. ProtocolLib is still required to filter packets produced by other plugins and to suppress live container animations, sounds, and barrel block updates.
+Without ProtocolLib, Vanish++ keeps hidden names off the shared scoreboard and gives authorized viewers private teams. Original scoreboards remain untouched. Their objectives, scores, teams and memberships are reconciled into private overlays in bounded batches, and restored on unvanish, quit or shutdown. Large boards may require several synchronization passes. ProtocolLib is still required to filter packets produced by other plugins and to suppress live container animations, sounds, and barrel block updates.
 
 EssentialsX private messages, including replies, nicknames and wildcard recipients, are checked after EssentialsX resolves their recipients. Vanilla selectors use Bukkit's selector resolution. Other messaging plugins use observed conversations. An unresolved reply is allowed; a messaging plugin with private recipient state may therefore still reveal a hidden recipient. Use its own vanish protection when no recipient integration exists.
 
 Incognito changes display and tab text, including TAB's name override; it does not replace the authenticated profile, UUID or skin. Simple Voice Chat isolation filters outgoing sound events instead of changing the disabled icon.
+
+Voice callbacks use immutable audience facts published on player-owned server tasks. Built-in permission changes and LuckPerms recalculation invalidate facts immediately; unknown facts deny hidden-player audio until refreshed. Other permission providers are sampled by the regular visibility synchronization task.

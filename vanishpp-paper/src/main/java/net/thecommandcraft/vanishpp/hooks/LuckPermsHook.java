@@ -23,6 +23,7 @@ public class LuckPermsHook {
     private final Vanishpp plugin;
     private LuckPerms luckPerms;
     private ContextCalculator<Player> calculator;
+    private net.luckperms.api.event.EventSubscription<net.luckperms.api.event.user.UserDataRecalculateEvent> permissionSubscription;
 
     public LuckPermsHook(Vanishpp plugin) {
         this.plugin = plugin;
@@ -33,6 +34,9 @@ public class LuckPermsHook {
                 Bukkit.getServicesManager().getRegistration(LuckPerms.class);
         if (provider == null) throw new IllegalStateException("LuckPerms service not found");
         this.luckPerms = provider.getProvider();
+        permissionSubscription = luckPerms.getEventBus().subscribe(plugin,
+                net.luckperms.api.event.user.UserDataRecalculateEvent.class,
+                event -> plugin.voiceAudience.invalidate(event.getUser().getUniqueId()));
 
         this.calculator = new ContextCalculator<Player>() {
             @Override
@@ -52,6 +56,7 @@ public class LuckPermsHook {
     }
 
     public void unload() {
+        if (permissionSubscription != null) { permissionSubscription.close(); permissionSubscription = null; }
         if (luckPerms != null && calculator != null) {
             try { luckPerms.getContextManager().unregisterCalculator(calculator); } catch (Throwable ignored) {}
             calculator = null;

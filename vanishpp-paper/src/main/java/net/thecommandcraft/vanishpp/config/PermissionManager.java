@@ -20,7 +20,7 @@ public class PermissionManager {
     private final Vanishpp plugin;
     private final File permissionsFile;
     private FileConfiguration permissionsConfig;
-    private final Map<UUID, List<String>> playerPermissions = new HashMap<>();
+    private final Map<UUID, List<String>> playerPermissions = new java.util.concurrent.ConcurrentHashMap<>();
 
     // Definitions for custom permission groups
     private static final Map<String, Set<String>> CUSTOM_GROUPS = new HashMap<>();
@@ -68,6 +68,7 @@ public class PermissionManager {
             plugin.saveResource("permissions.yml", false);
         }
         this.permissionsConfig = YamlConfiguration.loadConfiguration(permissionsFile);
+        plugin.voiceAudience.invalidateAll();
         playerPermissions.clear();
 
         ConfigurationSection permsSection = permissionsConfig.getConfigurationSection("permissions");
@@ -76,12 +77,13 @@ public class PermissionManager {
                 try {
                     UUID uuid = UUID.fromString(uuidString);
                     List<String> perms = permsSection.getStringList(uuidString);
-                    playerPermissions.put(uuid, new ArrayList<>(perms));
+                    playerPermissions.put(uuid, List.copyOf(perms));
                 } catch (IllegalArgumentException e) {
                     plugin.getLogger().warning("Invalid UUID found in permissions.yml: " + uuidString);
                 }
             }
         }
+        plugin.voiceAudience.invalidateAll();
         plugin.getLogger().info("Loaded custom permissions for " + playerPermissions.size() + " players.");
     }
 
@@ -100,21 +102,24 @@ public class PermissionManager {
     }
 
     public void addPermission(UUID uuid, String permission) {
-        List<String> perms = playerPermissions.computeIfAbsent(uuid, k -> new ArrayList<>());
-        if (!perms.contains(permission)) {
-            perms.add(permission);
-        }
+        plugin.voiceAudience.invalidate(uuid);
+        playerPermissions.compute(uuid, (key, old) -> {
+            List<String> permissions = new ArrayList<>(old == null ? List.of() : old);
+            if (!permissions.contains(permission)) permissions.add(permission);
+            return List.copyOf(permissions);
+        });
+        plugin.voiceAudience.invalidate(uuid);
         save();
     }
 
     public void removePermission(UUID uuid, String permission) {
-        List<String> perms = playerPermissions.get(uuid);
-        if (perms != null) {
-            perms.remove(permission);
-            if (perms.isEmpty()) {
-                playerPermissions.remove(uuid);
-            }
-        }
+        plugin.voiceAudience.invalidate(uuid);
+        playerPermissions.computeIfPresent(uuid, (key, old) -> {
+            List<String> permissions = new ArrayList<>(old);
+            permissions.remove(permission);
+            return permissions.isEmpty() ? null : List.copyOf(permissions);
+        });
+        plugin.voiceAudience.invalidate(uuid);
         save();
     }
 
@@ -185,6 +190,12 @@ public class PermissionManager {
 
     public boolean canSee(CommandSender observer, UUID target) {
         return !(observer instanceof Player player) || canSee(player, target);
+    }
+
+    public net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts voiceFacts(Player player) {
+        ConfigManager cm = plugin.getConfigManager();
+        return new net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts(hasPermission(player, "vanishpp.see"),
+                getLevel(player, "vanishpp.see.level.", cm.defaultSeeLevel), vanishLevel(player));
     }
 
     public int vanishLevel(Player target) {

@@ -90,6 +90,7 @@ public class PlayerListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         final UUID joinUuid = player.getUniqueId();
+        plugin.resumeVisibility(player);
 
         plugin.playerNameCache.put(player.getName().toLowerCase(), joinUuid);
 
@@ -376,6 +377,7 @@ public class PlayerListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+        plugin.retireVisibility(player);
         if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
@@ -602,12 +604,6 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onExperiencePickup(com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent event) {
         if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_PICKUP_ITEMS))
-            event.setCancelled(true);
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onProjectileCollide(com.destroystokyo.paper.event.entity.ProjectileCollideEvent event) {
-        if (config.ignoreProjectiles && event.getCollidedWith() instanceof Player player && plugin.isVanished(player))
             event.setCancelled(true);
     }
 

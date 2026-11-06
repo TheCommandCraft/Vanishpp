@@ -22,6 +22,7 @@ public class ProtocolLibManager {
 
     private final Vanishpp plugin;
     private long lastPlayerInfoWarning;
+    private final Map<String, Long> lastFilterFailures = new HashMap<>();
     private ProtocolManager protocolManager;
 
     /**
@@ -107,8 +108,9 @@ public class ProtocolLibManager {
                                 if (changed)
                                     copyForObserver(event).getStringArrays().write(0, filtered.toArray(new String[0]));
                             }
-                        } catch (Exception ignored) {
+                        } catch (Exception error) {
                             event.setCancelled(true);
+                            logPacketFailure("suggestions", event, error);
                         }
                     }
                 });
@@ -491,8 +493,9 @@ public class ProtocolLibManager {
                             }
                             if (changed) copyForObserver(event).getBlockDataArrays().write(0, data);
                         }
-                    } catch (Exception e) {
+                    } catch (Exception error) {
                         event.setCancelled(true);
+                        logPacketFailure("barrel", event, error);
                     }
                 }
             });
@@ -608,6 +611,17 @@ public class ProtocolLibManager {
             }
         }
         throw new NoSuchFieldException("Command suggestion text");
+    }
+
+    private synchronized void logPacketFailure(String operation, PacketEvent event, Exception error) {
+        String key = operation + ":" + event.getPacketType().name();
+        long now = System.currentTimeMillis();
+        Long previous = lastFilterFailures.get(key);
+        if (previous != null && now - previous < 600_000L) return;
+        lastFilterFailures.put(key, now);
+        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                "Failed to filter " + operation + " packet " + event.getPacketType().name()
+                        + "; cancelled to protect hidden identities. Further failures are hidden for 10 minutes.", error);
     }
 
     private PacketContainer copyForObserver(PacketEvent event) {

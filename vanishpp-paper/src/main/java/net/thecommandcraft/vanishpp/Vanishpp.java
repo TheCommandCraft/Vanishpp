@@ -60,6 +60,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public final net.thecommandcraft.vanishpp.utils.MessageRecipients messageRecipients = new net.thecommandcraft.vanishpp.utils.MessageRecipients();
     private final Map<UUID, Integer> publishedVisibilityLevels = new ConcurrentHashMap<>();
+    public final net.thecommandcraft.vanishpp.utils.VoiceAudience voiceAudience = new net.thecommandcraft.vanishpp.utils.VoiceAudience(this);
     private Team vanishTeam;
     private final net.thecommandcraft.vanishpp.utils.ViewerTeams viewerTeams = new net.thecommandcraft.vanishpp.utils.ViewerTeams(this);
     private VanishScheduler vanishScheduler;
@@ -520,6 +521,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (isIncognito(player)) setIncognitoName(player, null);
         }
         viewerTeams.close();
+        voiceAudience.close();
         if (vanishTeam != null) {
             vanishTeam.unregister();
         }
@@ -919,8 +921,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     /** Cleans up per-player cached state. Call on player quit. */
+    public void retireVisibility(Player player) {
+        if (vanishTeam != null && vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
+        if (!hasProtocolLib) viewerTeams.retireSubject(player);
+        voiceAudience.retire(player.getUniqueId());
+    }
+
+    public void resumeVisibility(Player player) {
+        viewerTeams.joined(player.getUniqueId());
+        voiceAudience.joined(player.getUniqueId());
+        voiceAudience.refresh();
+    }
+
     public void cleanupPlayerCache(UUID uuid) {
         viewerTeams.forget(uuid);
+        voiceAudience.invalidate(uuid);
         publishedVisibilityLevels.remove(uuid);
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
@@ -1056,6 +1071,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // Lightweight: just checks and fixes show/hide state without forced entity respawn.
         // Catches permission changes, op/deop, and any external plugins overriding visibility.
         vanishScheduler.runTimerGlobal(() -> {
+            voiceAudience.refresh();
+            if (!hasProtocolLib) viewerTeams.refresh();
             Set<UUID> vanishedCopy = Set.copyOf(vanishedPlayers);
             List<Player> onlinePlayers = new ArrayList<>(Bukkit.getOnlinePlayers());
 
@@ -1072,7 +1089,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 // Reapply team entry + tab prefix (catches TAB plugin or scoreboard overrides)
                 if (hasProtocolLib && vanishTeam != null && !vanishTeam.hasEntry(vanished.getName()))
                     vanishTeam.addEntry(vanished.getName());
-                if (!hasProtocolLib) viewerTeams.update(vanished, true);
                 updatePlayerListName(vanished);
 
                 // Fix visibility: ensure non-seers can't see, seers can see
@@ -1517,6 +1533,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void updateVanishVisibility(Player subject) {
+        voiceAudience.refresh();
         boolean isVanished = isVanished(subject);
         for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             if (observer.equals(subject))
