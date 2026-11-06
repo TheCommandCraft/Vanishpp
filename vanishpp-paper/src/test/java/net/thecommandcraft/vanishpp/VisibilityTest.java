@@ -101,10 +101,13 @@ class VisibilityTest {
             "vhistory,vanishpp.history", "vstats,vanishpp.stats", "vanishignore,vanishpp.ignorewarning",
             "vanishhelp,vanishpp.help", "vzone,vanishpp.zone"})
     void eachCompleterRejectsUnauthorizedRequests(String name, String permission) {
+        viewer.addAttachment(plugin, permission + ".others", true);
         viewer.addAttachment(plugin, permission, false);
         var command = plugin.getCommand(name);
         assertNotNull(command, "command fixture must resolve " + name);
-        List<String> suggestions = command.getTabCompleter().onTabComplete(viewer, command, name, new String[]{""});
+        var completer = command.getTabCompleter() != null ? command.getTabCompleter()
+                : (org.bukkit.command.TabCompleter) command.getExecutor();
+        List<String> suggestions = completer.onTabComplete(viewer, command, name, new String[]{""});
         assertNotNull(suggestions, "unauthorized completion must not fall back to Bukkit player names");
         assertTrue(suggestions.isEmpty(), "unauthorized completion must be empty for " + name);
     }
