@@ -132,6 +132,9 @@ public final class ViewerTeams {
         if (!copy.displayName().equals(original.displayName())) copy.displayName(original.displayName());
         if (copy.getRenderType() != original.getRenderType()) copy.setRenderType(original.getRenderType());
         if (copy.getDisplaySlot() != original.getDisplaySlot()) copy.setDisplaySlot(original.getDisplaySlot());
+        try {
+            if (!Objects.equals(copy.numberFormat(), original.numberFormat())) copy.numberFormat(original.numberFormat());
+        } catch (UnsupportedOperationException ignored) { /* MockBukkit has no number-format implementation. */ }
     }
 
     private void syncScore(Scoreboard source, Scoreboard target, String objective, String entry) {
@@ -140,6 +143,10 @@ public final class ViewerTeams {
         Score from = original.getScore(entry), to = copy.getScore(entry);
         if (from.isScoreSet()) {
             if (!to.isScoreSet() || to.getScore() != from.getScore()) to.setScore(from.getScore());
+            try {
+                if (!Objects.equals(to.customName(), from.customName())) to.customName(from.customName());
+                if (!Objects.equals(to.numberFormat(), from.numberFormat())) to.numberFormat(from.numberFormat());
+            } catch (UnsupportedOperationException ignored) { /* Optional scoreboard formatting API. */ }
         } else if (to.isScoreSet()) to.resetScore();
     }
 
