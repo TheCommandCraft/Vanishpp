@@ -15,11 +15,9 @@ class VppPacketTest {
         assertEquals("{\"text\":\"漢\"}", VppPacket.decode(valid).jsonPayload());
         assertEquals("", VppPacket.decode(VppPacket.encode(VppMessage.PONG, "")).jsonPayload());
         assertAll(
-                () -> assertThrows(IllegalArgumentException.class,
-                        () -> VppPacket.decode(frame(Integer.MAX_VALUE)),
+                () -> assertEquals(IllegalArgumentException.class, rejectionType(Integer.MAX_VALUE),
                         "oversized length must be rejected before allocation"),
-                () -> assertThrows(IllegalArgumentException.class,
-                        () -> VppPacket.decode(frame(-1)),
+                () -> assertEquals(IllegalArgumentException.class, rejectionType(-1),
                         "negative length must be rejected before allocation"),
                 () -> assertThrows(IllegalArgumentException.class,
                         () -> VppPacket.decode(Arrays.copyOf(valid, valid.length - 1))),
@@ -29,5 +27,16 @@ class VppPacketTest {
 
     private byte[] frame(int length) {
         return ByteBuffer.allocate(5).put((byte) VppMessage.PONG.ordinal()).putInt(length).array();
+    }
+
+    private Class<?> rejectionType(int length) {
+        try {
+            VppPacket.decode(frame(length));
+            return null;
+        } catch (IllegalArgumentException | NegativeArraySizeException | OutOfMemoryError error) {
+            // MAX_VALUE exceeds the VM's array limit without actually allocating a large heap array.
+            // Keep the error out of JUnit's unrecoverable-error propagation so this fails at an assertion.
+            return error.getClass();
+        }
     }
 }

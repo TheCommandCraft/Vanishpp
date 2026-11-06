@@ -48,12 +48,14 @@ class ProxyBridgeSecurityTest {
         ProxyBridge bridge = new ProxyBridge(plugin);
         bridge.init();
         assertTrue(server.getMessenger().isIncomingChannelRegistered(plugin, VppChannel.CHANNEL));
+        receive(bridge, VppMessage.PONG, "{}");
+        boolean unsolicitedPong = bridge.isProxyDetected();
         UUID staff = UUID.randomUUID();
-        plugin.getRawVanishedPlayers().add(staff);
+        plugin.handleNetworkVanishSync(staff, true);
         receive(bridge, VppMessage.VANISH_SYNC, "{\"uuid\":\"" + staff + "\",\"vanished\":false}");
         server.getScheduler().performOneTick();
         boolean preHandshakeSync = plugin.getRawVanishedPlayers().contains(staff);
-        plugin.getRawVanishedPlayers().add(staff);
+        plugin.handleNetworkVanishSync(staff, true);
         receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[]}");
         receive(bridge, VppMessage.CONFIG_PUSH, "{\"config\":\"{}\"}");
         server.getScheduler().performOneTick();
@@ -62,24 +64,32 @@ class ProxyBridgeSecurityTest {
 
         receive(bridge, VppMessage.PONG, "{}");
         assertTrue(bridge.isProxyDetected(), "an enabled bridge must still connect");
-        plugin.getRawVanishedPlayers().add(staff);
+        plugin.handleNetworkVanishSync(staff, true);
         receive(bridge, VppMessage.VANISH_SYNC, "{\"uuid\":\"" + staff + "\",\"vanished\":false}");
         server.getScheduler().performOneTick();
         assertFalse(plugin.getRawVanishedPlayers().contains(staff), "connected proxy sync must still apply");
-        plugin.getRawVanishedPlayers().add(staff);
+        plugin.handleNetworkVanishSync(staff, true);
         receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[]}");
         receive(bridge, VppMessage.CONFIG_PUSH, "{\"config\":\"{}\"}");
         server.getScheduler().performOneTick();
         assertFalse(plugin.getRawVanishedPlayers().contains(staff), "connected proxy snapshot must still apply");
         assertTrue(plugin.getProxyConfigCache().isReady(), "connected proxy config must still apply");
         bridge.shutdown();
+        plugin.handleNetworkVanishSync(staff, true);
+        receive(bridge, VppMessage.PONG, "{}");
+        receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[]}");
+        server.getScheduler().performOneTick();
+        boolean shutdownPreservedState = plugin.getRawVanishedPlayers().contains(staff);
 
         assertAll(
                 () -> assertFalse(standaloneRegistered, "standalone servers must not register the proxy channel"),
                 () -> assertFalse(standaloneDetected, "standalone servers must ignore forged PONGs"),
+                () -> assertFalse(unsolicitedPong, "PONG must answer an outstanding HELLO"),
                 () -> assertTrue(preHandshakeSync, "VANISH_SYNC must not unvanish staff before handshake"),
                 () -> assertTrue(preHandshakeState, "STATE_RESPONSE must not unvanish staff before handshake"),
-                () -> assertFalse(preHandshakeConfig, "CONFIG_PUSH must not apply before handshake"));
+                () -> assertFalse(preHandshakeConfig, "CONFIG_PUSH must not apply before handshake"),
+                () -> assertFalse(bridge.isProxyDetected(), "shutdown must invalidate the proxy session"),
+                () -> assertTrue(shutdownPreservedState, "shutdown must reject further control messages"));
     }
 
     private void receive(ProxyBridge bridge, VppMessage type, String json) {

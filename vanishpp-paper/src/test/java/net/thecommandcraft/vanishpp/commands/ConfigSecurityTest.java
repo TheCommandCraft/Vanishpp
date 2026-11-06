@@ -75,7 +75,7 @@ class ConfigSecurityTest {
     @Test
     void configCompletion_requiresPermissionAndNeverSuggestsSecrets() {
         var command = plugin.getCommand("vanishconfig");
-        var completer = command.getTabCompleter();
+        var completer = (org.bukkit.command.TabCompleter) command.getExecutor();
         var config = plugin.getConfigManager().getConfig();
         List<String> paths = List.of("storage.mysql.password", "storage.postgresql.password",
                 "storage.redis.password", "webhook.auth-header", "webhook.authorization", "webhook.urls");
