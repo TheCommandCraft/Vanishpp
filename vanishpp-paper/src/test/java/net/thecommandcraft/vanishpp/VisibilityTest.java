@@ -183,10 +183,23 @@ class VisibilityTest {
         PlayerCommandPreprocessEvent second = new PlayerCommandPreprocessEvent(viewer, "/r second");
         listener.onPrivateMessageCommand(second);
         assertTrue(second.isCancelled(), "repeated reply must not clear hidden-recipient protection");
+        viewer.setOp(true);
+        PlayerCommandPreprocessEvent seer = new PlayerCommandPreprocessEvent(viewer, "/r staff");
+        listener.onPrivateMessageCommand(seer);
+        assertFalse(seer.isCancelled(), "authorized seer conversation must remain usable");
+        viewer.setOp(false);
         plugin.removeVanishEffects(subject);
         PlayerCommandPreprocessEvent visible = new PlayerCommandPreprocessEvent(viewer, "/r visible");
         listener.onPrivateMessageCommand(visible);
         assertFalse(visible.isCancelled(), "visible conversation must remain usable");
+    }
+
+    @Test
+    void unresolvedReplyFromUnsupportedPluginPasses() {
+        hidden();
+        PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(viewer, "/r unknown");
+        listener.onPrivateMessageCommand(event);
+        assertFalse(event.isCancelled(), "unresolved replies must not disable unrelated conversations");
     }
 
     @Test

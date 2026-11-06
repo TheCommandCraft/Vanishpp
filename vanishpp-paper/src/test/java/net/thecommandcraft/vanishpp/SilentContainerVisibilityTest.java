@@ -63,6 +63,37 @@ class SilentContainerVisibilityTest {
         assertTrue(plugin.silentlyOpenedBlocks.isEmpty(), "last session must retire after its own close window");
     }
 
+    @Test
+    void closingOneViewerDoesNotRetireAnotherViewer() {
+        Block chest = server.addSimpleWorld("shared").getBlockAt(3, 64, 7);
+        chest.setType(Material.CHEST);
+        open(chest);
+        PlayerMock first = player;
+        player = server.addPlayer();
+        player.setOp(true);
+        plugin.applyVanishEffects(player);
+        plugin.getRuleManager().setRule(player, RuleManager.CAN_INTERACT, true);
+        open(chest);
+        listener.onClose(new InventoryCloseEvent(first.getOpenInventory()));
+        closes.get(0).run();
+        assertFalse(plugin.silentlyOpenedBlocks.isEmpty(), "another viewer still owns silent-container suppression");
+    }
+
+    @Test
+    void equalCoordinatesInDifferentWorldsHaveIndependentSessions() {
+        Block first = server.addSimpleWorld("first").getBlockAt(3, 64, 7);
+        Block second = server.addSimpleWorld("second").getBlockAt(3, 64, 7);
+        first.setType(Material.CHEST);
+        second.setType(Material.CHEST);
+        open(first);
+        player = server.addPlayer();
+        player.setOp(true);
+        plugin.applyVanishEffects(player);
+        plugin.getRuleManager().setRule(player, RuleManager.CAN_INTERACT, true);
+        open(second);
+        assertEquals(2, plugin.silentlyOpenedBlocks.size(), "silent container positions must include the world");
+    }
+
     private void open(Block chest) {
         listener.onInteract(new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, null, chest,
                 BlockFace.UP, EquipmentSlot.HAND));
