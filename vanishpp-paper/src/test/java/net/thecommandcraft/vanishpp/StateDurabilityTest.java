@@ -58,7 +58,7 @@ class StateDurabilityTest {
     void failedSqlReadsAreNotSuccessfulVisibleResults() throws Exception {
         DataSource source = mock(DataSource.class);
         when(source.getConnection()).thenThrow(new java.sql.SQLException("read unavailable"));
-        SqlStorage sql = new SqlStorage(plugin, source);
+        SqlStorage sql = sqlStorage(source);
         assertAll(
                 () -> assertThrows(RuntimeException.class, () -> sql.isVanished(player.getUniqueId()),
                         "failed player reads must be distinguishable from visible"),
@@ -186,7 +186,7 @@ class StateDurabilityTest {
         source.setStats(id, new VanishStats(42000, 3, 21000));
         JdbcDataSource dataSource = new JdbcDataSource();
         dataSource.setURL("jdbc:h2:mem:migration_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
-        SqlStorage target = new SqlStorage(plugin, dataSource);
+        SqlStorage target = sqlStorage(dataSource);
         target.init();
         try {
             var method = Vanishpp.class.getDeclaredMethod("migrateIfNeeded", StorageProvider.class, String.class);
@@ -235,6 +235,12 @@ class StateDurabilityTest {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
         listener.onJoin(new PlayerJoinEvent(player, Component.text("joined")));
+    }
+
+    private SqlStorage sqlStorage(DataSource source) throws Exception {
+        var constructor = SqlStorage.class.getDeclaredConstructor(Vanishpp.class, DataSource.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(plugin, source);
     }
 
     private static void field(Object object, String name, Object value) throws Exception {
