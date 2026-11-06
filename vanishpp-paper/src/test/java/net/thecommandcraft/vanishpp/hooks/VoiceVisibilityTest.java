@@ -35,7 +35,7 @@ class VoiceVisibilityTest {
     void outgoingAudioIsBlockedOnlyForUnauthorizedListeners() {
         PlayerMock speaker = server.addPlayer("Speaker");
         PlayerMock listener = server.addPlayer("Listener");
-        plugin.getRawVanishedPlayers().add(speaker.getUniqueId());
+        plugin.applyVanishEffects(speaker);
         plugin.getConfigManager().voiceChatIsolate = true;
         Map<Class<?>, Consumer<Object>> handlers = new HashMap<>();
         EventRegistration registration = (EventRegistration) Proxy.newProxyInstance(getClass().getClassLoader(),
@@ -63,7 +63,7 @@ class VoiceVisibilityTest {
         dispatch(handlers, staff);
         verify(staff, never()).cancel();
         listener.setOp(false);
-        plugin.getRawVanishedPlayers().clear();
+        plugin.removeVanishEffects(speaker);
         LocationalSoundPacketEvent visible = packet(speaker, listener);
         dispatch(handlers, visible);
         verify(visible, never()).cancel();

@@ -50,7 +50,7 @@ class PacketVisibilityTest {
         plugin.getConfigManager().preventSleeping = false;
         subject = server.addPlayer("HiddenStaff");
         viewer = server.addPlayer("Observer");
-        plugin.getRawVanishedPlayers().add(subject.getUniqueId());
+        plugin.applyVanishEffects(subject);
         reflection = mockStatic(MinecraftReflection.class);
         reflection.when(MinecraftReflection::getGameProfileClass).thenReturn(Profile.class);
         reflection.when(MinecraftReflection::getEntityPlayerClass).thenReturn(NativePlayer.class);
@@ -110,7 +110,7 @@ class PacketVisibilityTest {
 
     @Test
     void offlineVanishStateDoesNotReducePacketPingCount() {
-        plugin.getRawVanishedPlayers().add(UUID.randomUUID());
+        plugin.handleNetworkVanishSync(UUID.randomUUID(), true);
         plugin.getConfigManager().adjustServerListCount = true;
         PacketContainer packet = mock(PacketContainer.class);
         WrappedServerPing ping = mock(WrappedServerPing.class);

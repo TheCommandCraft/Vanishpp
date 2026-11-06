@@ -50,7 +50,7 @@ class VisibilityTest {
     @AfterEach
     void tearDown() { MockBukkit.unmock(); }
 
-    private void hidden() { plugin.getRawVanishedPlayers().add(subject.getUniqueId()); }
+    private void hidden() { plugin.applyVanishEffects(subject); }
 
     private void lowRank() {
         hidden();
@@ -99,7 +99,7 @@ class VisibilityTest {
         plugin.getRuleManager().setRule(subject, RuleManager.CAN_CHAT, true);
         Set<Audience> viewers = new HashSet<>(List.of(viewer, subject));
         AsyncChatEvent event = new AsyncChatEvent(false, subject, viewers, ChatRenderer.defaultRenderer(),
-                Component.text("probe"), Component.text("probe"));
+                Component.text("probe"), Component.text("probe"), null);
         listener.onChat(event);
         assertFalse(event.viewers().contains(viewer), "lower rank must not receive higher rank chat");
         assertTrue(event.viewers().contains(subject), "sender must retain their own chat");
@@ -115,7 +115,7 @@ class VisibilityTest {
         PlayerCommandPreprocessEvent second = new PlayerCommandPreprocessEvent(viewer, "/r second");
         listener.onPrivateMessageCommand(second);
         assertTrue(second.isCancelled(), "repeated reply must not clear hidden-recipient protection");
-        plugin.getRawVanishedPlayers().clear();
+        plugin.removeVanishEffects(subject);
         PlayerCommandPreprocessEvent visible = new PlayerCommandPreprocessEvent(viewer, "/r visible");
         listener.onPrivateMessageCommand(visible);
         assertFalse(visible.isCancelled(), "visible conversation must remain usable");

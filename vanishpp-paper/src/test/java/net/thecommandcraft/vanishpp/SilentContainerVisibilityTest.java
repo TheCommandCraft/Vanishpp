@@ -35,7 +35,7 @@ class SilentContainerVisibilityTest {
         plugin.getConfigManager().preventSleeping = false;
         player = server.addPlayer();
         player.setOp(true);
-        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        plugin.applyVanishEffects(player);
         plugin.getRuleManager().setRule(player, RuleManager.CAN_INTERACT, true);
         set("hasProtocolLib", true);
         VanishScheduler scheduler = mock(VanishScheduler.class);
