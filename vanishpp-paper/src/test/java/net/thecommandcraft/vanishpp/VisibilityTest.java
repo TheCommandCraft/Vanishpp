@@ -24,6 +24,7 @@ import org.bukkit.util.Vector;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.InetAddress;
 import java.util.*;
@@ -228,18 +229,27 @@ class VisibilityTest {
         assertFalse(viewer.canSee(subject), "auto-vanish must hide the entity before join completes");
     }
 
-    @Test
-    void projectileCollisionKeepsOriginalEntityAndState() {
+    @ParameterizedTest
+    @ValueSource(doubles = {0.0, 0.05, 4.25})
+    void projectileCollisionKeepsOriginalEntityAndState(double speed) {
         hidden();
         plugin.getConfigManager().ignoreProjectiles = true;
-        Projectile projectile = mock(Projectile.class);
-        when(projectile.getVelocity()).thenReturn(new Vector(0, 0, 0));
+        Projectile projectile = mock(org.bukkit.entity.Trident.class);
+        Vector velocity = new Vector(speed, 0, 0);
+        when(projectile.getVelocity()).thenReturn(velocity);
+        org.bukkit.World world = mock(org.bukkit.World.class);
+        when(projectile.getWorld()).thenReturn(world);
+        when(projectile.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 64, 0));
+        when(projectile.getType()).thenReturn(org.bukkit.entity.EntityType.TRIDENT);
+        when(world.spawnEntity(any(), any())).thenReturn(mock(org.bukkit.entity.Trident.class));
         ProjectileHitEvent hit = new ProjectileHitEvent(projectile, subject);
         listener.onProjectileHit(hit);
         assertTrue(hit.isCancelled(), "hidden collision must be cancelled");
         assertEquals(0, mockingDetails(projectile).getInvocations().stream()
                 .filter(call -> call.getMethod().getName().equals("remove")).count(),
                 "pass-through must retain the original projectile, including slow projectiles");
+        assertEquals(new Vector(speed, 0, 0), velocity, "pass-through must not normalize incoming velocity");
+        verify(world, never()).spawnEntity(any(), any());
     }
 
     @Test
