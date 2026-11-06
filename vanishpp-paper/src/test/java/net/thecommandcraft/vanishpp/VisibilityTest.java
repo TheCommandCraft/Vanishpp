@@ -22,6 +22,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.scoreboard.Team;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.net.InetAddress;
 import java.util.*;
@@ -91,6 +93,68 @@ class VisibilityTest {
         List<String> names = command.onTabComplete(viewer, plugin.getCommand("vanishrules"), "vrules", new String[]{""});
         assertFalse(names.contains(subject.getName()), "lower rank completion must hide higher rank names");
         assertTrue(names.contains(viewer.getName()), "visible player completion must remain available");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"vanishrules,vanishpp.rules", "vperms,vanishpp.manageperms", "vincognito,vanishpp.incognito",
+            "vautovanish,vanishpp.vanish", "vfollow,vanishpp.spectator", "vspec,vanishpp.spectator",
+            "vhistory,vanishpp.history", "vstats,vanishpp.stats", "vanishignore,vanishpp.ignorewarning",
+            "vanishhelp,vanishpp.help", "vzone,vanishpp.zone"})
+    void eachCompleterRejectsUnauthorizedRequests(String name, String permission) {
+        viewer.addAttachment(plugin, permission, false);
+        var command = plugin.getCommand(name);
+        assertNotNull(command, "command fixture must resolve " + name);
+        List<String> suggestions = command.getTabCompleter().onTabComplete(viewer, command, name, new String[]{""});
+        assertNotNull(suggestions, "unauthorized completion must not fall back to Bukkit player names");
+        assertTrue(suggestions.isEmpty(), "unauthorized completion must be empty for " + name);
+    }
+
+    @Test
+    void vanillaSelectorsAreCheckedAfterRecipientResolution() {
+        hidden();
+        try (var bukkit = mockStatic(org.bukkit.Bukkit.class, invocation -> {
+            if (invocation.getMethod().getName().equals("selectEntities")) return List.of(subject);
+            return invocation.callRealMethod();
+        })) {
+            PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(viewer,
+                    "/minecraft:tell @a[name=HiddenStaff] probe");
+            listener.onPrivateMessageCommand(event);
+            assertTrue(event.isCancelled(), "resolved selector must not address a hidden recipient");
+        }
+    }
+
+    @Test
+    void privateMessagesRespectLayersEvenWhenBothPlayersAreVanished() {
+        lowRank();
+        plugin.applyVanishEffects(viewer);
+        PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(viewer, "/msg HiddenStaff probe");
+        listener.onPrivateMessageCommand(event);
+        assertTrue(event.isCancelled(), "being vanished must not bypass the recipient's higher visibility level");
+    }
+
+    @Test
+    void lowerRankCannotUnvanishHiddenTarget() {
+        lowRank();
+        viewer.addAttachment(plugin, "vanishpp.vanish.others", true);
+        new VanishCommand(plugin).onCommand(viewer, plugin.getCommand("vanish"), "vanish", new String[]{subject.getName()});
+        assertTrue(plugin.isVanished(subject), "management permission must not reveal a higher rank target");
+    }
+
+    @Test
+    void vanishedListOnlyIncludesAuthorizedSubjects() {
+        lowRank();
+        viewer.addAttachment(plugin, "vanishpp.list", true);
+        drain(viewer);
+        new VanishListCommand(plugin).onCommand(viewer, plugin.getCommand("vanishlist"), "vlist", new String[0]);
+        assertFalse(drain(viewer).contains(subject.getName()), "vanished list must not disclose higher rank identities");
+    }
+
+    @Test
+    void silentJoinNotificationRespectsLevels() {
+        lowRank();
+        drain(viewer);
+        listener.onJoin(new PlayerJoinEvent(subject, Component.text("joined")));
+        assertFalse(drain(viewer).contains(subject.getName()), "silent-join notice must not disclose higher rank identities");
     }
 
     @Test
@@ -190,5 +254,12 @@ class VisibilityTest {
 
     private String plain(Component component) {
         return PlainTextComponentSerializer.plainText().serialize(component);
+    }
+
+    private String drain(PlayerMock player) {
+        StringBuilder messages = new StringBuilder();
+        String message;
+        while ((message = player.nextMessage()) != null) messages.append(message);
+        return messages.toString();
     }
 }
