@@ -224,12 +224,34 @@ class FeatureTest {
         player.performCommand("vanish");
         assertTrue(player.getAllowFlight(), "Flight should be preserved when disableFlyOnUnvanish=false");
 
-        // Case C: Rank permission overrides config disable
+    }
+
+    @Test
+    void testFlyPermissionDoesNotGrantFlightAfterUnvanish() {
+        player.setOp(true);
+        plugin.getRuleManager().setRule(player, RuleManager.SPECTATOR_GAMEMODE, false);
         plugin.getConfigManager().disableFlyOnUnvanish = true;
         player.addAttachment(plugin, "essentials.fly", true);
+        player.setAllowFlight(false);
+
+        player.performCommand("vanish");
+        assertTrue(player.getAllowFlight(), "Vanish must grant temporary flight");
+        player.performCommand("vanish");
+        assertFalse(player.getAllowFlight(), "Unvanish must restore disabled flight even with a fly permission");
+    }
+
+    @Test
+    void testExistingFlightSurvivesUnvanish() {
+        player.setOp(true);
+        plugin.getRuleManager().setRule(player, RuleManager.SPECTATOR_GAMEMODE, false);
+        plugin.getConfigManager().disableFlyOnUnvanish = true;
+        player.addAttachment(plugin, "essentials.fly", false);
+        player.addAttachment(plugin, "bukkit.command.fly", false);
+        player.setAllowFlight(true);
+
         player.performCommand("vanish");
         player.performCommand("vanish");
-        assertTrue(player.getAllowFlight(), "Flight should be preserved when player has essentials.fly");
+        assertTrue(player.getAllowFlight(), "Unvanish must restore flight that was enabled before vanish");
     }
 
     // -------------------------------------------------------------------------
