@@ -135,9 +135,10 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.history")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) completions.add(p.getName());
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }
         return new ArrayList<>();

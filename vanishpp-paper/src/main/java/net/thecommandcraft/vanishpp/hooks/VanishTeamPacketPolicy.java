@@ -35,6 +35,20 @@ final class VanishTeamPacketPolicy {
     private VanishTeamPacketPolicy() {
     }
 
+    static Decision decide(int action, Collection<String> names, Set<String> known,
+                           java.util.function.Predicate<String> visible) {
+        if (action == ACTION_REMOVE_PLAYERS) {
+            List<String> removed = names.stream().filter(known::remove).toList();
+            return new Decision(removed.isEmpty(), removed);
+        }
+        if (action == ACTION_CREATE || action == ACTION_ADD_PLAYERS) {
+            List<String> allowed = names.stream().filter(visible).toList();
+            known.addAll(allowed);
+            return new Decision(action == ACTION_ADD_PLAYERS && allowed.isEmpty(), allowed);
+        }
+        return new Decision(false, List.copyOf(names));
+    }
+
     /**
      * @param action        the packet's action code (0/3/4 — others are not routed here)
      * @param isStaff       whether the observer currently has {@code vanishpp.see}

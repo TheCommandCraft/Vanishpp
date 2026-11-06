@@ -56,10 +56,10 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **Native TAB Plugin Support:** If you use **TAB (by NEZNAMY)**, Vanish++ hooks directly into it to display your vanish prefix automatically. No manual Placeholder configuration required.
 *   **Legacy Plugin Support:** Even without specific hooks, Vanish++ sets standard Bukkit Metadata (`"vanished"`). This means plugins like **CMI**, **TAB**, or custom skripts automatically respect your vanished status.
 *   **Silent Chests:** Open Chests, Shulker Boxes, Barrels, and Ender Chests silently. The container opens directly against the real inventory — no animation, no sound, no item duplication.
-*   **DiscordSRV Integration:** Registers as a native vanish hook in DiscordSRV. Join, quit, advancement, and death announcements are all suppressed on Discord — even if you reconnect while already vanished. Fake join/leave messages honour DiscordSRV's full embed, colour, avatar, and webhook configuration from `messages.yml`. Staff notifications still appear in console and for players with the see permission.
-*   **Simple Voice Chat Integration:** Automatically isolates/mutes you in voice chat so you can't be heard or hear proximity chat while stalking.
+*   **DiscordSRV Integration:** Registers as a native vanish hook in DiscordSRV. Join, quit, advancement, and death announcements are all suppressed on Discord — even if you reconnect while already vanished. Fake join/leave messages honour DiscordSRV's full embed, colour, avatar, and webhook configuration from `messages.yml`. Staff notifications appear in console and for players whose see permission and level authorize the subject.
+*   **Simple Voice Chat Integration:** Filters proximity, group, and entity voice packets using visibility permissions and levels. Unauthorized players cannot hear vanished speakers; isolated staff can still talk to authorized seers.
 *   **Smart Item Pickup:** Toggle item pickup with `/vanishpickup`. Don't accidentally steal the diamonds you are watching a player mine.
-*   **`/msg` / `/tell` Detection Prevention:** Non-staff can no longer `/msg` or `/tell` a vanished player — they receive a vanilla-style "player not found" error. `/r` reply is blocked when the last target was a vanished sender. `/me` from a vanished player is restricted to staff-only audience. Configurable message text.
+*   **`/msg` / `/tell` Detection Prevention:** Non-staff can no longer `/msg` or `/tell` a vanished player — they receive a vanilla-style "player not found" error. `/r` uses EssentialsX's resolved recipient, or observed conversations for other messaging plugins. Conversations are tracked before vanishing and repeated replies remain protected. Unresolved replies from unsupported plugins pass; their hidden recipients cannot be guaranteed protected. `/me` from a vanished player is restricted to staff-only audience. Configurable message text.
 
 </details>
 
@@ -73,10 +73,10 @@ We hook directly into the server protocol to scrub your existence from clients. 
 *   **`/vhistory` Audit Log:** Full vanish/unvanish history with timestamps, executor, and reason stored in the database. Requires `vanishpp.history`.
 *   **`/vstats` Vanish Time Statistics:** View total vanish time, session count, and longest session per player. Requires `vanishpp.stats`.
 *   **`/vadmin` Dashboard GUI:** In-game GUI overview of all vanished players, active rules, and quick actions. Requires `vanishpp.admin`.
-*   **`/vincognito` Fake Name Mode:** Replace your display name and tab entry with a configurable fake name while vanished. Requires `vanishpp.incognito`.
+*   **`/vincognito` Fake Name Mode:** Replace your display name and tab entry with a configurable fake name until disabled. Vanish refreshes preserve the alias; disabling restores the previous display identity. This changes displayed text, not the authenticated profile or skin. Requires `vanishpp.incognito`.
 *   **`/vwand` Toggle Wand:** Grants a Blaze Rod vanish wand — right-click to toggle vanish state. Configurable in `config.yml`. Requires `vanishpp.wand`.
 *   **`/vzone` No-Vanish Zones:** Define radius-based zones where vanishing/unvanishing is blocked or forced. Manage with `/vzone create|delete|list|reload`. Requires `vanishpp.zone`.
-*   **`/vautovanish` Auto-Join Vanish:** Players opt into automatic vanish on join. Persisted per UUID — survives restarts and server switches. Requires `vanishpp.autovanish`.
+*   **`/vautovanish` Auto-Join Vanish:** Players opt into automatic vanish on join. Loaded before the initial join announcement and visibility setup. Persisted per UUID — survives restarts and server switches. Requires `vanishpp.autovanish`.
 *   **Bulk Vanish:** `/vanish all` vanishes every eligible online player at once. `/vanish world <world>` targets all players in a specific world. Vanish reason tracking: `/vanish <player> [reason]` records a reason visible to staff via `/vhistory`.
 *   **Bossbar Vanish Indicator:** Optional persistent bossbar shown to vanished players as a stealth reminder. Configurable colour, style, and text in `config.yml`.
 *   **Live Config Editor (`/vconfig`):** Edit settings in `config.yml` (Messages, Rules, Boolean toggles) directly in-game. Command completion requires `vanishpp.config` and excludes database passwords, webhook authorization values, and webhook URLs. `/vack apply_proxy` requires the same permission to apply local settings network-wide; other acknowledgements keep their existing permissions. Proxy connection settings require a Paper restart.
@@ -148,11 +148,11 @@ Only needed if you are building custom HUDs or Scoreboards. (TAB Plugin works au
 | :--- | :--- | :--- |
 | `%vanishpp_is_vanished%` | `Yes` / `No` | Current status text. |
 | `%vanishpp_is_vanished_bool%` | `true` / `false` | Boolean status for logic/conditions. |
-| `%vanishpp_vanished_count%` | `3` | Number of **online** vanished players. |
+| `%vanishpp_vanished_count%` | `3` | Number of online vanished players this viewer may see. |
 | `%vanishpp_visible_online%` | `15` | Total players minus vanished players (Fake count). |
 | `%vanishpp_prefix%` | `[VANISHED]` | Configured prefix (empty if visible). |
 | `%vanishpp_pickup%` | `Enabled` | Current item pickup status. |
-| `%vanishpp_vanished_list%` | `Notch, Herobrine` | Comma-separated list of online vanished player names. |
+| `%vanishpp_vanished_list%` | `Notch, Herobrine` | Online vanished names this viewer may see; anonymous requests return an empty list. |
 | `%vanishpp_visible_player_list%` | `Steve, Alex` | Comma-separated list of online non-vanished (visible) player names. |
 
 ---

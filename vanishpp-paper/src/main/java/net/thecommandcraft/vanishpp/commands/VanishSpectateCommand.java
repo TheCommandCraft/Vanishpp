@@ -60,7 +60,7 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
         }
 
         Player target = Bukkit.getPlayer(args[0]);
-        if (target == null || target.equals(player)) {
+        if (target == null || target.equals(player) || !plugin.getPermissionManager().canSee(player, target)) {
             plugin.getMessageManager().sendMessage(player,
                     plugin.getConfigManager().playerNotFoundMessage);
             return true;
@@ -105,10 +105,11 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.spectator") || !sender.hasPermission("vanishpp.vanish")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             completions.add("stop");
-            for (Player p : Bukkit.getOnlinePlayers()) completions.add(p.getName());
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }
         return new ArrayList<>();

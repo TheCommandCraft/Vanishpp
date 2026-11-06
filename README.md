@@ -58,9 +58,9 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 - **Native Language Fake Messages:** The fake "Player left the game" message uses the server's native translation packet — indistinguishable from a real disconnect in any language.
 - **Native TAB Plugin Support:** Hooks directly into TAB (by NEZNAMY) to display your vanish prefix automatically.
 - **Legacy Plugin Support:** Sets standard Bukkit Metadata (`vanished`), so CMI, TAB, and custom skripts automatically respect your vanish status.
-- **Silent Chests:** Open containers silently — no animation, no sound, full item interaction. Changes sync back on close.
+- **Silent Chests:** Open containers silently — no animation, no sound, full item interaction. The live inventory is used, including overlapping staff sessions.
 - **DiscordSRV Integration:** Suppresses join, quit, advancement, and death announcements on Discord. Fake messages honour DiscordSRV's full embed, color, avatar, and webhook configuration.
-- **Simple Voice Chat Integration:** Automatically isolates you in voice chat while vanished.
+- **Simple Voice Chat Integration:** Filters voice packets while vanished, including modded clients and newly connected voice sessions. Authorized seers can still hear you.
 - **Smart Item Pickup:** Toggle item pickup with `/vanishpickup`.
 
 </details>
@@ -113,7 +113,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 | :--- | :--- | :--- |
 | `%vanishpp_is_vanished%` | `Yes` / `No` | Current status text |
 | `%vanishpp_is_vanished_bool%` | `true` / `false` | Boolean status |
-| `%vanishpp_vanished_count%` | `3` | Online vanished player count |
+| `%vanishpp_vanished_count%` | `3` | Online vanished players this viewer may see |
 | `%vanishpp_visible_online%` | `15` | Total minus vanished (fake count) |
 | `%vanishpp_prefix%` | `[VANISHED]` | Configured prefix (empty if visible) |
 | `%vanishpp_pickup%` | `Enabled` | Current item pickup status |

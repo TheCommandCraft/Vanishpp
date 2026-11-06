@@ -1,6 +1,10 @@
 package net.thecommandcraft.vanishpp.config;
 
 import net.thecommandcraft.vanishpp.Vanishpp;
+import net.thecommandcraft.vanishpp.common.visibility.AudiencePolicy;
+import net.thecommandcraft.vanishpp.common.state.NetworkVanishState;
+import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -162,20 +166,48 @@ public class PermissionManager {
     }
 
     public boolean canSee(Player observer, Player target) {
-        if (!plugin.isVanished(target))
-            return true;
-        if (!hasPermission(observer, "vanishpp.see"))
-            return false;
-
+        if (!plugin.isVanished(target)) return true;
         ConfigManager cm = plugin.getConfigManager();
-        if (cm.layeredPermsEnabled) {
-            int targetVanishLevel = getLevel(target, "vanishpp.vanish.level.", cm.defaultVanishLevel);
-            int observerSeeLevel = getLevel(observer, "vanishpp.see.level.", cm.defaultSeeLevel);
-            if (observerSeeLevel < targetVanishLevel) {
-                return false;
-            }
-        }
-        return true;
+        return decide(observer, target.getUniqueId(), plugin.isVanished(target),
+                getLevel(target, "vanishpp.vanish.level.", cm.defaultVanishLevel));
+    }
+
+    public boolean canSee(CommandSender observer, Player target) {
+        return !(observer instanceof Player player) || canSee(player, target);
+    }
+
+    public boolean canSee(Player observer, UUID target) {
+        Player player = Bukkit.getPlayer(target);
+        if (player != null) return canSee(observer, player);
+        // No local permission facts exist for an offline/network-only packet entry.
+        return !plugin.isVanished(target) || (observer != null && observer.getUniqueId().equals(target));
+    }
+
+    public boolean canSee(CommandSender observer, NetworkVanishState target) {
+        if (!(observer instanceof Player player)) return true;
+        Player local = Bukkit.getPlayer(target.uuid());
+        return local != null ? canSee(player, local) : decide(player, target.uuid(), true, target.vanishLevel());
+    }
+
+    public boolean canReceiveStaffNotice(Player observer, Player target) {
+        ConfigManager cm = plugin.getConfigManager();
+        return hasPermission(observer, "vanishpp.see") && decide(observer, target.getUniqueId(), true,
+                getLevel(target, "vanishpp.vanish.level.", cm.defaultVanishLevel));
+    }
+
+    public List<Player> visiblePlayers(CommandSender observer) {
+        return Bukkit.getOnlinePlayers().stream().filter(player -> canSee(observer, player)).map(player -> (Player) player).toList();
+    }
+
+    public int publicOnlineCount() {
+        return AudiencePolicy.publicCount(Bukkit.getOnlinePlayers(), plugin::isVanished);
+    }
+
+    private boolean decide(Player observer, UUID target, boolean vanished, int vanishLevel) {
+        ConfigManager cm = plugin.getConfigManager();
+        return AudiencePolicy.canSee(observer == null ? null : observer.getUniqueId(), target, vanished,
+                observer != null && hasPermission(observer, "vanishpp.see"), cm.layeredPermsEnabled,
+                observer == null ? 0 : getLevel(observer, "vanishpp.see.level.", cm.defaultSeeLevel), vanishLevel);
     }
 
     private int getLevel(Player player, String prefix, int def) {

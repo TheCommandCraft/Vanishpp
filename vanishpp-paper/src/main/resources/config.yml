@@ -51,6 +51,7 @@ vanish-appearance:
     text: "&bYou are currently VANISHED"
 
   # Whether to hide vanished players from the server's online player count.
+  # Counts only online vanished players; the Velocity companion filters its own ping too.
   adjust-server-list: true
 
   # If true, staff with vanishpp.see will see a glowing outline around vanished players.
@@ -186,6 +187,7 @@ default-rules:
 hooks:
   simple-voice-chat:
     enabled: true
+    # Filter actual voice packets; authorized seers can still hear vanished speakers.
     isolate-vanished-players: true
   essentials:
     # Use EssentialsX custom join/quit messages if configured.
@@ -319,6 +321,7 @@ vanish-wand:
 
 # --- [ INCOGNITO ] ---
 incognito:
+  # Display/tab aliases survive vanish refreshes and restore on disable; profiles stay unchanged.
   # Pool of fake names to randomly assign. Must be valid (≤16 chars).
   fake-names:
     - "Steve"
@@ -345,6 +348,7 @@ update-checker:
 
 # --- [ PERMISSIONS ] ---
 permissions:
+  # Applies to packets, names, messages, lists, placeholders, and command targets.
   layered-permissions-enabled: true
   default-vanish-level: 1
   default-see-level: 1

@@ -1,6 +1,7 @@
 package net.thecommandcraft.vanishpp.hooks;
 
 import com.comphenix.protocol.PacketType;
+import com.mojang.brigadier.suggestion.Suggestions;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import com.comphenix.protocol.events.ListenerPriority;
@@ -63,28 +64,35 @@ public class ProtocolLibManager {
                     public void onPacketSending(PacketEvent event) {
                         if (event.isCancelled())
                             return;
-                        if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(event.getPlayer(),
-                                "vanishpp.see"))
-                            return;
 
                         try {
                             PacketContainer packet = event.getPacket();
+                            StructureModifier<Suggestions> modern = packet.getSpecificModifier(Suggestions.class);
+                            if (modern.size() > 0) {
+                                Suggestions suggestions = modern.read(0);
+                                if (suggestions != null) {
+                                    var kept = suggestions.getList().stream()
+                                            .filter(value -> visibleName(event.getPlayer(), value.getText())).toList();
+                                    if (kept.size() != suggestions.getList().size())
+                                        copyForObserver(event).getSpecificModifier(Suggestions.class).write(0, new Suggestions(suggestions.getRange(), kept));
+                                }
+                            }
                             if (packet.getStringArrays().size() > 0) {
                                 String[] suggestions = packet.getStringArrays().read(0);
                                 List<String> filtered = new ArrayList<>();
                                 boolean changed = false;
-                                Set<String> vanishedNames = ProtocolLibManager.this.getVanishedNames();
+                                Set<String> vanishedNames = ProtocolLibManager.this.getHiddenNames(event.getPlayer());
 
                                 for (String s : suggestions) {
                                     if (s == null)
                                         continue;
-                                    if (vanishedNames.contains(s))
+                                    if (vanishedNames.contains(s.toLowerCase(Locale.ROOT)))
                                         changed = true;
                                     else
                                         filtered.add(s);
                                 }
                                 if (changed)
-                                    packet.getStringArrays().write(0, filtered.toArray(new String[0]));
+                                    copyForObserver(event).getStringArrays().write(0, filtered.toArray(new String[0]));
                             }
                         } catch (Exception ignored) {
                         }
@@ -115,8 +123,6 @@ public class ProtocolLibManager {
                 if (event.isCancelled())
                     return;
                 Player observer = event.getPlayer();
-                boolean canSee = ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer,
-                        "vanishpp.see");
 
                 try {
                     PacketContainer packet = event.getPacket();
@@ -134,25 +140,25 @@ public class ProtocolLibManager {
                         if (observer.getEntityId() == entityId) {
                             return;
                         }
-                        if (!canSee) {
+                        if (!plugin.getPermissionManager().canSee(observer, target)) {
                             event.setCancelled(true);
                             return;
                         }
 
                         // Staff-only modifications (remove invisibility flag)
                         if (type == PacketType.Play.Server.ENTITY_METADATA) {
-                            modifyMetadataForStaff(packet);
+                            modifyMetadataForStaff(copyForObserver(event));
                         }
                     }
 
                     // Extra checks for specific packet types
-                    if (!canSee) {
+                    {
                         if (type == PacketType.Play.Server.COLLECT) {
                             // Index 1 is the collector ID
                             int collectorId = packet.getIntegers().read(1);
                             Entity collector = protocolManager.getEntityFromID(observer.getWorld(), collectorId);
                             if (collector instanceof Player p
-                                    && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                    && !plugin.getPermissionManager().canSee(observer, p)) {
                                 event.setCancelled(true);
                             }
                         } else if (type == PacketType.Play.Server.MOUNT) {
@@ -164,7 +170,7 @@ public class ProtocolLibManager {
                                 for (int id : passengers) {
                                     Entity e = protocolManager.getEntityFromID(observer.getWorld(), id);
                                     if (e instanceof Player p
-                                            && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                            && !plugin.getPermissionManager().canSee(observer, p)) {
                                         hasVanished = true;
                                     } else {
                                         filtered.add(id);
@@ -175,7 +181,7 @@ public class ProtocolLibManager {
                                         event.setCancelled(true);
                                     else {
                                         int[] newArray = filtered.stream().mapToInt(i -> i).toArray();
-                                        packet.getIntegerArrays().write(0, newArray);
+                                        copyForObserver(event).getIntegerArrays().write(0, newArray);
                                     }
                                 }
                             }
@@ -235,9 +241,6 @@ public class ProtocolLibManager {
                         if (event.isCancelled())
                             return;
                         Player observer = event.getPlayer();
-                        if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(observer,
-                                "vanishpp.see"))
-                            return;
 
                         try {
                             // The raw entry list, not getPlayerInfoDataLists(): ProtocolLib's
@@ -254,14 +257,14 @@ public class ProtocolLibManager {
 
                             VanishPlayerInfoPolicy.FilterResult<Object> result = VanishPlayerInfoPolicy.filter(
                                     new ArrayList<Object>(entries), ProtocolLibManager::entryProfileId,
-                                    ProtocolLibManager.this.plugin::isVanished);
+                                    uuid -> !plugin.getPermissionManager().canSee(observer, uuid));
 
                             if (!result.changed())
                                 return;
                             if (result.cancel()) {
                                 event.setCancelled(true);
                             } else {
-                                lists.write(0, result.kept());
+                                copyForObserver(event).getModifier().withType(List.class).write(0, result.kept());
                             }
                         } catch (Exception e) {
                             // Fail open: hidePlayer() already keeps vanished players out of the tab
@@ -285,16 +288,13 @@ public class ProtocolLibManager {
             public void onPacketSending(PacketEvent event) {
                 if (event.isCancelled())
                     return;
-                if (ProtocolLibManager.this.plugin.getPermissionManager().hasPermission(event.getPlayer(),
-                        "vanishpp.see"))
-                    return;
 
                 try {
                     int entityId = event.getPacket().getIntegers().read(0);
                     Entity entity = protocolManager.getEntityFromID(event.getPlayer().getWorld(), entityId);
 
                     if (entity instanceof Player target
-                            && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
+                            && !plugin.getPermissionManager().canSee(event.getPlayer(), target)) {
                         event.setCancelled(true);
                     }
                 } catch (Exception ignored) {
@@ -330,10 +330,6 @@ public class ProtocolLibManager {
                             if (!"Vanishpp_Vanished".equals(teamName)) {
                                 // Not our team — leave any other plugin/vanilla team packets alone
                                 // aside from the pre-existing generic per-name vanish scrub below.
-                                if (ProtocolLibManager.this.plugin.getPermissionManager()
-                                        .hasPermission(event.getPlayer(), "vanishpp.see")) {
-                                    return;
-                                }
                                 if (action == 0 || action == 3 || action == 4) {
                                     scrubGenericTeamPacket(packet, action, event);
                                 }
@@ -351,22 +347,16 @@ public class ProtocolLibManager {
                             if (names == null || names.isEmpty())
                                 return;
 
-                            boolean isStaff = ProtocolLibManager.this.plugin.getPermissionManager()
-                                    .hasPermission(observer, "vanishpp.see");
                             Set<String> known = ProtocolLibManager.this.knownVanishTeamMembers
                                     .computeIfAbsent(observer.getUniqueId(), k -> ConcurrentHashMap.newKeySet());
 
                             VanishTeamPacketPolicy.Decision decision = VanishTeamPacketPolicy.decide(
-                                    action, isStaff, names, known,
-                                    name -> {
-                                        Player p = Bukkit.getPlayer(name);
-                                        return p != null && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId());
-                                    });
+                                    action, names, known, name -> visibleName(observer, name));
 
                             if (decision.cancel()) {
                                 event.setCancelled(true);
                             } else if (decision.names().size() != names.size()) {
-                                packet.getSpecificModifier(Collection.class).write(0, decision.names());
+                                copyForObserver(event).getSpecificModifier(Collection.class).write(0, decision.names());
                             }
                         } catch (Exception e) {
                             // Fail closed: if we can't verify a vanished name isn't in this
@@ -389,7 +379,7 @@ public class ProtocolLibManager {
                             boolean changed = false;
                             for (String name : players) {
                                 Player p = Bukkit.getPlayer(name);
-                                if (p != null && ProtocolLibManager.this.plugin.isVanished(p.getUniqueId())) {
+                                if (p != null && !plugin.getPermissionManager().canSee(event.getPlayer(), p)) {
                                     changed = true;
                                 } else {
                                     scrubbed.add(name);
@@ -399,7 +389,7 @@ public class ProtocolLibManager {
                                 if (scrubbed.isEmpty() && action != 0) {
                                     event.setCancelled(true);
                                 } else {
-                                    packet.getSpecificModifier(Collection.class).write(0, scrubbed);
+                                    copyForObserver(event).getSpecificModifier(Collection.class).write(0, scrubbed);
                                 }
                             }
                         } catch (Exception e) {
@@ -439,9 +429,7 @@ public class ProtocolLibManager {
                             }
                             ping.setPlayers(players);
 
-                            int onlineCount = Bukkit.getOnlinePlayers().size();
-                            int vanishedCount = ProtocolLibManager.this.plugin.getRawVanishedPlayers().size();
-                            ping.setPlayersOnline(Math.max(0, onlineCount - vanishedCount));
+                            ping.setPlayersOnline(plugin.getPermissionManager().publicOnlineCount());
                         } catch (Exception e) {
                             // Ignore
                         }
@@ -455,6 +443,48 @@ public class ProtocolLibManager {
     }
 
     private void registerSilentChestListeners() {
+        try {
+            protocolManager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.HIGHEST,
+                    PacketType.Play.Server.BLOCK_CHANGE, PacketType.Play.Server.MULTI_BLOCK_CHANGE) {
+                @Override
+                public void onPacketSending(PacketEvent event) {
+                    if (event.isCancelled() || plugin.silentlyOpenedBlocks.isEmpty()) return;
+                    Player viewer = event.getPlayer();
+                    UUID world = viewer.getWorld().getUID();
+                    PacketContainer packet = event.getPacket();
+                    try {
+                        if (event.getPacketType() == PacketType.Play.Server.BLOCK_CHANGE) {
+                            BlockPosition pos = packet.getBlockPositionModifier().read(0);
+                            if (!plugin.silentContainers.suppress(viewer.getUniqueId(), world, pos.getX(), pos.getY(), pos.getZ())) return;
+                            var closed = plugin.silentContainers.closedBarrel(world, pos.getX(), pos.getY(), pos.getZ());
+                            if (closed != null && packet.getBlockData().read(0).getType() == org.bukkit.Material.BARREL)
+                                copyForObserver(event).getBlockData().write(0, WrappedBlockData.createData(closed));
+                        } else {
+                            BlockPosition section = packet.getSectionPositions().read(0);
+                            short[] positions = packet.getShortArrays().read(0);
+                            WrappedBlockData[] data = packet.getBlockDataArrays().read(0).clone();
+                            boolean changed = false;
+                            for (int i = 0; i < positions.length; i++) {
+                                int x = (section.getX() << 4) + ((positions[i] >> 8) & 15);
+                                int y = (section.getY() << 4) + (positions[i] & 15);
+                                int z = (section.getZ() << 4) + ((positions[i] >> 4) & 15);
+                                if (!plugin.silentContainers.suppress(viewer.getUniqueId(), world, x, y, z)) continue;
+                                var closed = plugin.silentContainers.closedBarrel(world, x, y, z);
+                                if (closed != null && data[i].getType() == org.bukkit.Material.BARREL) {
+                                    data[i] = WrappedBlockData.createData(closed);
+                                    changed = true;
+                                }
+                            }
+                            if (changed) copyForObserver(event).getBlockDataArrays().write(0, data);
+                        }
+                    } catch (Exception e) {
+                        event.setCancelled(true);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to register silent-barrel block update listener: " + e.getMessage());
+        }
         // Suppress BLOCK_ACTION (chest open/close animation, shulker open/close animation)
         // for non-seers when the block is in the silently-opened set
         try {
@@ -465,15 +495,10 @@ public class ProtocolLibManager {
                 if (event.isCancelled()) return;
                 if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.isEmpty()) return;
                 Player observer = event.getPlayer();
-                // Suppress chest lid animation for ALL non-openers (both staff and non-staff)
-                // The vanished player who opened it will see it, everyone else won't
-                if (ProtocolLibManager.this.plugin.isVanished(observer))
-                    return; // Don't suppress for the vanished opener
                 try {
                     PacketContainer packet = event.getPacket();
                     BlockPosition pos = packet.getBlockPositionModifier().read(0);
-                    String blockKey = pos.getX() + "," + pos.getY() + "," + pos.getZ();
-                    if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.contains(blockKey))
+                    if (plugin.silentContainers.suppress(observer.getUniqueId(), observer.getWorld().getUID(), pos.getX(), pos.getY(), pos.getZ()))
                         event.setCancelled(true);
                 } catch (Exception ignored) {}
             }
@@ -498,22 +523,18 @@ public class ProtocolLibManager {
                 if (event.isCancelled()) return;
                 if (ProtocolLibManager.this.plugin.silentlyOpenedBlocks.isEmpty()) return;
                 Player observer = event.getPlayer();
-                // Suppress sound for everyone except the vanished opener
-                if (ProtocolLibManager.this.plugin.isVanished(observer))
-                    return;
-                if (matchesSilentBlock(event.getPacket()))
+                if (matchesSilentBlock(event.getPacket(), observer))
                     event.setCancelled(true);
             }
 
             /** Try index offsets 0..3 for X/Y/Z, always treating as fixed-point (* 8). */
-            private boolean matchesSilentBlock(PacketContainer packet) {
-                Set<String> silentBlocks = ProtocolLibManager.this.plugin.silentlyOpenedBlocks;
+            private boolean matchesSilentBlock(PacketContainer packet, Player observer) {
                 for (int offset = 0; offset <= 3; offset++) {
                     try {
                         int bx = packet.getIntegers().read(offset) >> 3;
                         int by = packet.getIntegers().read(offset + 1) >> 3;
                         int bz = packet.getIntegers().read(offset + 2) >> 3;
-                        if (silentBlocks.contains(bx + "," + by + "," + bz))
+                        if (plugin.silentContainers.suppress(observer.getUniqueId(), observer.getWorld().getUID(), bx, by, bz))
                             return true;
                     } catch (Exception ignored) {}
                 }
@@ -550,14 +571,25 @@ public class ProtocolLibManager {
         } catch (Throwable ignored) {}
     }
 
-    private Set<String> getVanishedNames() {
+    private Set<String> getHiddenNames(Player observer) {
         Set<String> names = new java.util.HashSet<>();
         for (UUID uuid : ProtocolLibManager.this.plugin.getRawVanishedPlayers()) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null && p.getName() != null)
-                names.add(p.getName());
+            if (p != null && p.getName() != null && !plugin.getPermissionManager().canSee(observer, p))
+                names.add(p.getName().toLowerCase(Locale.ROOT));
         }
         return names;
+    }
+
+    private boolean visibleName(Player observer, String name) {
+        Player target = Bukkit.getPlayerExact(name);
+        return target == null || plugin.getPermissionManager().canSee(observer, target);
+    }
+
+    private PacketContainer copyForObserver(PacketEvent event) {
+        PacketContainer copy = event.getPacket().shallowClone();
+        event.setPacket(copy);
+        return copy;
     }
 
     private static volatile java.lang.reflect.Field entryIdField;

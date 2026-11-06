@@ -98,9 +98,10 @@ public class VanishStatsCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.stats")) return new ArrayList<>();
         if (args.length == 1 && sender.hasPermission("vanishpp.stats.others")) {
             List<String> names = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) names.add(p.getName());
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) names.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], names, new ArrayList<>());
         }
         return new ArrayList<>();

@@ -58,9 +58,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private PluginHider pluginHider;
     private MessageManager messageManager;
 
+    public final net.thecommandcraft.vanishpp.utils.MessageRecipients messageRecipients = new net.thecommandcraft.vanishpp.utils.MessageRecipients();
     private Team vanishTeam;
+    private final net.thecommandcraft.vanishpp.utils.ViewerTeams viewerTeams = new net.thecommandcraft.vanishpp.utils.ViewerTeams(this);
     private VanishScheduler vanishScheduler;
-    private VoiceChatHook voiceChatHook;
     private VanishScoreboard vanishScoreboard;
     private YamlConfiguration scoreboardConfig;
 
@@ -75,7 +76,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public String downgradeFromVersion = null;
     /** Blocks currently being silently opened by a vanished player — suppress animation/sound packets for these.
      *  Key format: "x,y,z" */
-    public final Set<String> silentlyOpenedBlocks = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    public final net.thecommandcraft.vanishpp.utils.SilentContainerSessions silentContainers = new net.thecommandcraft.vanishpp.utils.SilentContainerSessions();
+    public final Set<String> silentlyOpenedBlocks = silentContainers.blocks();
 
     // ── Proxy support ─────────────────────────────────────────────────────────
     private ProxyBridge proxyBridge;
@@ -97,6 +99,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public final Map<UUID, GameMode> pendingGamemodeRestore = new ConcurrentHashMap<>();
     /** Incognito mode: player UUID → fake name */
     public final Map<UUID, String> incognitoNames = new ConcurrentHashMap<>();
+    private record OriginalIdentity(Component display, Component tab) {}
+    private final Map<UUID, OriginalIdentity> originalIdentities = new ConcurrentHashMap<>();
 
     private final Map<UUID, String> vanishReasons = new ConcurrentHashMap<>();
     public final Map<UUID, Long> vanishStartTimes = new ConcurrentHashMap<>();
@@ -292,8 +296,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         boolean hasVoiceChat = Bukkit.getPluginManager().getPlugin("voicechat") != null
                 || Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null;
         if (hasVoiceChat && configManager.voiceChatEnabled) {
-            this.voiceChatHook = new VoiceChatHook(this);
-            getServer().getPluginManager().registerEvents(voiceChatHook, this);
+            new VoiceChatHook(this);
             getLogger().info("Hooked into Simple Voice Chat.");
         }
 
@@ -512,6 +515,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (vanishScheduler != null) {
             vanishScheduler.cancelAllTasks();
         }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (isIncognito(player)) setIncognitoName(player, null);
+        }
+        viewerTeams.close();
         if (vanishTeam != null) {
             vanishTeam.unregister();
         }
@@ -694,7 +701,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     .replace("%player%", player.getName());
             Component joinComp = messageManager.parse(joinMsg, player);
             for (Player staff : Bukkit.getOnlinePlayers()) {
-                if (!staff.equals(player) && permissionManager.hasPermission(staff, "vanishpp.see"))
+                if (!staff.equals(player) && permissionManager.canReceiveStaffNotice(staff, player))
                     staff.sendMessage(joinComp);
             }
             Bukkit.getConsoleSender().sendMessage(joinComp);
@@ -910,6 +917,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     /** Cleans up per-player cached state. Call on player quit. */
     public void cleanupPlayerCache(UUID uuid) {
+        viewerTeams.forget(uuid);
         actionBarPausedUntil.remove(uuid);
         actionBarWarningComponent.remove(uuid);
         ignoredWarningPlayers.remove(uuid);
@@ -918,6 +926,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         spectateOrigins.remove(uuid);
         pendingGamemodeRestore.remove(uuid);
         incognitoNames.remove(uuid);
+        originalIdentities.remove(uuid);
         vanishReasons.remove(uuid);
         // Record session on quit if still vanished
         Long start = vanishStartTimes.remove(uuid);
@@ -994,6 +1003,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     /** Remove and re-add a player to the vanish team to force a scoreboard update packet to all observers. */
     public void reapplyTeamEntry(Player player) {
+        if (!hasProtocolLib) { viewerTeams.update(player, isVanished(player)); return; }
         if (vanishTeam == null) return;
         String name = player.getName();
         if (vanishTeam.hasEntry(name))
@@ -1050,12 +1060,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 if (vanished == null || !vanished.isOnline()) continue;
 
                 // Reapply team entry + tab prefix (catches TAB plugin or scoreboard overrides)
-                if (vanishTeam != null && !vanishTeam.hasEntry(vanished.getName()))
+                if (hasProtocolLib && vanishTeam != null && !vanishTeam.hasEntry(vanished.getName()))
                     vanishTeam.addEntry(vanished.getName());
-                if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
-                    vanished.playerListName(messageManager.parse(
-                            configManager.vanishTabPrefix + vanished.getName(), vanished));
-                }
+                if (!hasProtocolLib) viewerTeams.update(vanished, true);
+                updatePlayerListName(vanished);
 
                 // Fix visibility: ensure non-seers can't see, seers can see
                 for (Player observer : onlinePlayers) {
@@ -1137,12 +1145,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void applyVanishEffects(Player player) {
         vanishedPlayers.add(player.getUniqueId());
-        if (vanishTeam != null) vanishTeam.addEntry(player.getName());
+        if (hasProtocolLib && vanishTeam != null) vanishTeam.addEntry(player.getName());
+        else viewerTeams.update(player, true);
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
 
-        if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
-            player.playerListName(messageManager.parse(configManager.vanishTabPrefix + player.getName(), player));
-        }
+        updatePlayerListName(player);
 
         if (configManager.preventSleeping)
             try {
@@ -1203,8 +1210,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
             }, 20L);
         }
 
-        if (voiceChatHook != null)
-            voiceChatHook.updateVanishState(player, true);
         integrationManager.updateHooks(player, true);
         if (integrationManager.getStatusbot() != null)
             integrationManager.getStatusbot().refreshStatus();
@@ -1260,12 +1265,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void removeVanishEffects(Player player) {
         vanishedPlayers.remove(player.getUniqueId());
+        messageRecipients.forget(player.getUniqueId());
+        viewerTeams.update(player, false);
         try {
             player.setSleepingIgnored(false);
         } catch (Throwable ignored) {
         }
         player.removeMetadata("vanished", this);
-        player.playerListName(null);
+        updatePlayerListName(player);
 
         if (vanishTeam != null && vanishTeam.hasEntry(player.getName()))
             vanishTeam.removeEntry(player.getName());
@@ -1338,8 +1345,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         player.removeMetadata("vanishpp_pre_vanish_fly", this);
 
-        if (voiceChatHook != null)
-            voiceChatHook.updateVanishState(player, false);
         integrationManager.updateHooks(player, false);
         if (integrationManager.getStatusbot() != null)
             integrationManager.getStatusbot().refreshStatus();
@@ -1493,7 +1498,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         String notification = template.replace("%player%", subject.getName()).replace("%staff%", executor.getName());
         Component comp = messageManager.parse(notification, subject);
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (permissionManager.hasPermission(p, "vanishpp.see"))
+            if (permissionManager.canReceiveStaffNotice(p, subject))
                 p.sendMessage(comp);
         }
         Bukkit.getConsoleSender().sendMessage(comp);
@@ -1573,11 +1578,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (!isVanished(player)) return;
 
         // Team + prefix
-        if (vanishTeam != null) vanishTeam.addEntry(player.getName());
+        if (hasProtocolLib && vanishTeam != null) vanishTeam.addEntry(player.getName());
+        else viewerTeams.update(player, true);
         refreshTeamPrefix();
-        if (configManager.vanishTabPrefix != null && !configManager.vanishTabPrefix.isEmpty()) {
-            player.playerListName(messageManager.parse(configManager.vanishTabPrefix + player.getName(), player));
-        }
+        updatePlayerListName(player);
 
         // Metadata
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
@@ -1683,6 +1687,34 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public WebhookManager getWebhookManager() {
         return webhookManager;
+    }
+
+    public String setIncognitoName(Player player, String name) {
+        UUID uuid = player.getUniqueId();
+        String previous = incognitoNames.get(uuid);
+        if (name == null) {
+            incognitoNames.remove(uuid);
+            OriginalIdentity original = originalIdentities.remove(uuid);
+            if (original != null) {
+                player.displayName(original.display());
+                player.playerListName(original.tab());
+            } else updatePlayerListName(player);
+        } else {
+            originalIdentities.putIfAbsent(uuid, new OriginalIdentity(player.displayName(), player.playerListName()));
+            incognitoNames.put(uuid, name);
+            player.displayName(Component.text(name));
+            updatePlayerListName(player);
+        }
+        if (tabPluginHook != null) tabPluginHook.update(player, isVanished(player));
+        return previous;
+    }
+
+    public void updatePlayerListName(Player player) {
+        String alias = incognitoNames.get(player.getUniqueId());
+        Component name = Component.text(alias == null ? player.getName() : alias);
+        if (isVanished(player) && configManager.vanishTabPrefix != null)
+            name = messageManager.parse(configManager.vanishTabPrefix, player).append(name);
+        player.playerListName(name);
     }
 
     public boolean isIncognito(Player player) {
