@@ -1656,7 +1656,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         changeVanish(player, executor, hidden, reason, messages, accepted -> {});
     }
 
-    /** Completes on the player's owner after acceptance; retired requests complete with false. */
+    /** Completes on the player's owner after execution; unavailable requests complete false on the rejection/retirement thread. */
     public void requestVanish(Player player, CommandSender executor, boolean hidden, String reason,
                               java.util.function.Consumer<Boolean> completed) {
         changeVanish(player, executor, hidden, reason, TransitionMessages.FULL, completed);

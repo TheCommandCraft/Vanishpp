@@ -77,6 +77,8 @@ public class MobAiManager implements Listener {
         });
         java.util.Map<ChunkWork, List<MobWork>> batches = new java.util.HashMap<>();
         for (int work = 0; work < ENTITY_WORK_PER_TICK; work++) {
+            // Hold admission capacity until owner work settles, including across stalled chunks.
+            if (inFlight.size() >= ENTITY_WORK_PER_TICK) break;
             if (!currentTargets.hasNext()) {
                 if (currentPlayer != null) requested.remove(currentPlayer);
                 currentPlayer = requests.poll();
@@ -127,28 +129,45 @@ public class MobAiManager implements Listener {
         plugin.getVanishScheduler().runRegion(region.world(), region.x(), region.z(), () -> {
             java.util.Queue<MobWork> queue = regionWork.get(region);
             if (queue == null) return;
-            for (int count = 0; count < ENTITY_WORK_PER_TICK; count++) {
-                MobWork work = queue.poll();
-                if (work == null) break;
-                Mob mob = work.handle().mob().get();
-                if (mob == null) { forget(work.handle().id()); continue; }
-                Runnable apply = () -> {
+            try {
+                for (int count = 0; count < ENTITY_WORK_PER_TICK; count++) {
+                    MobWork work = queue.poll();
+                    if (work == null) break;
+                    Mob mob = work.handle().mob().get();
+                    if (mob == null) { retireWork(work.handle().id()); continue; }
+                    Runnable apply = () -> {
+                        try {
+                            if (!mob.isValid()) { forget(work.handle().id()); return; }
+                            if (work.target() == null) watch(mob); else clearTargetOwned(mob, work.target());
+                        } catch (RuntimeException failure) {
+                            failedWork(region, work, failure);
+                        } finally { inFlight.remove(work.handle().id()); }
+                    };
                     try {
-                        if (!mob.isValid()) { forget(work.handle().id()); return; }
-                        if (work.target() == null) watch(mob); else clearTargetOwned(mob, work.target());
-                    } finally { inFlight.remove(work.handle().id()); }
-                };
-                if (!plugin.getVanishScheduler().regionThreaded() || plugin.getVanishScheduler().owns(mob)) apply.run();
-                else plugin.getVanishScheduler().runEntity(mob, apply, () -> forget(work.handle().id()));
+                        if (!plugin.getVanishScheduler().regionThreaded() || plugin.getVanishScheduler().owns(mob)) apply.run();
+                        else plugin.getVanishScheduler().runEntity(mob, apply, () -> retireWork(work.handle().id()));
+                    } catch (RuntimeException failure) {
+                        try { failedWork(region, work, failure); }
+                        finally { inFlight.remove(work.handle().id()); }
+                    }
+                }
+            } finally {
+                var again = new java.util.concurrent.atomic.AtomicBoolean();
+                regionWork.computeIfPresent(region, (key, pending) -> {
+                    if (pending.isEmpty()) return null;
+                    again.set(true);
+                    return pending;
+                });
+                if (again.get()) scheduleRegion(region);
             }
-            var again = new java.util.concurrent.atomic.AtomicBoolean();
-            regionWork.computeIfPresent(region, (key, pending) -> {
-                if (pending.isEmpty()) return null;
-                again.set(true);
-                return pending;
-            });
-            if (again.get()) scheduleRegion(region);
         });
+    }
+
+    private void failedWork(ChunkWork region, MobWork work, RuntimeException failure) {
+        forget(work.handle().id());
+        plugin.getLogger().log(java.util.logging.Level.WARNING, "Mob " + work.handle().id()
+                + " failed during " + (work.target() == null ? "initialization" : "target cleanup")
+                + " in " + region.world().getUID() + " chunk " + region.x() + "," + region.z(), failure);
     }
 
     private MobHandle handle(Mob mob) {
@@ -176,9 +195,13 @@ public class MobAiManager implements Listener {
     }
 
     private void forget(java.util.UUID mob) {
-        inFlight.remove(mob);
         handles.remove(mob);
         removeTarget(mob);
+    }
+
+    private void retireWork(java.util.UUID mob) {
+        forget(mob);
+        inFlight.remove(mob);
     }
 
     private void removeTarget(java.util.UUID mob) {
@@ -249,7 +272,11 @@ public class MobAiManager implements Listener {
         chunks.removeIf(chunk -> chunk.world().equals(world));
         initializing.removeIf(initial -> initial.region().world().equals(world));
         deferredInitialization.removeIf(handle -> handle.region().world().equals(world));
-        regionWork.entrySet().removeIf(entry -> entry.getKey().world().equals(world));
+        regionWork.entrySet().removeIf(entry -> {
+            if (!entry.getKey().world().equals(world)) return false;
+            entry.getValue().forEach(work -> retireWork(work.handle().id()));
+            return true;
+        });
         handles.forEach((uuid, handle) -> { if (handle.region().world().equals(world)) forget(uuid); });
     }
     /**

@@ -22,6 +22,11 @@ public interface VanishScheduler {
         return () -> active.set(false);
     }
 
+    /**
+     * Runs on the entity owner or settles retirement exactly once. Rejection before scheduling
+     * calls retired on the caller thread; later retirement uses the scheduler's retirement thread.
+     * Retirement callbacks must limit themselves to thread-safe cleanup or scheduling new work.
+     */
     void runEntity(Entity entity, Runnable runnable, Runnable retired);
 
     /** Like runEntity, but runs right away when the current thread already owns the entity. */

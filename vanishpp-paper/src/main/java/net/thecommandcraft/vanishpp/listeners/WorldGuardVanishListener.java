@@ -39,9 +39,10 @@ public class WorldGuardVanishListener implements Listener {
         if (!plugin.isVanished(player)
                 && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")
                 && hook.isForceVanish(player)) {
-            plugin.vanishPlayer(player, player, "force-vanish region");
-            plugin.getMessageManager().sendMessage(player,
-                    plugin.getConfigManager().getLanguageManager().getMessage("worldguard.force-vanished"));
+            plugin.requestVanish(player, player, true, "force-vanish region", accepted -> {
+                if (accepted) plugin.getMessageManager().sendMessage(player,
+                        plugin.getConfigManager().getLanguageManager().getMessage("worldguard.force-vanished"));
+            });
         }
     }
 }

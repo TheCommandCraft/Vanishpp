@@ -514,7 +514,7 @@ public class ProxyBridge implements PluginMessageListener {
                 }
             } finally { flushing.set(false); }
             if (!pendingPackets.isEmpty() && !outboundSuspended && !retryScheduled.get())
-                plugin.getVanishScheduler().runLaterEntity(carrier, () -> flushPendingPackets(carrier), 1L);
+                scheduleDrain(1L);
         };
         if (plugin.getVanishScheduler().owns(carrier)) flush.run();
         else plugin.getVanishScheduler().runEntity(carrier, flush, () -> {
@@ -523,16 +523,20 @@ public class ProxyBridge implements PluginMessageListener {
     }
 
     private void scheduleSendRetry() {
+        long delay = Math.min(MAX_SEND_RETRY_TICKS, SEND_RETRY_TICKS << Math.max(0, Math.min(consecutiveSendFailures - 1, 3)));
+        scheduleDrain(delay);
+    }
+
+    private void scheduleDrain(long delayTicks) {
         if (!retryScheduled.compareAndSet(false, true)) return;
         long generation = sendGeneration;
-        long delay = Math.min(MAX_SEND_RETRY_TICKS, SEND_RETRY_TICKS << Math.max(0, Math.min(consecutiveSendFailures - 1, 3)));
         plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (generation != sendGeneration) return;
             retryScheduled.set(false);
             if (!active || outboundSuspended) return;
             Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
             if (carrier != null) flushPendingPackets(carrier);
-        }, delay);
+        }, delayTicks);
     }
 
     private String resolveServerName() {
