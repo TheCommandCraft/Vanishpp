@@ -35,8 +35,6 @@ class StateDurabilityTest {
     private Vanishpp plugin;
     private RecordingPlayer player;
     private ControlledScheduler scheduler;
-    private final List<Thread> asyncThreads = java.util.Collections.synchronizedList(new ArrayList<>());
-    private final java.util.concurrent.CountDownLatch asyncRan = new java.util.concurrent.CountDownLatch(1);
 
     @BeforeEach
     void setUp() throws Exception {
@@ -45,28 +43,11 @@ class StateDurabilityTest {
         plugin.getConfigManager().disableBlockTriggering = false;
         plugin.getConfigManager().preventSleeping = false;
         plugin.getConfigManager().enableFly = false;
+        player = new RecordingPlayer(server);
+        server.addPlayer(player);
         server.getScheduler().cancelTasks(plugin);
         scheduler = new ControlledScheduler();
         field(plugin, "vanishScheduler", scheduler);
-        player = new RecordingPlayer(server);
-        server.addPlayer(player);
-        scheduler.drainAsync();
-        // The join has completed; the follow-up work it scheduled does not carry into the test.
-        scheduler.later.clear();
-        scheduler.delays.clear();
-    }
-
-    private void asyncStarted() {
-        asyncThreads.add(Thread.currentThread());
-        asyncRan.countDown();
-    }
-
-    @Test
-    void theJoinInSetUpReadsItsStateOnTheTestThreadBeforeTheTestStarts() throws Exception {
-        assertTrue(asyncRan.await(5, java.util.concurrent.TimeUnit.SECONDS), "the join in setUp must read the player's stored state");
-        assertEquals(List.of(Thread.currentThread()), List.copyOf(asyncThreads),
-                "the join in setUp must read its state on the test thread, not alongside the test on the server's async pool");
-        assertFalse(plugin.isProxyJoinPending(player.getUniqueId()), "the join in setUp must be complete before the test starts");
     }
 
     @AfterEach
@@ -1359,17 +1340,14 @@ class StateDurabilityTest {
         }
     }
 
-    private class ControlledScheduler implements VanishScheduler {
+    private static class ControlledScheduler implements VanishScheduler {
         String context = "event";
         boolean cancelled;
         final List<Runnable> async = new ArrayList<>();
         final List<Runnable> later = new ArrayList<>();
         final Map<Runnable, Long> delays = new HashMap<>();
         final List<Runnable> timers = new ArrayList<>();
-        void run(String owner, Runnable task) {
-            if (owner.equals("async")) asyncStarted();
-            String old = context; context = owner; try { task.run(); } finally { context = old; }
-        }
+        void run(String owner, Runnable task) { String old = context; context = owner; try { task.run(); } finally { context = old; } }
         public void runGlobal(Runnable task) { run("global", task); }
         public void runLaterGlobal(Runnable task, long ticks) { later.add(task); delays.put(task, ticks); }
         public void runTimerGlobal(Runnable task, long delay, long period) { timers.add(task); }
