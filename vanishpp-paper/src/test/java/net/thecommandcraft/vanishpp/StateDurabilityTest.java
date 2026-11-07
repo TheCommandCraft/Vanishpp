@@ -116,6 +116,27 @@ class StateDurabilityTest {
     }
 
     @Test
+    void delayedProxyMessageCannotUndoANewerRevision() throws Exception {
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        for (String name : List.of("active", "helloSent", "handshakeComplete", "proxyDetected")) {
+            var field = ProxyBridge.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(bridge, true);
+        }
+        String payload = "{\"uuid\":\"" + player.getUniqueId() + "\",\"session\":\"proxy-session\",";
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.VANISH_SYNC,
+                        payload + "\"revision\":2,\"vanished\":true}"));
+        assertTrue(plugin.isVanished(player), "newer network revision must apply");
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.VANISH_SYNC,
+                        payload + "\"revision\":1,\"vanished\":false}"));
+        assertTrue(plugin.isVanished(player), "delayed proxy revision must not unvanish a newer hidden state");
+    }
+
+    @Test
     void cancellingDelayedUnvanishNeverRemovesEquippedArmour() {
         plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.nightvision");
         ItemStack[] armour = {new ItemStack(Material.DIAMOND_BOOTS), new ItemStack(Material.DIAMOND_LEGGINGS),
