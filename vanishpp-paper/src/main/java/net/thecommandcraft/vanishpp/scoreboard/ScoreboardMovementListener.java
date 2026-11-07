@@ -26,6 +26,7 @@ class ScoreboardMovementListener {
                                Map<UUID, Long> cooldowns,
                                long cooldownMs,
                                Consumer<Player> tickCallback) {
+        var scheduler = plugin.getVanishScheduler();
         this.adapter = new PacketAdapter(plugin,
                 PacketType.Play.Client.POSITION,
                 PacketType.Play.Client.POSITION_LOOK) {
@@ -40,7 +41,7 @@ class ScoreboardMovementListener {
                 cooldowns.put(uuid, now);
 
                 Player player = event.getPlayer();
-                plugin.getVanishScheduler().runEntityNow(player, () -> {
+                scheduler.runEntityNow(player, () -> {
                     if (player.isOnline()) tickCallback.accept(player);
                 });
             }
