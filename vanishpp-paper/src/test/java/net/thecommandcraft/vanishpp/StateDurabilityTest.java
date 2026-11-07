@@ -242,6 +242,10 @@ class StateDurabilityTest {
         for (String next; (next = observer.nextMessage()) != null; ) received.append(next).append('\n');
         assertFalse(received.toString().contains("fake-"), "the released join must not be preceded by fake announcements: " + received);
         assertTrue(received.toString().contains("joined"), "the withheld join announcement must be sent once the join completes: " + received);
+        plugin.vanishPlayer(player, player);
+        assertEquals("fake-quit " + player.getName(), observer.nextMessage(), "vanishing after the join completes must announce a fake quit");
+        plugin.unvanishPlayer(player, player);
+        assertEquals("fake-join " + player.getName(), observer.nextMessage(), "unvanishing after the join completes must announce a fake join");
     }
 
     @Test
