@@ -123,6 +123,119 @@ class StateDurabilityTest {
         scheduler.drainAsync();
         assertTrue(observer.canSee(player), "a successful read must reveal a player stored as visible");
         assertFalse(plugin.isVanished(player));
+        scheduler.drainAsync();
+        verify(storage, never()).setVanished(eq(player.getUniqueId()), anyBoolean());
+    }
+
+    @Test
+    void recoveredAutoVanishHidesAHeldPlayerWithoutShowingThem() throws Exception {
+        WatchingPlayer observer = new WatchingPlayer(server);
+        server.addPlayer(observer);
+        observer.setOp(false);
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        when(storage.getAutoVanishOnJoin(player.getUniqueId())).thenReturn(true);
+        field(plugin, "storageProvider", storage);
+        plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.vanish");
+        login();
+        observer.shown.clear();
+        scheduler.drainAsync();
+        assertTrue(plugin.isVanished(player), "auto-vanish must apply once the stored preference can be read");
+        assertFalse(observer.shown.contains(player.getUniqueId()), "a held auto-vanishing player must never be shown");
+        assertFalse(observer.canSee(player));
+    }
+
+    @Test
+    void manualUnvanishDuringTheHoldIsNotUndoneByRecoveredAutoVanish() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        when(storage.getAutoVanishOnJoin(player.getUniqueId())).thenReturn(true);
+        field(plugin, "storageProvider", storage);
+        plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.vanish");
+        login();
+        plugin.removeVanishEffects(player);
+        scheduler.drainAsync();
+        assertFalse(plugin.isVanished(player), "a choice made during the hold must outrank the recovered auto-vanish preference");
+    }
+
+    @Test
+    void proxySnapshotsDoNotLiftTheHoldWhileTheLoginReadFails() throws Exception {
+        PlayerMock observer = server.addPlayer();
+        observer.setOp(false);
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.getAutoVanishOnJoin(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        field(plugin, "storageProvider", storage);
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        for (String name : List.of("active", "helloSent", "handshakeComplete", "proxyDetected")) {
+            var field = ProxyBridge.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(bridge, true);
+        }
+        field(plugin, "proxyBridge", bridge);
+        login();
+        var query = player.packets.stream().filter(packet -> packet.type()
+                == net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_QUERY).findFirst().orElseThrow();
+        var reply = new com.google.gson.JsonObject();
+        reply.add("vanished", new com.google.gson.JsonArray());
+        reply.addProperty("requestId", com.google.gson.JsonParser.parseString(query.jsonPayload())
+                .getAsJsonObject().get("requestId").getAsString());
+        reply.addProperty("joiningUuid", player.getUniqueId().toString());
+        reply.addProperty("joiningVanished", false);
+        reply.addProperty("session", "proxy-session");
+        reply.addProperty("revision", 0);
+        stateResponse(bridge, reply);
+        var snapshot = new com.google.gson.JsonObject();
+        snapshot.add("vanished", new com.google.gson.JsonArray());
+        snapshot.addProperty("authoritative", true);
+        snapshot.addProperty("session", "proxy-session");
+        snapshot.addProperty("revision", 1);
+        stateResponse(bridge, snapshot);
+        assertFalse(observer.canSee(player), "a proxy snapshot must not lift the hold while the stored state is unknown");
+        scheduler.drainAsync();
+        assertTrue(observer.canSee(player), "the hold lifts once the stored state is read");
+    }
+
+    @Test
+    void deniedAndAbandonedLoginsForgetTheirFailedRead() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId())).thenThrow(new IllegalStateException("unavailable"));
+        field(plugin, "storageProvider", storage);
+        PlayerListener listener = new PlayerListener(plugin);
+        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
+        var login = new org.bukkit.event.player.PlayerLoginEvent(player, "localhost", InetAddress.getLoopbackAddress());
+        login.disallow(org.bukkit.event.player.PlayerLoginEvent.Result.KICK_WHITELIST, Component.text("whitelist"));
+        for (var method : PlayerListener.class.getMethods())
+            if (method.isAnnotationPresent(org.bukkit.event.EventHandler.class)
+                    && Arrays.equals(method.getParameterTypes(), new Class<?>[]{login.getClass()}))
+                method.invoke(listener, login);
+        Set<?> unread = listenerField(listener, "unreadJoins");
+        assertFalse(unread.contains(player.getUniqueId()), "a denied login must not keep its failed read");
+        UUID abandoned = UUID.randomUUID();
+        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent("Gone", InetAddress.getLoopbackAddress(), abandoned));
+        assertTrue(unread.contains(abandoned), "a failed read is kept for the join that follows");
+        Map<UUID, Long> attempts = listenerField(listener, "loginAttempts");
+        attempts.put(abandoned, System.nanoTime() - java.util.concurrent.TimeUnit.MINUTES.toNanos(10));
+        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
+        assertFalse(unread.contains(abandoned), "an attempt that never joined must be forgotten");
+    }
+
+    private static void stateResponse(ProxyBridge bridge, com.google.gson.JsonObject json) {
+        bridge.onPluginMessageReceived("vanishpp:proxy", null, net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_RESPONSE, json.toString()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T listenerField(PlayerListener listener, String name) throws Exception {
+        Field field = PlayerListener.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return (T) field.get(listener);
     }
 
     @Test
@@ -1122,6 +1235,15 @@ class StateDurabilityTest {
             teleports++;
             lastDestination = location.clone();
             return CompletableFuture.completedFuture(true);
+        }
+    }
+
+    private static class WatchingPlayer extends PlayerMock {
+        final List<UUID> shown = new ArrayList<>();
+        WatchingPlayer(ServerMock server) { super(server, "Watcher"); }
+        @Override public void showPlayer(org.bukkit.plugin.Plugin source, org.bukkit.entity.Player subject) {
+            shown.add(subject.getUniqueId());
+            super.showPlayer(source, subject);
         }
     }
 
