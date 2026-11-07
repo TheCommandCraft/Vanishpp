@@ -651,6 +651,24 @@ class HardeningTest {
                 () -> assertFalse(player.isInvisible(), "duplicate queued unvanish must remove invisibility"),
                 () -> assertFalse(player.hasMetadata("vanished"), "unvanish must clear applied metadata"),
                 () -> assertEquals(List.of(true, false), listener.posts, "queued duplicates must emit exactly one post per change"));
+        var guard = new java.util.concurrent.atomic.AtomicBoolean();
+        PlayerMock observer = new PlayerMock(server, "SnapshotObserver") {
+            @Override public boolean hasPermission(String permission) {
+                if (guard.get() && !scheduler.owns(this)) throw new AssertionError("live permission read outside observer owner");
+                return super.hasPermission(permission);
+            }
+        };
+        server.addPlayer(observer); observer.setOp(true); guard.set(true);
+        state().add(player.getUniqueId());
+        scheduler.run("global", plugin.voiceAudience::refresh); scheduler.drainEntities();
+        scheduler.run("global", () -> assertTrue(plugin.getPermissionManager().canSee(observer, player), "other regions must use published permission and level facts"));
+        plugin.voiceAudience.invalidate(observer.getUniqueId());
+        scheduler.run("global", () -> assertFalse(plugin.getPermissionManager().canSee(observer, player), "missing cross-region facts must fail closed until capture completes"));
+        scheduler.run("global", plugin.voiceAudience::refresh);
+        scheduler.run("global", () -> assertFalse(plugin.getPermissionManager().canSee(observer, player), "queued permission capture must not publish early"));
+        scheduler.drainEntities();
+        scheduler.run("global", () -> assertTrue(plugin.getPermissionManager().canSee(observer, player), "completed owner capture must restore authorized cross-region visibility"));
+        guard.set(false);
     }
 
     @Test
