@@ -84,6 +84,7 @@ class HardeningTest {
         server.addPlayer(player);
         server.getScheduler().cancelTasks(plugin);
         scheduler = new ControlledScheduler();
+        scheduler.owner = player;
         field(plugin, "vanishScheduler", scheduler);
     }
 
@@ -302,6 +303,10 @@ class HardeningTest {
         try { plugin.getVanishScoreboard().show(player); }
         catch (RuntimeException ignored) { /* The assertion concerns entering the unsupported API, not MockBukkit's renderer. */ }
         assertEquals(0, scoreboardAccesses, "Folia must avoid unsupported scoreboard API calls");
+        invoke(plugin, "setupTeams");
+        plugin.viewerTeams.update(player, true);
+        plugin.viewerTeams.refresh();
+        assertEquals(0, scoreboardAccesses, "Folia startup and private overlays must also avoid scoreboard API");
     }
 
     @Test
@@ -367,6 +372,9 @@ class HardeningTest {
         plugin.vanishPlayer(player, player);
         scheduler.drainAsync();
         assertTrue(plugin.getStorageProvider().getAllHistory(1, 100).isEmpty(), "disabled history must not append a transition");
+        plugin.getConfigManager().getConfig().set("vanish-history.enabled", true);
+        plugin.unvanishPlayer(player, player); scheduler.drainAsync();
+        assertEquals(1, plugin.getStorageProvider().getAllHistory(1, 100).size(), "enabled history must still record transitions");
     }
 
     @Test
@@ -440,6 +448,9 @@ class HardeningTest {
         var event = new EntityTargetEvent(mock(Mob.class), player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
         new PlayerListener(plugin).onMobTarget(event);
         assertFalse(event.isCancelled(), "disable-mob-targeting false must disable targeting prevention");
+        plugin.getConfigManager().disableMobTarget = true;
+        new PlayerListener(plugin).onMobTarget(event);
+        assertTrue(event.isCancelled(), "enabled mob protection must still reject targets");
     }
 
     @Test
@@ -451,6 +462,9 @@ class HardeningTest {
                 io.papermc.paper.chat.ChatRenderer.defaultRenderer(), Component.text("probe"), Component.text("probe"), null);
         new PlayerListener(plugin).onChat(event);
         assertFalse(event.isCancelled(), "prevent-accidental-chat false must disable chat confirmation blocking");
+        plugin.getConfigManager().preventAccidentalChat = true;
+        new PlayerListener(plugin).onChat(event);
+        assertTrue(event.isCancelled(), "enabled accidental-chat protection must still block the first attempt");
     }
 
     @Test
@@ -473,6 +487,9 @@ class HardeningTest {
         doAnswer(call -> { suppressed.set(true); return null; }).when(event).message(null);
         new PlayerListener(plugin).onAdvancement(event);
         assertFalse(suppressed.get(), "hide-announcements.advancements false must preserve the announcement");
+        plugin.getConfigManager().hideAdvancements = true;
+        new PlayerListener(plugin).onAdvancement(event);
+        assertTrue(suppressed.get(), "enabled advancement hiding must still suppress the announcement");
     }
 
     @Test
@@ -610,6 +627,186 @@ class HardeningTest {
         assertTrue(messages().contains("offline-evidence"), "history must resolve an offline identity without the transient player-name cache");
     }
 
+    @Test
+    void queuedDuplicateNetworkUpdatesApplyEffectsAndPostExactlyOnce() {
+        TransitionListener listener = new TransitionListener();
+        server.getPluginManager().registerEvents(listener, plugin);
+        scheduler.queueOffOwner = true;
+        scheduler.run("global", () -> {
+            plugin.handleNetworkVanishSync(player.getUniqueId(), true);
+            plugin.handleNetworkVanishSync(player.getUniqueId(), true);
+        });
+        assertFalse(scheduler.entities.isEmpty(), "off-owner effects must actually be queued");
+        scheduler.drainEntities();
+        boolean invisible = player.isInvisible();
+        scheduler.run("global", () -> {
+            plugin.handleNetworkVanishSync(player.getUniqueId(), false);
+            plugin.handleNetworkVanishSync(player.getUniqueId(), false);
+        });
+        scheduler.drainEntities();
+        assertAll(
+                () -> assertTrue(invisible, "duplicate queued vanish must apply invisibility"),
+                () -> assertFalse(player.isInvisible(), "duplicate queued unvanish must remove invisibility"),
+                () -> assertFalse(player.hasMetadata("vanished"), "unvanish must clear applied metadata"),
+                () -> assertEquals(List.of(true, false), listener.posts, "queued duplicates must emit exactly one post per change"));
+    }
+
+    @Test
+    void cancelledCommandsDoNotEnterSpectatorOrReportAcceptedTargets() {
+        player.setOp(true);
+        PlayerMock target = server.addPlayer("CommandTarget");
+        TransitionListener listener = new TransitionListener(); listener.cancelVanish = true;
+        server.getPluginManager().registerEvents(listener, plugin);
+        clearMessages();
+        player.performCommand("vspec " + target.getName());
+        boolean spectator = player.getGameMode() == GameMode.SPECTATOR;
+        boolean follow = plugin.spectateFollowTargets.containsKey(player.getUniqueId());
+        String specMessages = messages();
+        plugin.getConfigManager().vanishedOtherMessage = "accepted-target";
+        player.performCommand("vanish " + target.getName());
+        String targetMessages = messages();
+        player.performCommand("vanish all");
+        String bulkMessages = messages();
+        String zero = PlainTextComponentSerializer.plainText().serialize(plugin.getMessageManager().parse(
+                plugin.getLanguageManager().getMessage("bulk.vanished-all").replace("%count%", "0"), player));
+        assertAll(
+                () -> assertFalse(spectator || follow || plugin.spectateOrigins.containsKey(player.getUniqueId()), "vetoed spectate must not change mode, origin or follow state"),
+                () -> assertFalse(specMessages.contains(target.getName()), "vetoed spectate must not report success"),
+                () -> assertFalse(targetMessages.contains("accepted-target"), "vetoed target command must not report success"),
+                () -> assertTrue(bulkMessages.contains(zero), "bulk count must include only accepted transitions"));
+    }
+
+    @Test
+    void followContinuesAfterUnvanishOnlyForSpectatorBypass() {
+        var teleports = new java.util.concurrent.atomic.AtomicInteger();
+        PlayerMock follower = new PlayerMock(server, "BypassFollower") {
+            @Override public java.util.concurrent.CompletableFuture<Boolean> teleportAsync(Location location) {
+                teleports.incrementAndGet(); return java.util.concurrent.CompletableFuture.completedFuture(true);
+            }
+        };
+        server.addPlayer(follower); follower.setOp(true);
+        var bypass = follower.addAttachment(plugin, "vanishpp.spectator.bypass", true);
+        var follow = new net.thecommandcraft.vanishpp.commands.VanishFollowCommand(plugin);
+        scheduler.runEntityNow(follower, () -> {
+            plugin.vanishPlayer(follower, follower);
+            follow.onCommand(follower, plugin.getCommand("vfollow"), "vfollow", new String[]{player.getName()});
+            plugin.unvanishPlayer(follower, follower);
+        });
+        int before = teleports.get(); scheduler.fireTimers();
+        boolean continued = teleports.get() > before;
+        bypass.setPermission("vanishpp.spectator.bypass", false);
+        scheduler.runEntityNow(follower, () -> {
+            plugin.vanishPlayer(follower, follower);
+            plugin.unvanishPlayer(follower, follower);
+        });
+        int stopped = teleports.get(); scheduler.fireTimers();
+        assertAll(
+                () -> assertTrue(continued, "spectator bypass must preserve following after unvanish"),
+                () -> assertEquals(stopped, teleports.get(), "ordinary unvanish must stop following"),
+                () -> assertFalse(plugin.spectateFollowTargets.containsKey(follower.getUniqueId())));
+    }
+
+    @Test
+    void mobCleanupIsBoundedAndEventuallyDrainsRepeatedRequests() {
+        MobAiManager manager = new MobAiManager(plugin); manager.register();
+        var cleared = new java.util.concurrent.atomic.AtomicInteger();
+        List<Mob> mobs = new ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            Mob mob = mock(Mob.class, RETURNS_DEEP_STUBS); mobs.add(mob);
+            when(mob.getUniqueId()).thenReturn(UUID.randomUUID()); when(mob.isValid()).thenReturn(true);
+            var target = new AtomicReference<org.bukkit.entity.LivingEntity>(player);
+            when(mob.getTarget()).thenAnswer(call -> target.get());
+            doAnswer(call -> { if (target.getAndSet(null) != null) cleared.incrementAndGet(); return null; }).when(mob).setTarget(null);
+            manager.onTarget(new EntityTargetEvent(mob, player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER));
+        }
+        state().add(player.getUniqueId());
+        for (int i = 0; i < 20; i++) manager.clearTargets(player);
+        int immediate = cleared.get();
+        for (int i = 0; i < 30; i++) {
+            int before = cleared.get(); scheduler.fireTimers();
+            assertTrue(cleared.get() - before <= 64, "mob cleanup must process at most its 64-entity tick budget");
+        }
+        assertAll(
+                () -> assertTrue(immediate <= 64, "transition requests must not synchronously scan all 300 mobs"),
+                () -> assertEquals(300, cleared.get(), "bounded cleanup must eventually clear every tracked target"));
+    }
+
+    @Test
+    void removedMobsLeaveNoTargetIndexWithoutDeathOrChunkUnload() throws Exception {
+        MobAiManager manager = new MobAiManager(plugin);
+        server.getPluginManager().registerEvents(manager, plugin);
+        Mob mob = mock(Mob.class); when(mob.getUniqueId()).thenReturn(UUID.randomUUID());
+        manager.onTarget(new EntityTargetEvent(mob, player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER));
+        var index = MobAiManager.class.getDeclaredField("mobTargets"); index.setAccessible(true);
+        assertEquals(1, ((Map<?, ?>) index.get(manager)).size(), "target control must enter the index");
+        server.getPluginManager().callEvent(new com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent(mob, player.getWorld()));
+        server.getPluginManager().callEvent(new com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent(mob, player.getWorld()));
+        assertTrue(((Map<?, ?>) index.get(manager)).isEmpty(), "removal without death must idempotently retire the target index");
+    }
+
+    @Test
+    void olderSqlLoadCannotOverwriteANewerPublishedRestriction() throws Exception {
+        SqlStorage storage = mock(SqlStorage.class); field(plugin, "storageProvider", storage);
+        var rules = new AtomicReference<Map<String, Object>>(Map.of(RuleManager.CAN_CHAT, true));
+        when(storage.getRecoveryRules(player.getUniqueId())).thenAnswer(call -> rules.get());
+        var first = new java.util.concurrent.atomic.AtomicBoolean(true);
+        when(storage.getRecoveryVanishLevel(player.getUniqueId())).thenAnswer(call -> {
+            if (first.getAndSet(false)) {
+                rules.set(Map.of(RuleManager.CAN_CHAT, false));
+                plugin.getPlayerData().load(player.getUniqueId());
+            }
+            return 1;
+        });
+        scheduler.run("async", () -> plugin.getPlayerData().load(player.getUniqueId()));
+        assertFalse(plugin.getRuleManager().getRule(player, RuleManager.CAN_CHAT), "an older SQL completion must not overwrite a newer restriction");
+    }
+
+    @Test
+    void proxyTransientSendFailureBacksOffAndRecoversInOrder() throws Exception {
+        proxyFailure(false);
+    }
+
+    @Test
+    void proxyPermanentSendFailureStopsRetryingAndReportsCause() throws Exception {
+        proxyFailure(true);
+    }
+
+    private void proxyFailure(boolean permanent) throws Exception {
+        player.disconnect();
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var delivered = new ArrayList<String>();
+        var logs = new ArrayList<String>();
+        PlayerMock carrier = new PlayerMock(server, "FailureCarrier") {
+            @Override public void sendPluginMessage(org.bukkit.plugin.Plugin source, String channel, byte[] message) {
+                int attempt = attempts.incrementAndGet();
+                if (permanent) throw new IllegalArgumentException("invalid-packet-probe");
+                if (attempt == 1) throw new IllegalStateException("temporary-carrier-probe");
+                delivered.add(net.thecommandcraft.vanishpp.common.protocol.VppPacket.decode(message).jsonPayload());
+            }
+        };
+        server.addPlayer(carrier);
+        var handler = new java.util.logging.Handler() {
+            public void publish(java.util.logging.LogRecord record) { logs.add(record.getMessage()); }
+            public void flush() {}
+            public void close() {}
+        };
+        plugin.getLogger().addHandler(handler);
+        try {
+            plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+            var bridge = new net.thecommandcraft.vanishpp.proxy.ProxyBridge(plugin); bridge.init(); scheduler.later.clear();
+            bridge.sendPacket(net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_QUERY, "first"));
+            int afterFailure = attempts.get();
+            bridge.sendPacket(net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_QUERY, "second"));
+            int beforeRetry = attempts.get();
+            for (int i = 0; i < 12; i++) scheduler.delayedPass();
+            assertAll(
+                    () -> assertEquals(afterFailure, beforeRetry, "new packets must not bypass a failed-send backoff or suspension"),
+                    () -> assertTrue(logs.stream().anyMatch(message -> message.contains(permanent ? "invalid-packet-probe" : "temporary-carrier-probe")), "proxy send failures must report their cause"),
+                    () -> { if (permanent) assertEquals(1, attempts.get(), "permanent failure must not retry forever");
+                        else assertEquals(List.of("first", "second"), delivered, "transient recovery must preserve packet order"); });
+        } finally { plugin.getLogger().removeHandler(handler); }
+    }
+
     private InventoryClickEvent click(int slot) {
         return new InventoryClickEvent(player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
                 slot, ClickType.LEFT, InventoryAction.PICKUP_ALL);
@@ -689,6 +886,8 @@ class HardeningTest {
     private static class ControlledScheduler implements VanishScheduler {
         String context = "entity";
         Entity owner;
+        boolean queueOffOwner;
+        final List<Runnable> entities = new ArrayList<>();
         final List<Runnable> async = new ArrayList<>(), later = new ArrayList<>(), timers = new ArrayList<>();
         final List<Long> periods = new ArrayList<>();
         void run(String owner, Runnable task) { String old = context; context = owner; try { task.run(); } finally { context = old; } }
@@ -699,7 +898,12 @@ class HardeningTest {
             Entity previous = owner; owner = entity;
             try { run("entity", task); } finally { owner = previous; }
         }
-        public void runEntityNow(Entity entity, Runnable task) { runEntity(entity, task, null); }
+        public boolean owns(Entity entity) { return context.equals("entity") && owner == entity; }
+        public void runEntityNow(Entity entity, Runnable task) {
+            if (queueOffOwner && !owns(entity)) entities.add(() -> runEntity(entity, task, null));
+            else runEntity(entity, task, null);
+        }
+        void drainEntities() { while (!entities.isEmpty()) entities.removeFirst().run(); }
         public void runAsync(Runnable task) { async.add(task); }
         public void cancelAllTasks() { later.clear(); timers.clear(); async.clear(); }
         void drainAsync() { while (!async.isEmpty()) run("async", async.removeFirst()); }
