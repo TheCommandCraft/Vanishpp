@@ -97,6 +97,37 @@ class StateDurabilityTest {
     }
 
     @Test
+    void firstCarrierJoinStaysHiddenUntilItsProxyReply() throws Exception {
+        PlayerMock observer = server.addPlayer();
+        observer.setOp(false);
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        for (String name : List.of("active", "helloSent", "handshakeComplete", "proxyDetected")) {
+            var field = ProxyBridge.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(bridge, true);
+        }
+        field(plugin, "proxyBridge", bridge);
+        login();
+        assertFalse(observer.canSee(player), "first carrier must stay hidden until its own proxy state reply");
+        var query = player.packets.stream().filter(packet -> packet.type()
+                == net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_QUERY).findFirst().orElseThrow();
+        var request = com.google.gson.JsonParser.parseString(query.jsonPayload()).getAsJsonObject();
+        var reply = new com.google.gson.JsonObject();
+        reply.add("vanished", new com.google.gson.JsonArray());
+        reply.addProperty("requestId", request.get("requestId").getAsString());
+        reply.addProperty("joiningUuid", player.getUniqueId().toString());
+        reply.addProperty("joiningVanished", false);
+        reply.addProperty("session", "proxy-session");
+        reply.addProperty("revision", 0);
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_RESPONSE, reply.toString()));
+        assertFalse(plugin.isVanished(player), "an authoritative visible reply must release the provisional hide");
+        assertTrue(observer.canSee(player), "confirmed visible player must become visible after the reply");
+    }
+
+    @Test
     void freshEmptyProxySnapshotDoesNotErasePersistedVanish() {
         plugin.getStorageProvider().setVanished(player.getUniqueId(), true);
         plugin.handleNetworkVanishSync(player.getUniqueId(), true);
