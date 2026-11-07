@@ -435,6 +435,7 @@ class StateDurabilityTest {
     @Test
     void warningAcknowledgementLoadsBeforeJoinWarnings() throws Exception {
         plugin.setWarningIgnored(player, true);
+        scheduler.drainAsync();
         plugin.cleanupPlayerCache(player.getUniqueId());
         YamlStorage reopened = new YamlStorage(plugin);
         reopened.init();
@@ -447,6 +448,7 @@ class StateDurabilityTest {
     void reEnablingWarningsRemovesThePersistedAcknowledgement() {
         plugin.setWarningIgnored(player, true);
         plugin.setWarningIgnored(player, false);
+        scheduler.drainAsync();
         assertFalse(plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), "protocol-lib-warning"),
                 "re-enabling warnings must persist the newer preference");
     }
@@ -902,6 +904,7 @@ class StateDurabilityTest {
         // Reusing the same owner has no replacement/close boundary; exercise its normal write path instead.
         if (plugin.getStorageProvider() == old) { plugin.setWarningIgnored(player, true); accepted.set(true); }
         assertTrue(accepted.get(), "the concurrent/new-owner acknowledgement must actually be accepted");
+        scheduler.drainAsync();
         YamlStorage reopened = new YamlStorage(plugin);
         reopened.init();
         assertTrue(reopened.hasAcknowledged(player.getUniqueId(), "protocol-lib-warning"),

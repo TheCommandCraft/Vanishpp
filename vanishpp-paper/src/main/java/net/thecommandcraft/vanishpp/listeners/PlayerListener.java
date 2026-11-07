@@ -250,7 +250,7 @@ public class PlayerListener implements Listener {
                         .replace("%rule%", expiredRule).replace("%player%", player.getName());
                 plugin.getMessageManager().sendMessage(player, expMsg);
                 // Clear the flag so it is not delivered again
-                plugin.getStorageProvider().setRule(player.getUniqueId(), entry.getKey(), false);
+                plugin.submitStorageWork(() -> plugin.getStorageProvider().setRule(player.getUniqueId(), entry.getKey(), false));
             }
 
             // 4. Update Check

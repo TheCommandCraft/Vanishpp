@@ -1326,7 +1326,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                             String msg = configManager.getLanguageManager().getMessage("rules.expired")
                                     .replace("%rule%", expiredRule).replace("%player%", p.getName());
                             messageManager.sendMessage(p, msg);
-                            storageProvider.setRule(p.getUniqueId(), entry.getKey(), false);
+                            submitStorageWork(() -> storageProvider.setRule(p.getUniqueId(), entry.getKey(), false));
                         }
                     });
                 }
@@ -2000,13 +2000,17 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return -1L;
     }
 
+    public void acknowledge(UUID uuid, String notification) {
+        submitStorageWork(() -> storageProvider.addAcknowledgement(uuid, notification));
+    }
+
     public void setWarningIgnored(Player player, boolean ignored) {
-        if (ignored) {
-            ignoredWarningPlayers.add(player.getUniqueId());
-            storageProvider.addAcknowledgement(player.getUniqueId(), "protocol-lib-warning");
-        } else {
-            storageProvider.removeAcknowledgement(player.getUniqueId(), "protocol-lib-warning");
-            ignoredWarningPlayers.remove(player.getUniqueId());
-        }
+        UUID uuid = player.getUniqueId();
+        if (ignored) ignoredWarningPlayers.add(uuid);
+        else ignoredWarningPlayers.remove(uuid);
+        submitStorageWork(() -> {
+            if (ignored) storageProvider.addAcknowledgement(uuid, "protocol-lib-warning");
+            else storageProvider.removeAcknowledgement(uuid, "protocol-lib-warning");
+        });
     }
 }
