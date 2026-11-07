@@ -962,6 +962,23 @@ class StateDurabilityTest {
         assertFalse(plugin.isVanished(player), "authenticated cancellation must still release the source fence");
     }
 
+    @Test
+    void anAlreadySelectedRetryCannotOverwriteANewerAcceptedDecision() throws Exception {
+        StorageProvider storage = spy(plugin.getStorageProvider());
+        field(plugin, "storageProvider", storage);
+        doThrow(new IllegalStateException("old write failed")).doCallRealMethod()
+                .when(storage).setVanished(player.getUniqueId(), true);
+        plugin.applyVanishEffects(player); scheduler.drainAsync();
+        var retry = scheduler.later.stream().filter(task -> scheduler.delays.getOrDefault(task, 0L) == 5L).findFirst();
+        assertTrue(retry.isPresent(), "failed state must schedule a retry");
+        plugin.removeVanishEffects(player); scheduler.drainAsync();
+        assertFalse(storage.isVanished(player.getUniqueId()), "newer decision must persist before the old selected callback runs");
+        scheduler.run("global", retry.orElseThrow()); // Cancellation cannot revoke a callback already selected by a scheduler.
+        scheduler.drainAsync();
+        assertFalse(storage.isVanished(player.getUniqueId()), "superseded retry must not overwrite the latest accepted decision");
+        assertFalse(plugin.hasPendingStateWrite(player.getUniqueId()));
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
