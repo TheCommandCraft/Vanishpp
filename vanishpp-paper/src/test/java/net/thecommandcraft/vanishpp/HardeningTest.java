@@ -155,11 +155,25 @@ class HardeningTest {
         player.setAllowFlight(false);
         plugin.resyncVanishEffects(player);
         boolean refreshed = player.getAllowFlight();
+        player.setAllowFlight(false);
+        new PlayerListener(plugin).onGameModeChange(new PlayerGameModeChangeEvent(player, GameMode.SURVIVAL));
+        scheduler.delayedPass();
+        boolean gamemode = player.getAllowFlight();
         permission.setPermission("vanishpp.fly", true);
         plugin.resyncVanishEffects(player);
+        boolean permitted = player.getAllowFlight();
+        permission.setPermission("vanishpp.fly", false);
+        plugin.resyncVanishEffects(player);
+        boolean revoked = player.getAllowFlight();
+        PlayerMock existing = server.addPlayer();
+        existing.addAttachment(plugin, "vanishpp.fly", false);
+        existing.setAllowFlight(true);
+        plugin.vanishPlayer(existing, existing); plugin.unvanishPlayer(existing, existing);
         assertAll(
-                () -> assertFalse(immediate || delayed || refreshed, "every vanish flight grant must require vanishpp.fly"),
-                () -> assertTrue(player.getAllowFlight(), "a permitted player must still receive flight"));
+                () -> assertFalse(immediate || delayed || refreshed || gamemode, "every vanish flight grant must require vanishpp.fly"),
+                () -> assertTrue(permitted, "a permitted player must still receive flight"),
+                () -> assertFalse(revoked, "permission revocation must restore the flight state Vanish++ changed"),
+                () -> assertTrue(existing.getAllowFlight(), "denied vanish flight must leave another provider's existing flight intact"));
     }
 
     @Test
@@ -294,8 +308,15 @@ class HardeningTest {
     void gameplayRuleReadsUsePreparedSnapshotsWithoutStorageQueries() throws Exception {
         SqlStorage storage = mock(SqlStorage.class);
         field(plugin, "storageProvider", storage);
-        when(storage.getRules(player.getUniqueId())).thenReturn(Map.of(RuleManager.CAN_CHAT, true));
-        when(storage.getRecoveryRules(player.getUniqueId())).thenReturn(Map.of(RuleManager.CAN_CHAT, true));
+        var stored = new AtomicReference<Map<String, Object>>(Map.of(RuleManager.CAN_CHAT, true));
+        var unavailable = new java.util.concurrent.atomic.AtomicBoolean();
+        when(storage.getRules(player.getUniqueId())).thenAnswer(call -> unavailable.get() ? Map.of() : stored.get());
+        when(storage.getRecoveryRules(player.getUniqueId())).thenAnswer(call -> {
+            if (unavailable.get()) throw new IllegalStateException("settings unavailable");
+            return stored.get();
+        });
+        doAnswer(call -> { stored.set(Map.of(RuleManager.CAN_CHAT, call.getArgument(2))); return null; })
+                .when(storage).setRule(eq(player.getUniqueId()), eq(RuleManager.CAN_CHAT), any());
         var listener = new PlayerListener(plugin);
         scheduler.run("async", () -> listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(
                 player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId())));
@@ -303,7 +324,17 @@ class HardeningTest {
         clearInvocations(storage);
         for (int i = 0; i < 40; i++) assertTrue(plugin.getRuleManager().getRule(player, RuleManager.CAN_CHAT));
         long reads = mockingDetails(storage).getInvocations().stream().filter(call -> call.getMethod().getName().equals("getRules")).count();
-        assertEquals(0, reads, "gameplay rule reads must not issue synchronous storage queries");
+        unavailable.set(true);
+        scheduler.run("async", () -> listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(
+                player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId())));
+        boolean retained = plugin.getRuleManager().getRule(player, RuleManager.CAN_CHAT);
+        unavailable.set(false);
+        plugin.getRuleManager().setRule(player, RuleManager.CAN_CHAT, false); scheduler.drainAsync();
+        boolean written = plugin.getRuleManager().getRule(player, RuleManager.CAN_CHAT);
+        assertAll(
+                () -> assertEquals(0, reads, "gameplay rule reads must not issue synchronous storage queries"),
+                () -> assertTrue(retained, "failed refreshes must preserve the last complete rule snapshot"),
+                () -> assertFalse(written, "a completed local write must update the cached rule before releasing its pending decision"));
     }
 
     @Test
