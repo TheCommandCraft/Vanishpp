@@ -51,7 +51,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private StorageProvider storageProvider;
     private final net.thecommandcraft.vanishpp.common.state.OrderedWrites stateWrites =
             new net.thecommandcraft.vanishpp.common.state.OrderedWrites(
-                    task -> vanishScheduler.runAsync(task), e -> getLogger().log(Level.SEVERE, "State write failed", e));
+                    task -> getVanishScheduler().runAsync(task), e -> getLogger().log(Level.SEVERE, "State write failed", e));
     private final Map<UUID, Long> stateVersions = new ConcurrentHashMap<>();
     private static final String SAVED_GAMEMODE = "__gamemode_restore";
     private int expiryEpoch;
