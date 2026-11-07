@@ -40,7 +40,7 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.history")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.history")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -78,9 +78,9 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
 
             if (finalPlayerName != null) {
                 UUID targetUuid = onlineUuid != null ? onlineUuid
-                        : plugin.playerNameCache.get(finalPlayerName.toLowerCase());
+                        : plugin.getStorageProvider().resolveHistoryPlayer(finalPlayerName);
                 if (targetUuid == null) {
-                    plugin.getVanishScheduler().runGlobal(() ->
+                    plugin.getVanishScheduler().runSender(sender, () ->
                             plugin.getMessageManager().sendMessage(sender,
                                     plugin.getConfigManager().playerNotFoundMessage));
                     return;
@@ -95,7 +95,7 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
             final List<VanishHistoryEntry> finalEntries = entries;
             final String finalHeader = header;
 
-            plugin.getVanishScheduler().runGlobal(() -> {
+            plugin.getVanishScheduler().runSender(sender, () -> {
                 if (onlineUuid != null && !plugin.getPermissionManager().canSee(sender, onlineUuid)) {
                     plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().playerNotFoundMessage);
                     return;
@@ -141,7 +141,7 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.history")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.history")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());

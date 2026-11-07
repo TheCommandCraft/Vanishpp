@@ -23,12 +23,16 @@ public class VanishScoreboardCommand implements CommandExecutor {
             return true;
         }
 
-        if (!player.hasPermission("vanishpp.scoreboard")) {
+        if (!plugin.getPermissionManager().hasPermission(player, "vanishpp.scoreboard")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
         }
 
+        if (!plugin.getVanishScheduler().supportsScoreboards()) {
+            plugin.getMessageManager().sendMessage(player, "<gray>Scoreboards are unavailable on this server.");
+            return true;
+        }
         if (!plugin.getConfigManager().scoreboardEnabled) {
             plugin.getMessageManager().sendMessage(player,
                     "<gray>The vanish scoreboard is disabled in <white>config.yml</white>.");

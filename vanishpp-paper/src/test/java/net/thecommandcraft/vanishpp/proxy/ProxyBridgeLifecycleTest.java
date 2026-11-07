@@ -81,19 +81,21 @@ class ProxyBridgeLifecycleTest {
     @Test
     void shutdown_discardsQueuedPacketsAndRejectsNewSends() {
         bridge.sendPacket(packet("queued-control"));
+        server.addPlayer(carrier);
         bridge.flushPendingPackets(carrier);
         assertEquals(List.of("queued-control"), carrier.payloads(), "an active bridge must flush queued packets");
         carrier.packets.clear();
+        carrier.disconnect();
 
         bridge.sendPacket(packet("stale"));
         bridge.shutdown();
         bridge.sendPacket(packet("after-shutdown"));
+        server.addPlayer(carrier);
         bridge.init();
         bridge.flushPendingPackets(carrier);
         List<String> afterRestart = carrier.payloads();
         carrier.packets.clear();
 
-        server.addPlayer(carrier);
         bridge.sendPacket(packet("live-control"));
         assertEquals(List.of("live-control"), carrier.payloads(), "an active bridge must send through an online carrier");
         carrier.packets.clear();
@@ -125,6 +127,7 @@ class ProxyBridgeLifecycleTest {
         bridge.flushPendingPackets(carrier);
         assertTrue(carrier.packets.isEmpty(), "an inactive bridge must not flush an in-flight packet");
 
+        server.addPlayer(carrier);
         bridge.init();
         bridge.flushPendingPackets(carrier);
         assertEquals(List.of("in-flight"), carrier.payloads(), "the fixture must actually have queued the in-flight packet");

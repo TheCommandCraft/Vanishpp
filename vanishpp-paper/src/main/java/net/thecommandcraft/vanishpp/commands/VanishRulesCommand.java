@@ -30,7 +30,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.rules")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.rules")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -74,7 +74,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 }
                 return true;
             }
-            if (!sender.hasPermission("vanishpp.rules.others")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.rules.others")) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
@@ -109,7 +109,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 else if (valStr.equals("false")) { value = false; nextIdx++; }
             }
             // Allow trailing player name: /vrules all true <player>
-            if (args.length > nextIdx && sender.hasPermission("vanishpp.rules.others")) {
+            if (args.length > nextIdx && plugin.getPermissionManager().hasPermission(sender, "vanishpp.rules.others")) {
                 Player namedTarget = Bukkit.getPlayer(args[nextIdx]);
                 if (namedTarget != null) {
                     if (!plugin.getPermissionManager().canSee(sender, namedTarget)) {
@@ -201,7 +201,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.rules")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.rules")) return new ArrayList<>();
         RuleManager rules = plugin.getRuleManager();
         List<String> booleans = List.of("true", "false");
         List<String> durations = List.of("30", "60", "120", "300", "600");
@@ -243,7 +243,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 return StringUtil.copyPartialMatches(args[2], new ArrayList<>(booleans), new ArrayList<>());
             } else if ((arg0IsRule || arg0IsAllNone) && arg1IsBool) {
                 List<String> completions = new ArrayList<>(durations);
-                if (arg0IsAllNone && sender.hasPermission("vanishpp.rules.others")) {
+                if (arg0IsAllNone && plugin.getPermissionManager().hasPermission(sender, "vanishpp.rules.others")) {
                     for (Player p : plugin.getPermissionManager().visiblePlayers(sender))
                         completions.add(p.getName());
                 }
@@ -291,7 +291,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                     plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
             return true;
         }
-        if (!player.hasPermission("vanishpp.rules")) {
+        if (!plugin.getPermissionManager().hasPermission(player, "vanishpp.rules")) {
             plugin.getMessageManager().sendMessage(player,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -323,7 +323,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 }
                 plugin.submitStorageWork(() -> {
                     plugin.getStorageProvider().saveRulePreset(uuid, name, snapshot);
-                    plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
+                    plugin.getVanishScheduler().runEntityNow(player, () -> plugin.getMessageManager().sendMessage(player,
                             lm.getMessage("rules-preset.saved").replace("%name%", name)));
                 });
             }
@@ -336,13 +336,13 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 plugin.submitStorageWork(() -> {
                     Map<String, Boolean> preset = plugin.getStorageProvider().loadRulePreset(uuid, name);
                     if (preset == null || preset.isEmpty()) {
-                        plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
+                        plugin.getVanishScheduler().runEntityNow(player, () -> plugin.getMessageManager().sendMessage(player,
                                 lm.getMessage("rules-preset.not-found").replace("%name%", name)));
                         return;
                     }
                     RuleManager rules = plugin.getRuleManager();
                     preset.forEach((rule, val) -> rules.setRule(player, rule, val));
-                    plugin.getVanishScheduler().runGlobal(() -> {
+                    plugin.getVanishScheduler().runEntityNow(player, () -> {
                         if (plugin.isVanished(player)) plugin.resyncVanishEffects(player);
                         plugin.getMessageManager().sendMessage(player,
                                 lm.getMessage("rules-preset.loaded").replace("%name%", name));
@@ -352,7 +352,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             case "list" -> {
                 plugin.submitStorageWork(() -> {
                     Set<String> presets = plugin.getStorageProvider().listRulePresets(uuid);
-                    plugin.getVanishScheduler().runGlobal(() -> {
+                    plugin.getVanishScheduler().runEntityNow(player, () -> {
                         if (presets.isEmpty()) {
                             plugin.getMessageManager().sendMessage(player, lm.getMessage("rules-preset.none"));
                         } else {
@@ -374,7 +374,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 String name = args[2];
                 plugin.submitStorageWork(() -> {
                     plugin.getStorageProvider().deleteRulePreset(uuid, name);
-                    plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
+                    plugin.getVanishScheduler().runEntityNow(player, () -> plugin.getMessageManager().sendMessage(player,
                             lm.getMessage("rules-preset.deleted").replace("%name%", name)));
                 });
             }

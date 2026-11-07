@@ -33,9 +33,11 @@ public class VanishZoneListener implements Listener {
         VanishZone zone = plugin.getVanishZoneManager().getZoneAt(event.getTo());
         if (zone == null || !zone.isForceUnvanish()) return;
 
-        plugin.unvanishPlayer(player, player);
-        plugin.getMessageManager().sendMessage(player,
+        plugin.requestVanish(player, player, false, null, accepted -> {
+            if (!accepted) return;
+            plugin.getMessageManager().sendMessage(player,
                 plugin.getConfigManager().getLanguageManager().getMessage("zone.forced-unvanish")
                         .replace("%zone%", zone.getName()));
+        });
     }
 }

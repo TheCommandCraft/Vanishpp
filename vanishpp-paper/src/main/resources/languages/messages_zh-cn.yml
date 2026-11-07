@@ -209,21 +209,6 @@ spectator:
 silent-chest:
   blocked: '&c你无法静默打开此容器（不支持该容器类型或受保护）。'
 
-# --- [ 定时隐身 ] ---
-timed-vanish:
-  expired: '&e你的定时隐身已到期。'
-  set: '&a你将在 &e%seconds% 秒 &a后取消隐身。'
-  invalid-duration: '&c无效的持续时间。请使用 &e30s&c、&e5m&c、&e1h&c 等格式。'
-
-# --- [ 频率限制 ] ---
-rate-limit:
-  blocked: '&c你切换隐身过于频繁。请稍后再试。'
-
-# --- [ 战斗隐身冷却 ] ---
-combat:
-  pvp-cooldown: '&c无法隐身 — PvP 冷却中（剩余 %seconds% 秒）。'
-  pve-cooldown: '&c无法隐身 — PvE 冷却中（剩余 %seconds% 秒）。'
-
 # --- [ VSPEC 命令 ] ---
 vspec:
   usage: '&c用法：/vspec <玩家|stop>'

@@ -94,7 +94,8 @@ public final class RuleExpiries implements AutoCloseable {
             synchronized (this) {
                 if (closed || !deadlines.remove(key, deadline)) return;
             }
-            if (changed) plugin.ruleExpired(key.uuid(), key.rule(), deadline.provider);
+            if (changed) plugin.ruleExpired(key.uuid(), key.rule(), deadline.provider,
+                    Boolean.parseBoolean(deadline.token.split(":", 3)[1]));
         } catch (RuntimeException e) {
             plugin.getLogger().warning("Rule expiry will retry: " + e.getMessage());
             synchronized (this) { if (!closed && deadlines.get(key) == deadline) schedule(key, deadline, 100L); }

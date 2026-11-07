@@ -27,7 +27,7 @@ public class DowngradeCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.admin") && !sender.isOp()) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.admin") && !sender.isOp()) {
             sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
             return true;
         }
@@ -140,7 +140,7 @@ public class DowngradeCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.admin")) return java.util.Collections.emptyList();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.admin")) return java.util.Collections.emptyList();
         if (args.length == 1) return List.of("info", "allow", "reset");
         if (args.length == 2 && args[0].equalsIgnoreCase("reset")) return List.of("confirm");
         return List.of();

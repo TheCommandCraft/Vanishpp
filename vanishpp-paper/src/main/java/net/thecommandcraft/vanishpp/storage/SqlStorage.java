@@ -677,6 +677,12 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public int getVanishLevel(UUID uuid) {
+        try { return getRecoveryVanishLevel(uuid); }
+        catch (IllegalStateException e) { plugin.getLogger().warning(e.getMessage()); return 1; }
+    }
+
+    @Override
+    public int getRecoveryVanishLevel(UUID uuid) {
         ensureInitialized();
         try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn.prepareStatement("SELECT level FROM vpp_levels WHERE uuid = ?")) {
@@ -687,7 +693,7 @@ public class SqlStorage implements StorageProvider {
             }
         } catch (SQLException e) {
             failMigration(e);
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            throw new IllegalStateException("Could not read vanish level", e);
         }
         return 1;
     }
@@ -860,6 +866,17 @@ public class SqlStorage implements StorageProvider {
         ensureInitialized();
         String q = "SELECT * FROM vpp_history ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?";
         return queryHistory(q, null, perPage, (page - 1) * perPage);
+    }
+
+    @Override
+    public UUID resolveHistoryPlayer(String name) {
+        ensureInitialized();
+        try (SqlConnection conn = borrowConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT uuid FROM vpp_history WHERE LOWER(player_name) = ? ORDER BY timestamp DESC, id DESC LIMIT 1")) {
+            ps.setString(1, name.toLowerCase(java.util.Locale.ROOT));
+            try (ResultSet rs = ps.executeQuery()) { return rs.next() ? UUID.fromString(rs.getString(1)) : null; }
+        } catch (SQLException e) { throw new IllegalStateException("Could not resolve history player", e); }
     }
 
     @Override

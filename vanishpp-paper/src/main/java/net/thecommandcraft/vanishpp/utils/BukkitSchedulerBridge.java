@@ -48,6 +48,8 @@ public class BukkitSchedulerBridge implements VanishScheduler {
         else runEntity(entity, runnable, null);
     }
 
+    @Override public boolean owns(Entity entity) { return Bukkit.isPrimaryThread(); }
+
     @Override
     public void runAsync(Runnable runnable) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, runnable);

@@ -73,7 +73,7 @@ public class VanishBossbar {
     public void refreshAll() {
         for (UUID uuid : new java.util.ArrayList<>(bossbars.keySet())) {
             Player p = plugin.getServer().getPlayer(uuid);
-            if (p != null && p.isOnline()) refresh(p);
+            if (p != null) plugin.getVanishScheduler().runEntityNow(p, () -> { if (p.isOnline()) refresh(p); });
         }
     }
 

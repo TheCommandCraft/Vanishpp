@@ -172,6 +172,92 @@ class StateDurabilityTest {
     }
 
     @Test
+    void unvanishDuringTheHoldOfAPreviouslyHiddenPlayerIsNotUndoneByRecoveredAutoVanish() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        when(storage.getAutoVanishOnJoin(player.getUniqueId())).thenReturn(true);
+        field(plugin, "storageProvider", storage);
+        plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.vanish");
+        plugin.handleNetworkVanishSync(player.getUniqueId(), true);
+        login();
+        plugin.removeVanishEffects(player);
+        scheduler.drainAsync();
+        assertFalse(plugin.isVanished(player), "a choice made during the hold must outrank the recovered auto-vanish preference");
+    }
+
+    @Test
+    void recoveredAutoVanishKeepsAPreviouslyHiddenHeldPlayerHidden() throws Exception {
+        WatchingPlayer observer = new WatchingPlayer(server);
+        server.addPlayer(observer);
+        observer.setOp(false);
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        when(storage.getAutoVanishOnJoin(player.getUniqueId())).thenReturn(true);
+        field(plugin, "storageProvider", storage);
+        plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.vanish");
+        plugin.handleNetworkVanishSync(player.getUniqueId(), true);
+        login();
+        observer.shown.clear();
+        scheduler.drainAsync();
+        assertTrue(plugin.isVanished(player), "recovered auto-vanish must keep a player hidden before the hold hidden");
+        assertFalse(observer.shown.contains(player.getUniqueId()), "a held auto-vanishing player must never be shown");
+        assertFalse(observer.canSee(player));
+    }
+
+    @Test
+    void aCancelledVanishEventStopsRecoveredAutoVanish() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        when(storage.getAutoVanishOnJoin(player.getUniqueId())).thenReturn(true);
+        field(plugin, "storageProvider", storage);
+        plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.vanish");
+        server.getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler
+            public void deny(net.thecommandcraft.vanishpp.api.events.VanishEvent event) { event.setCancelled(true); }
+        }, plugin);
+        login();
+        scheduler.drainAsync();
+        assertFalse(plugin.isVanished(player), "another plugin cancelling the vanish must keep the recovered visible state");
+    }
+
+    @Test
+    void repeatedTogglesDuringTheHoldBroadcastNoFakeJoinOrQuit() throws Exception {
+        PlayerMock observer = server.addPlayer();
+        observer.setOp(false);
+        plugin.getConfigManager().broadcastFakeJoin = true;
+        plugin.getConfigManager().broadcastFakeQuit = true;
+        plugin.getConfigManager().fakeJoinMessage = "fake-join %player%";
+        plugin.getConfigManager().fakeQuitMessage = "fake-quit %player%";
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        field(plugin, "storageProvider", storage);
+        login();
+        while (observer.nextMessage() != null) {}
+        plugin.unvanishPlayer(player, player);
+        plugin.vanishPlayer(player, player);
+        plugin.unvanishPlayer(player, player);
+        assertFalse(plugin.isVanished(player));
+        assertNull(observer.nextMessage(), "no join or quit may be announced while the real join is still withheld");
+        scheduler.drainAsync();
+        StringBuilder received = new StringBuilder();
+        for (String next; (next = observer.nextMessage()) != null; ) received.append(next).append('\n');
+        assertFalse(received.toString().contains("fake-"), "the released join must not be preceded by fake announcements: " + received);
+        assertTrue(received.toString().contains("joined"), "the withheld join announcement must be sent once the join completes: " + received);
+        plugin.vanishPlayer(player, player);
+        assertEquals("fake-quit " + player.getName(), observer.nextMessage(), "vanishing after the join completes must announce a fake quit");
+        plugin.unvanishPlayer(player, player);
+        assertEquals("fake-join " + player.getName(), observer.nextMessage(), "unvanishing after the join completes must announce a fake join");
+    }
+
+    @Test
     void proxySnapshotsDoNotLiftTheHoldWhileTheLoginReadFails() throws Exception {
         PlayerMock observer = server.addPlayer();
         observer.setOp(false);
@@ -533,6 +619,7 @@ class StateDurabilityTest {
     void reloadKeepsFollowingAMovingTarget() {
         FollowingPlayer follower = new FollowingPlayer(server);
         server.addPlayer(follower);
+        plugin.applyVanishEffects(follower);
         new VanishFollowCommand(plugin);
         plugin.spectateFollowTargets.put(follower.getUniqueId(), player.getUniqueId());
         scheduler.fireTimers();

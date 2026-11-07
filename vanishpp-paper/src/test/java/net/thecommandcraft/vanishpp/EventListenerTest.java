@@ -841,6 +841,7 @@ class EventListenerTest {
 
     @Test
     void entityInteract_allowed_whenVanished_canInteractTrue() {
+        plugin.getConfigManager().preventEntityInteract = false;
         plugin.applyVanishEffects(player);
         plugin.getRuleManager().setRule(player, RuleManager.CAN_INTERACT, true);
 

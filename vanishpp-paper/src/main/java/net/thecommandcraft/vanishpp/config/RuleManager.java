@@ -42,7 +42,7 @@ public class RuleManager {
     }
 
     public void load() {
-        // Data is now loaded lazily or pre-loaded by StorageProvider
+        plugin.getPlayerData().refreshKnown();
     }
 
     public void save() {
@@ -57,7 +57,7 @@ public class RuleManager {
         Boolean pending = plugin.pendingRule(uuid, rule);
         if (pending != null) return pending;
         // 1. Check Storage Provider for Player Specific Override
-        Map<String, Object> playerRules = plugin.getStorageProvider().getRules(uuid);
+        Map<String, Object> playerRules = plugin.getPlayerData().rules(uuid);
         if (playerRules.containsKey(rule)) {
             Object val = playerRules.get(rule);
             if (val instanceof Boolean)

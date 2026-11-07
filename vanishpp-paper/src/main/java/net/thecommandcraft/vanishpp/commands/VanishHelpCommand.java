@@ -75,7 +75,7 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
         LanguageManager lm = plugin.getConfigManager().getLanguageManager();
-        if (!sender.hasPermission("vanishpp.help")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.help")) {
             plugin.getMessageManager().sendMessage(sender, lm.getMessage("unknown-command"));
             return true;
         }
@@ -160,7 +160,7 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.help")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.help")) return new ArrayList<>();
         if (args.length == 1)
             return StringUtil.copyPartialMatches(args[0], KNOWN_COMMANDS, new ArrayList<>());
         return new ArrayList<>();
