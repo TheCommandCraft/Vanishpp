@@ -1724,8 +1724,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 if (isValidMessage(message)) player.sendMessage(messageManager.parse(message, player));
             }
             if (messages == TransitionMessages.FULL) {
-                // A held join's announcement is still withheld; the release decides it.
-                if (!held) announceTransition(player, hidden);
+                // Until a held join completes its announcement is still withheld; the release decides it.
+                if (pending == null) announceTransition(player, hidden);
                 notifyStaff(player, source, hidden);
             }
         } finally {
