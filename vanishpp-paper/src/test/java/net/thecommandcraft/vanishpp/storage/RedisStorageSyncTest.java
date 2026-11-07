@@ -53,21 +53,41 @@ class RedisStorageSyncTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void testBroadcastVanishPayloadIsVanishPrefixPlusUuid() {
-        // broadcastVanish writes to Redis; we only verify the payload is VANISH:{uuid}
-        // by inspecting what handleSyncMessage would need to parse it back correctly.
+    void testBroadcastVanishPayloadIsVanishPrefixPlusUuid() throws Exception {
         UUID uuid = UUID.randomUUID();
-        String expectedVanish = "VANISH:" + uuid;
-        String expectedUnvanish = "UNVANISH:" + uuid;
+        java.util.List<String> published = new java.util.ArrayList<>();
+        redis.clients.jedis.Jedis connection = new redis.clients.jedis.Jedis() {
+            @Override
+            public long publish(String channel, String message) {
+                published.add(channel + " " + message);
+                redisStorage.handleSyncMessage(message);
+                return 1;
+            }
 
-        // Round-trip: apply the message → check it resolves without error
-        assertDoesNotThrow(() -> redisStorage.handleSyncMessage(expectedVanish),
-                "VANISH payload must be parsed without exception");
-        tickScheduler();
+            @Override
+            public void close() {}
+        };
+        try (redis.clients.jedis.JedisPool pool = new redis.clients.jedis.JedisPool() {
+            @Override
+            public redis.clients.jedis.Jedis getResource() { return connection; }
+        }) {
+            java.lang.reflect.Field field = RedisStorage.class.getDeclaredField("jedisPool");
+            field.setAccessible(true);
+            field.set(redisStorage, pool);
 
-        assertDoesNotThrow(() -> redisStorage.handleSyncMessage(expectedUnvanish),
-                "UNVANISH payload must be parsed without exception");
-        tickScheduler();
+            redisStorage.broadcastVanish(uuid, true);
+            tickScheduler();
+            assertEquals(java.util.List.of("vanishpp:sync VANISH:" + uuid), published,
+                    "broadcastVanish must publish the vanish payload on the sync channel");
+            assertTrue(plugin.isVanished(uuid), "Published vanish must reach the receiver");
+
+            redisStorage.broadcastVanish(uuid, false);
+            tickScheduler();
+            assertEquals(java.util.List.of("vanishpp:sync VANISH:" + uuid,
+                    "vanishpp:sync UNVANISH:" + uuid), published,
+                    "broadcastVanish must publish the unvanish payload on the sync channel");
+            assertFalse(plugin.isVanished(uuid), "Published unvanish must reach the receiver");
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -180,45 +200,42 @@ class RedisStorageSyncTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void testMalformedMessageWithNoColonIsIgnored() {
-        assertDoesNotThrow(() -> redisStorage.handleSyncMessage("VANISH_NO_COLON"),
-                "Message with no colon separator must be silently ignored");
+    void testMalformedMessagesLeaveStateUnchanged() {
+        UUID vanished = UUID.randomUUID();
+        UUID visible = UUID.randomUUID();
+        redisStorage.handleSyncMessage("VANISH:" + vanished);
         tickScheduler();
-        // Nothing should have been added to vanished set — no crash
-    }
+        java.util.Set<UUID> before = java.util.Set.copyOf(plugin.getRawVanishedPlayers());
+        assertTrue(before.contains(vanished));
+        assertFalse(before.contains(visible));
 
-    @Test
-    void testEmptyMessageIsIgnored() {
-        assertDoesNotThrow(() -> redisStorage.handleSyncMessage(""),
-                "Empty message must be silently ignored");
-        tickScheduler();
-    }
-
-    @Test
-    void testMessageWithInvalidUuidIsIgnored() {
-        // Valid prefix but garbage UUID
-        assertDoesNotThrow(() -> redisStorage.handleSyncMessage("VANISH:not-a-uuid"),
-                "Message with invalid UUID must be silently ignored");
-        tickScheduler();
+        for (String message : new String[] {null, "", "VANISH_NO_COLON", "VANISH:not-a-uuid",
+                "UNVANISH:not-a-uuid", "VANISH:", "UNVANISH:" + vanished + ":extra"}) {
+            assertDoesNotThrow(() -> redisStorage.handleSyncMessage(message));
+            tickScheduler();
+            assertEquals(before, plugin.getRawVanishedPlayers(),
+                    "Malformed message must leave the vanished set unchanged: " + message);
+        }
     }
 
     @Test
     void testUnknownActionIsIgnored() {
-        UUID uuid = UUID.randomUUID();
-        // Action is neither VANISH nor UNVANISH
-        assertDoesNotThrow(() -> redisStorage.handleSyncMessage("INVISIBLE:" + uuid),
-                "Unknown action prefix must be silently ignored");
+        UUID vanished = UUID.randomUUID();
+        UUID visible = UUID.randomUUID();
+        redisStorage.handleSyncMessage("VANISH:" + vanished);
         tickScheduler();
-        // Should not add to vanished set
-        assertFalse(plugin.isVanished(uuid),
-                "Unknown action must not alter vanish state");
-    }
+        assertTrue(plugin.isVanished(vanished), "Pre-condition: player must be vanished");
+        assertFalse(plugin.isVanished(visible));
 
-    @Test
-    void testNullMessageIsIgnored() {
-        assertDoesNotThrow(() -> redisStorage.handleSyncMessage(null),
-                "Null message must be silently ignored without NullPointerException");
+        redisStorage.handleSyncMessage("INVISIBLE:" + vanished);
+        redisStorage.handleSyncMessage("INVISIBLE:" + visible);
         tickScheduler();
+        assertTrue(plugin.isVanished(vanished), "Unknown action must not unvanish a vanished player");
+        assertFalse(plugin.isVanished(visible), "Unknown action must not vanish a visible player");
+
+        redisStorage.handleSyncMessage("UNVANISH:" + vanished);
+        tickScheduler();
+        assertFalse(plugin.isVanished(vanished), "Supported unvanish must still change state");
     }
 
     // -------------------------------------------------------------------------
