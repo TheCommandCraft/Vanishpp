@@ -738,6 +738,36 @@ class StateDurabilityTest {
         assertTrue(contexts.stream().allMatch("async"::equals), "reload and recovery must not drain or scan storage on event/global threads: " + contexts);
     }
 
+    @Test
+    void transferReplyWaitsForStorageAndFreezesNewDecisionsUntilCancelled() throws Exception {
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        field(plugin, "proxyBridge", bridge);
+        bridge.init(); scheduler.runImmediate();
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.PONG, "{\"session\":\"transfer-proxy\"}"));
+        plugin.applyVanishEffects(player);
+        String payload = "{\"uuid\":\"" + player.getUniqueId() + "\",\"requestId\":\"transfer-1\"}";
+        bridge.onPluginMessageReceived("vanishpp:proxy", player, rawPacket(14, payload));
+        assertTrue(player.packets.stream().noneMatch(packet -> packet.type().name().equals("TRANSFER_READY")),
+                "transfer reply must wait for accepted storage work");
+        scheduler.drainAsync();
+        var ready = player.packets.stream().filter(packet -> packet.type().name().equals("TRANSFER_READY")).findFirst();
+        assertTrue(ready.isPresent(), "settled source must send its final decision before losing the carrier");
+        assertTrue(com.google.gson.JsonParser.parseString(ready.orElseThrow().jsonPayload()).getAsJsonObject().get("vanished").getAsBoolean());
+        plugin.removeVanishEffects(player);
+        assertTrue(plugin.isVanished(player), "source must hold its decision while the transfer is in flight");
+        bridge.onPluginMessageReceived("vanishpp:proxy", player, rawPacket(16, payload));
+        plugin.removeVanishEffects(player);
+        assertFalse(plugin.isVanished(player), "cancelled transfer must release the decision hold");
+    }
+
+    private static byte[] rawPacket(int ordinal, String json) {
+        byte[] body = json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return java.nio.ByteBuffer.allocate(body.length + 5).put((byte) ordinal).putInt(body.length).put(body).array();
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
