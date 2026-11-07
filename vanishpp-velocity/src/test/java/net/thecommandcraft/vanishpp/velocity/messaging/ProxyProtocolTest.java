@@ -152,8 +152,11 @@ class ProxyProtocolTest {
     }
 
     private ServerPreConnectEvent beginTransfer(AtomicBoolean resumed) throws Exception {
+        return beginTransfer(new ServerPreConnectEvent(player, destination.getServer()), resumed);
+    }
+
+    private ServerPreConnectEvent beginTransfer(ServerPreConnectEvent transfer, AtomicBoolean resumed) throws Exception {
         var listener = new VelocityPlayerListener(plugin, states, dispatcher);
-        var transfer = new ServerPreConnectEvent(player, destination.getServer());
         Continuation continuation = stub(Continuation.class, (method, args) -> { resumed.set(true); return null; });
         boolean found = false;
         for (Method method : listener.getClass().getMethods()) {
@@ -164,6 +167,16 @@ class ProxyProtocolTest {
         }
         if (!found) resumed.set(true);
         return transfer;
+    }
+
+    @Test
+    void lostSourceConnectionCannotReleaseAnUnconfirmedFallbackTransfer() throws Exception {
+        var transfer = new ServerPreConnectEvent(player, destination.getServer(), source.getServer());
+        current = null; // A backend kick can clear currentServer before the fallback event.
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(transfer, resumed);
+        assertTrue(resumed.get(), "a lost source must finish the event without waiting for an impossible reply");
+        assertFalse(transfer.getResult().isAllowed(), "lost source must deny an unconfirmed fallback instead of exposing stale state");
     }
 
     private JsonObject decision(String session, long sequence, boolean hidden) {
