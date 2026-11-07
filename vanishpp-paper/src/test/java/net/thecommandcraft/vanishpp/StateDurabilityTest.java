@@ -444,6 +444,219 @@ class StateDurabilityTest {
                 "re-enabling warnings must persist the newer preference");
     }
 
+    @Test
+    void visibleProxyReplyPreservesOrdinarySpectatorFlightAndHooks() throws Exception {
+        var hooks = mock(net.thecommandcraft.vanishpp.hooks.WebhookManager.class);
+        field(plugin, "webhookManager", hooks);
+        player.setGameMode(GameMode.SPECTATOR);
+        player.setAllowFlight(true);
+        player.setFlying(true);
+        plugin.holdProxyJoin(player);
+        plugin.completeProxyJoin(player, false);
+        assertAll(
+                () -> assertEquals(GameMode.SPECTATOR, player.getGameMode(), "visible join must preserve ordinary spectator mode"),
+                () -> assertTrue(player.getAllowFlight(), "visible join must preserve existing flight permission"),
+                () -> assertTrue(player.isFlying(), "visible join must preserve existing flight"),
+                () -> verifyNoInteractions(hooks));
+    }
+
+    @Test
+    void gamemodeRestorationDoesNotReadOrWriteStorageOnTheEntityThread() throws Exception {
+        StorageProvider storage = spy(plugin.getStorageProvider());
+        field(plugin, "storageProvider", storage);
+        player.setGameMode(GameMode.CREATIVE);
+        plugin.saveGamemodeForRestore(player);
+        player.setGameMode(GameMode.SPECTATOR);
+        plugin.pendingGamemodeRestore.clear();
+        plugin.restoreSavedGamemode(player);
+        assertEquals(GameMode.CREATIVE, player.getGameMode());
+        verifyNoInteractions(storage);
+    }
+
+    @Test
+    void failedRuleReadCannotEraseSavedGamemode() throws Exception {
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:gamemode_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage sql = sqlStorage(database);
+        sql.init();
+        field(plugin, "storageProvider", sql);
+        player.setGameMode(GameMode.CREATIVE);
+        plugin.saveGamemodeForRestore(player);
+        scheduler.drainAsync();
+        player.setGameMode(GameMode.SPECTATOR);
+        plugin.pendingGamemodeRestore.clear();
+        DataSource unavailable = mock(DataSource.class);
+        when(unavailable.getConnection()).thenThrow(new java.sql.SQLException("temporary read failure"));
+        var sourceField = SqlStorage.class.getDeclaredField("dataSource");
+        sourceField.setAccessible(true);
+        sourceField.set(sql, unavailable);
+        assertDoesNotThrow(() -> plugin.restoreSavedGamemode(player));
+        sourceField.set(sql, database);
+        assertEquals(GameMode.CREATIVE, player.getGameMode(), "failed rule reads must not erase the saved original gamemode");
+    }
+
+    @Test
+    void temporaryRuleStorageRunsOnlyOnAnAsyncWorker() throws Exception {
+        StorageProvider storage = spy(plugin.getStorageProvider());
+        List<String> contexts = new ArrayList<>();
+        doAnswer(call -> { contexts.add(scheduler.context); return call.callRealMethod(); })
+                .when(storage).setTemporaryRule(any(), anyString(), anyBoolean(), anyString());
+        doAnswer(call -> { contexts.add(scheduler.context); return call.callRealMethod(); })
+                .when(storage).expireRule(any(), anyString(), anyString());
+        field(plugin, "storageProvider", storage);
+        plugin.setTemporaryRule(player, "can_chat", true, false, 0);
+        scheduler.drainAsync();
+        scheduler.runDelayedPass();
+        scheduler.drainAsync();
+        assertEquals(List.of("async", "async"), contexts, "temporary-rule persistence and expiry must both run off the event thread");
+    }
+
+    @Test
+    void expiredRuleRefreshesThePlayerOnItsEntityScheduler() {
+        plugin.applyVanishEffects(player);
+        scheduler.drainAsync();
+        plugin.setTemporaryRule(player, "can_chat", true, false, 0);
+        scheduler.drainAsync();
+        List<String> contexts = new ArrayList<>();
+        player.invisibilityObserver = () -> contexts.add(scheduler.context);
+        scheduler.runDelayedPass();
+        scheduler.drainAsync();
+        assertFalse(contexts.isEmpty(), "expiry must actually refresh the vanished player");
+        assertTrue(contexts.stream().allMatch("entity"::equals), "expiry must mutate the player only on its entity scheduler: " + contexts);
+    }
+
+    @Test
+    void failedRecoveryScanKeepsTheExistingExpiryAlive() throws Exception {
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:scan_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage sql = sqlStorage(database);
+        sql.init();
+        field(plugin, "storageProvider", sql);
+        plugin.setTemporaryRule(player, "can_chat", true, false, 0);
+        scheduler.drainAsync();
+        DataSource unavailable = mock(DataSource.class);
+        when(unavailable.getConnection()).thenThrow(new java.sql.SQLException("temporary recovery failure"));
+        var sourceField = SqlStorage.class.getDeclaredField("dataSource");
+        sourceField.setAccessible(true);
+        sourceField.set(sql, unavailable);
+        assertDoesNotThrow(() -> { plugin.storageRecovered(sql); scheduler.drainAsync(); },
+                "recovery must retain its previous generation and retry unavailable reads");
+        sourceField.set(sql, database);
+        scheduler.runDelayedPass();
+        scheduler.drainAsync();
+        assertFalse(sql.getRule(player.getUniqueId(), "can_chat", true), "failed scan must not cancel the only live expiry");
+    }
+
+    @Test
+    void repeatedRecoveryReplacesLongExpiryTasks() {
+        plugin.setTemporaryRule(player, "can_chat", true, false, 86400);
+        scheduler.drainAsync();
+        int before = scheduler.later.size();
+        for (int i = 0; i < 5; i++) {
+            plugin.storageRecovered(plugin.getStorageProvider());
+            scheduler.drainAsync();
+        }
+        assertEquals(before, scheduler.later.size(), "recovery must cancel replaced long-deadline tasks instead of retaining epoch no-ops");
+    }
+
+    @Test
+    void failedFinalSessionSaveDoesNotAbortOtherSavesOrCleanup() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        UUID other = UUID.randomUUID();
+        List<UUID> attempted = new ArrayList<>();
+        doAnswer(call -> {
+            UUID id = call.getArgument(0);
+            attempted.add(id);
+            if (id.equals(player.getUniqueId())) throw new IllegalStateException("final statistics unavailable");
+            return null;
+        }).when(storage).recordVanishSession(any(), anyLong());
+        field(plugin, "storageProvider", storage);
+        ProxyBridge bridge = mock(ProxyBridge.class);
+        RedisStorage redis = mock(RedisStorage.class);
+        field(plugin, "proxyBridge", bridge);
+        field(plugin, "redisStorage", redis);
+        plugin.vanishStartTimes.put(player.getUniqueId(), System.currentTimeMillis() - 10000);
+        plugin.vanishStartTimes.put(other, System.currentTimeMillis() - 10000);
+        assertAll(
+                () -> assertDoesNotThrow(plugin::onDisable, "one failed final save must not abort shutdown"),
+                () -> assertTrue(attempted.containsAll(List.of(player.getUniqueId(), other)), "each final session must be attempted"),
+                () -> verify(storage).shutdown(),
+                () -> verify(bridge).shutdown(),
+                () -> verify(redis).shutdown(),
+                () -> assertTrue(scheduler.cancelled, "scheduler cleanup must still run"));
+    }
+
+    @Test
+    void coldFirstCarrierCompletesHelloBeforeItsJoinTimeout() throws Exception {
+        player.disconnect();
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        field(plugin, "proxyBridge", bridge);
+        bridge.init();
+        scheduler.runDelayedPass(); // Empty server: HELLO retry is now five seconds away.
+        player = new RecordingPlayer(server);
+        server.addPlayer(player);
+        login();
+        scheduler.runImmediate();
+        assertTrue(player.packets.stream().anyMatch(packet -> packet.type()
+                == net.thecommandcraft.vanishpp.common.protocol.VppMessage.HELLO),
+                "first carrier must start HELLO immediately instead of racing the five-second join timeout");
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.PONG, "{\"session\":\"cold-proxy\"}"));
+        var query = player.packets.stream().filter(packet -> packet.type()
+                == net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_QUERY)
+                .map(packet -> com.google.gson.JsonParser.parseString(packet.jsonPayload()).getAsJsonObject())
+                .filter(json -> json.has("requestId")).findFirst();
+        assertTrue(query.isPresent(), "PONG must release the pending targeted join query");
+        var reply = new com.google.gson.JsonObject();
+        reply.add("vanished", new com.google.gson.JsonArray());
+        reply.addProperty("requestId", query.orElseThrow().get("requestId").getAsString());
+        reply.addProperty("joiningUuid", player.getUniqueId().toString());
+        reply.addProperty("joiningVanished", false);
+        reply.addProperty("session", "cold-proxy");
+        reply.addProperty("revision", 0);
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_RESPONSE, reply.toString()));
+        assertFalse(plugin.isVanished(player), "targeted cold reply must release the provisional hold");
+        assertTrue(player.isOnline(), "a completed cold handshake must not kick the carrier");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void redisRecoveryCannotOverwriteAQueuedLocalDecision(boolean desired) throws Exception {
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:redis_pending_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage sql = sqlStorage(database);
+        sql.init();
+        field(plugin, "storageProvider", sql);
+        if (!desired) { plugin.applyVanishEffects(player); scheduler.drainAsync(); }
+        if (desired) plugin.applyVanishEffects(player); else plugin.removeVanishEffects(player);
+        var subscribed = new java.util.concurrent.CountDownLatch(1);
+        var stopped = new java.util.concurrent.CountDownLatch(1);
+        var subscriber = new java.util.concurrent.atomic.AtomicReference<redis.clients.jedis.JedisPubSub>();
+        var jedis = mock(redis.clients.jedis.Jedis.class);
+        doAnswer(call -> {
+            subscriber.set(call.getArgument(0)); subscribed.countDown();
+            stopped.await(5, java.util.concurrent.TimeUnit.SECONDS); return null;
+        }).when(jedis).subscribe(any(redis.clients.jedis.JedisPubSub.class), eq("vanishpp:sync"));
+        doAnswer(call -> { stopped.countDown(); return null; }).when(jedis).disconnect();
+        try (var pools = mockConstruction(redis.clients.jedis.JedisPool.class,
+                (pool, context) -> when(pool.getResource()).thenReturn(jedis))) {
+            RedisStorage redis = new RedisStorage(plugin);
+            redis.init();
+            try {
+                assertTrue(subscribed.await(5, java.util.concurrent.TimeUnit.SECONDS), "subscriber fixture must connect");
+                subscriber.get().onSubscribe("vanishpp:sync", 1);
+                scheduler.drainAsync();
+                assertAll(
+                        () -> assertEquals(desired, plugin.isVanished(player), "recovery snapshot must not undo a locally queued decision"),
+                        () -> assertEquals(desired, sql.isVanished(player.getUniqueId()), "latest local decision must remain persisted"));
+            } finally { redis.shutdown(); stopped.countDown(); }
+        }
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
@@ -474,6 +687,11 @@ class StateDurabilityTest {
     }
 
     private static class RecordingPlayer extends PlayerMock {
+        Runnable invisibilityObserver;
+        @Override public void setInvisible(boolean invisible) {
+            super.setInvisible(invisible);
+            if (invisibilityObserver != null) invisibilityObserver.run();
+        }
         final List<net.thecommandcraft.vanishpp.common.protocol.VppPacket.DecodedPacket> packets = new ArrayList<>();
         RecordingPlayer(ServerMock server) { super(server, "Staff"); }
         @Override public void sendPluginMessage(org.bukkit.plugin.Plugin source, String channel, byte[] message) {
@@ -482,18 +700,26 @@ class StateDurabilityTest {
     }
 
     private static class ControlledScheduler implements VanishScheduler {
+        String context = "event";
+        boolean cancelled;
         final List<Runnable> async = new ArrayList<>();
         final List<Runnable> later = new ArrayList<>();
+        final Map<Runnable, Long> delays = new HashMap<>();
         final List<Runnable> timers = new ArrayList<>();
-        public void runGlobal(Runnable task) { task.run(); }
-        public void runLaterGlobal(Runnable task, long ticks) { later.add(task); }
+        void run(String owner, Runnable task) { String old = context; context = owner; try { task.run(); } finally { context = old; } }
+        public void runGlobal(Runnable task) { run("global", task); }
+        public void runLaterGlobal(Runnable task, long ticks) { later.add(task); delays.put(task, ticks); }
         public void runTimerGlobal(Runnable task, long delay, long period) { timers.add(task); }
-        public void runEntity(Entity entity, Runnable task, Runnable retired) { task.run(); }
-        public void runEntityNow(Entity entity, Runnable task) { task.run(); }
+        public void runEntity(Entity entity, Runnable task, Runnable retired) { run("entity", task); }
+        public void runEntityNow(Entity entity, Runnable task) { run("entity", task); }
         public void runAsync(Runnable task) { async.add(task); }
-        public void cancelAllTasks() { later.clear(); timers.clear(); async.clear(); }
-        void drainAsync() { while (!async.isEmpty()) async.removeFirst().run(); }
-        void runDelayedPass() { List<Runnable> due = List.copyOf(later); later.clear(); due.forEach(Runnable::run); }
+        public Runnable startLater(Runnable task, long ticks) { runLaterGlobal(task, ticks); return () -> { later.remove(task); delays.remove(task); }; }
+        public void cancelAllTasks() { cancelled = true; later.clear(); timers.clear(); async.clear(); }
+        void drainAsync() { while (!async.isEmpty()) run("async", async.removeFirst()); }
+        void runDelayedPass() { List<Runnable> due = List.copyOf(later); later.clear(); due.forEach(task -> run("global", task)); }
+        void runImmediate() {
+            for (Runnable task : List.copyOf(later)) if (delays.getOrDefault(task, 100L) <= 1L) { later.remove(task); run("global", task); }
+        }
         void fireTimers() { List.copyOf(timers).forEach(Runnable::run); }
     }
 }
