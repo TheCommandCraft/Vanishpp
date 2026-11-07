@@ -203,21 +203,6 @@ spectator:
 silent-chest:
   blocked: "&cYou cannot open this silently (Inventory Type not supported or protected)."
 
-# --- [ TIMED VANISH ] ---
-timed-vanish:
-  expired: "&eYour timed vanish has expired."
-  set: "&aYou will be unvanished in &e%seconds%s&a."
-  invalid-duration: "&cInvalid duration. Use formats like &e30s&c, &e5m&c, &e1h&c."
-
-# --- [ RATE LIMIT ] ---
-rate-limit:
-  blocked: "&cYou are toggling vanish too quickly. Please wait a moment."
-
-# --- [ ANTI-COMBAT VANISH ] ---
-combat:
-  pvp-cooldown: "&cCannot vanish — PvP cooldown (%seconds%s remaining)."
-  pve-cooldown: "&cCannot vanish — PvE cooldown (%seconds%s remaining)."
-
 # --- [ VSPEC COMMAND ] ---
 vspec:
   usage: "&cUsage: /vspec <player|stop>"

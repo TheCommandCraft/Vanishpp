@@ -146,9 +146,6 @@ permissions:
       vanishpp.incognito: true
       vanishpp.incognito.others: true
       vanishpp.vanish.bulk: true
-      vanishpp.vanish.timed: true
-      vanishpp.combat.bypass: true
-      vanishpp.ratelimit.bypass: true
       vanishpp.invsee: true
       vanishpp.invsee.modify: true
 
@@ -272,15 +269,6 @@ permissions:
   vanishpp.vanish.bulk:
     description: Allows bulk-vanishing all/group/world players.
     default: op
-  vanishpp.vanish.timed:
-    description: Allows using timed vanish (/vanish <player> <duration>).
-    default: op
-  vanishpp.combat.bypass:
-    description: Bypasses the anti-combat-vanish cooldown.
-    default: false
-  vanishpp.ratelimit.bypass:
-    description: Bypasses the vanish toggle rate limit.
-    default: false
   vanishpp.invsee:
     description: Allows shift-right-clicking a player to view their inventory.
     default: op
