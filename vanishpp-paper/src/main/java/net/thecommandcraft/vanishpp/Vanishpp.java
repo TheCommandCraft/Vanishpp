@@ -673,6 +673,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void submitStorageWork(Runnable work) { if (!stopping) stateWrites.submit(work); }
 
+    /** Returns once all storage work accepted so far has finished, running any that no worker has started yet on this thread. */
+    public void flushStorageWork() { stateWrites.drain(); }
+
     private void migrateIfNeeded(StorageProvider target, String targetType) {
         if (!target.getAllKnownPlayers().isEmpty()) return;
         Runnable copy = () -> migrateEmptyTarget(target, targetType);

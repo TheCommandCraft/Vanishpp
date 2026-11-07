@@ -45,24 +45,15 @@ class StateDurabilityTest {
         plugin.getConfigManager().disableBlockTriggering = false;
         plugin.getConfigManager().preventSleeping = false;
         plugin.getConfigManager().enableFly = false;
-        field(plugin, "vanishScheduler", recordingAsync(plugin.getVanishScheduler()));
-        player = new RecordingPlayer(server);
-        server.addPlayer(player);
         server.getScheduler().cancelTasks(plugin);
         scheduler = new ControlledScheduler();
         field(plugin, "vanishScheduler", scheduler);
-    }
-
-    private VanishScheduler recordingAsync(VanishScheduler delegate) {
-        return (VanishScheduler) java.lang.reflect.Proxy.newProxyInstance(VanishScheduler.class.getClassLoader(),
-                new Class<?>[]{VanishScheduler.class}, (self, method, args) -> {
-                    if (method.getName().equals("runAsync")) {
-                        Runnable task = (Runnable) args[0];
-                        args = new Object[]{(Runnable) () -> { asyncStarted(); task.run(); }};
-                    }
-                    try { return method.invoke(delegate, args); }
-                    catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }
-                });
+        player = new RecordingPlayer(server);
+        server.addPlayer(player);
+        scheduler.drainAsync();
+        // The join has completed; the follow-up work it scheduled does not carry into the test.
+        scheduler.later.clear();
+        scheduler.delays.clear();
     }
 
     private void asyncStarted() {

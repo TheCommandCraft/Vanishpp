@@ -262,7 +262,7 @@ class VanishStateTest {
     }
 
     private void awaitStorageWrites() {
-        server.getScheduler().waitAsyncTasksFinished();
+        plugin.flushStorageWork();
     }
 
     /** Async work is accepted but does not start until the test releases it, like a pool thread that has not been scheduled yet. */
