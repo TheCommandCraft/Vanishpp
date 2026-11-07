@@ -68,6 +68,23 @@ class StateDurabilityTest {
     }
 
     @Test
+    void unavailableSqlInitializationDoesNotBecomeAuthoritativeYaml() throws Exception {
+        plugin.getConfigManager().getConfig().set("storage.type", "MYSQL");
+        field(plugin, "storageProvider", null);
+        try (var construction = mockConstruction(SqlStorage.class, (storage, context) -> {
+            doThrow(new java.sql.SQLException("database unavailable")).when(storage).init();
+            when(storage.isVanished(player.getUniqueId())).thenThrow(new IllegalStateException("unavailable")).thenReturn(true);
+        })) {
+            var initialize = Vanishpp.class.getDeclaredMethod("initStorage");
+            initialize.setAccessible(true);
+            initialize.invoke(plugin);
+            assertThrows(RuntimeException.class, () -> plugin.getStorageProvider().isVanished(player.getUniqueId()),
+                    "failed SQL initialization must not turn missing local YAML into an authoritative unvanish");
+            assertTrue(plugin.getStorageProvider().isVanished(player.getUniqueId()), "the configured provider must remain available for recovery");
+        }
+    }
+
+    @Test
     void failedLoginReadKeepsKnownStateAndRetries() throws Exception {
         StorageProvider storage = mock(StorageProvider.class);
         when(storage.isVanished(player.getUniqueId()))
