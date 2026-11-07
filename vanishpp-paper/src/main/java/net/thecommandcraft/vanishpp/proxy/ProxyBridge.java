@@ -36,6 +36,10 @@ public class ProxyBridge implements PluginMessageListener {
     private volatile boolean active = false;
     private volatile boolean helloSent = false;
     private final java.util.concurrent.atomic.AtomicBoolean flushing = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean retryScheduled = new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile boolean outboundSuspended;
+    private volatile long sendGeneration;
+    private int consecutiveSendFailures;
     private volatile boolean proxyDetected = false;
     private volatile boolean handshakeComplete = false;
     private volatile String serverName;
@@ -70,6 +74,10 @@ public class ProxyBridge implements PluginMessageListener {
 
     private static final long HANDSHAKE_TIMEOUT_TICKS = 100L; // 5 seconds (20 ticks/s)
     private static final long HELLO_RETRY_TICKS       = 100L; // retry interval when no player online
+    private static final int PACKETS_PER_FLUSH = 64;
+    private static final int MAX_SEND_FAILURES = 5;
+    private static final long SEND_RETRY_TICKS = 20L;
+    private static final long MAX_SEND_RETRY_TICKS = 200L;
 
     public ProxyBridge(Vanishpp plugin) {
         this.plugin = plugin;
@@ -90,6 +98,10 @@ public class ProxyBridge implements PluginMessageListener {
 
     public void shutdown() {
         active = false;
+        sendGeneration++;
+        outboundSuspended = false;
+        retryScheduled.set(false);
+        consecutiveSendFailures = 0;
         helloSent = false;
         proxyDetected = false;
         handshakeComplete = false;
@@ -463,7 +475,7 @@ public class ProxyBridge implements PluginMessageListener {
 
     /** Sends a raw packet via the first available online player, or queues it for later. */
     public void sendPacket(byte[] data) {
-        if (!active) return;
+        if (!active || outboundSuspended) return;
         Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
         pendingPackets.addLast(data);
         if (carrier != null) flushPendingPackets(carrier);
@@ -471,18 +483,56 @@ public class ProxyBridge implements PluginMessageListener {
 
     /** Flushes any queued packets now that a carrier player is available. Call on PlayerJoinEvent. */
     public void flushPendingPackets(Player carrier) {
-        plugin.getVanishScheduler().runEntityNow(carrier, () -> {
-            if (!active || !carrier.isOnline() || !flushing.compareAndSet(false, true)) return;
+        if (outboundSuspended || retryScheduled.get()) return;
+        Runnable flush = () -> {
+            if (!carrier.isOnline()) { if (active && !pendingPackets.isEmpty()) scheduleSendRetry(); return; }
+            if (!active || outboundSuspended || retryScheduled.get()
+                    || !flushing.compareAndSet(false, true)) return;
             try {
-                for (int sent = 0; sent < 64; sent++) {
+                for (int sent = 0; sent < PACKETS_PER_FLUSH && active; sent++) {
                     byte[] data = pendingPackets.pollFirst();
                     if (data == null) break;
-                    try { carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data); }
-                    catch (RuntimeException e) { pendingPackets.addFirst(data); break; }
+                    try {
+                        carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data);
+                        consecutiveSendFailures = 0;
+                    } catch (RuntimeException e) {
+                        pendingPackets.addFirst(data);
+                        consecutiveSendFailures++;
+                        if (e instanceof IllegalArgumentException || consecutiveSendFailures >= MAX_SEND_FAILURES) {
+                            outboundSuspended = true;
+                            plugin.getLogger().severe("Proxy outbound suspended on " + VppChannel.CHANNEL + " after "
+                                    + consecutiveSendFailures + " send failure(s); queued decisions are retained. Repair the channel and restart the server: "
+                                    + e.getClass().getSimpleName() + ": " + e.getMessage());
+                        } else {
+                            if (consecutiveSendFailures == 1) plugin.getLogger().warning("Proxy send through "
+                                    + carrier.getUniqueId() + " failed; retrying in order with backoff: "
+                                    + e.getClass().getSimpleName() + ": " + e.getMessage());
+                            scheduleSendRetry();
+                        }
+                        break;
+                    }
                 }
             } finally { flushing.set(false); }
-            if (!pendingPackets.isEmpty()) plugin.getVanishScheduler().runLaterEntity(carrier, () -> flushPendingPackets(carrier), 1L);
+            if (!pendingPackets.isEmpty() && !outboundSuspended && !retryScheduled.get())
+                plugin.getVanishScheduler().runLaterEntity(carrier, () -> flushPendingPackets(carrier), 1L);
+        };
+        if (plugin.getVanishScheduler().owns(carrier)) flush.run();
+        else plugin.getVanishScheduler().runEntity(carrier, flush, () -> {
+            if (active && !pendingPackets.isEmpty()) scheduleSendRetry();
         });
+    }
+
+    private void scheduleSendRetry() {
+        if (!retryScheduled.compareAndSet(false, true)) return;
+        long generation = sendGeneration;
+        long delay = Math.min(MAX_SEND_RETRY_TICKS, SEND_RETRY_TICKS << Math.max(0, Math.min(consecutiveSendFailures - 1, 3)));
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
+            if (generation != sendGeneration) return;
+            retryScheduled.set(false);
+            if (!active || outboundSuspended) return;
+            Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
+            if (carrier != null) flushPendingPackets(carrier);
+        }, delay);
     }
 
     private String resolveServerName() {

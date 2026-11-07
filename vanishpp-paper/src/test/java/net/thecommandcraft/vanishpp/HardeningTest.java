@@ -360,8 +360,9 @@ class HardeningTest {
     void mobSafetyDoesNotScheduleAPollForEveryMobEveryTick() throws Exception {
         field(plugin, "hasPaperApi", false);
         new MobAiManager(plugin).register();
-        assertTrue(scheduler.periods.stream().noneMatch(period -> period == 1L),
-                "mob safety must not install an every-tick player-by-mob sweep");
+        int before = scheduler.regionDispatches;
+        scheduler.fireTimers();
+        assertEquals(before, scheduler.regionDispatches, "idle mob maintenance must not poll regions or nearby mobs");
         state().add(player.getUniqueId());
         var target = new EntityTargetEvent(mock(Mob.class), player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
         new PlayerListener(plugin).onMobTarget(target);
@@ -734,6 +735,7 @@ class HardeningTest {
         for (int i = 0; i < 300; i++) {
             Mob mob = mock(Mob.class, RETURNS_DEEP_STUBS); mobs.add(mob);
             when(mob.getUniqueId()).thenReturn(UUID.randomUUID()); when(mob.isValid()).thenReturn(true);
+            when(mob.getWorld()).thenReturn(player.getWorld()); when(mob.getLocation()).thenReturn(player.getLocation());
             var target = new AtomicReference<org.bukkit.entity.LivingEntity>(player);
             when(mob.getTarget()).thenAnswer(call -> target.get());
             doAnswer(call -> { if (target.getAndSet(null) != null) cleared.incrementAndGet(); return null; }).when(mob).setTarget(null);
@@ -743,8 +745,9 @@ class HardeningTest {
         for (int i = 0; i < 20; i++) manager.clearTargets(player);
         int immediate = cleared.get();
         for (int i = 0; i < 30; i++) {
-            int before = cleared.get(); scheduler.fireTimers();
+            int before = cleared.get(); int regions = scheduler.regionDispatches; scheduler.fireTimers();
             assertTrue(cleared.get() - before <= 64, "mob cleanup must process at most its 64-entity tick budget");
+            assertTrue(scheduler.regionDispatches - regions <= 1, "mobs in one chunk must share one scheduled region batch");
         }
         assertAll(
                 () -> assertTrue(immediate <= 64, "transition requests must not synchronously scan all 300 mobs"),
@@ -756,6 +759,7 @@ class HardeningTest {
         MobAiManager manager = new MobAiManager(plugin);
         server.getPluginManager().registerEvents(manager, plugin);
         Mob mob = mock(Mob.class); when(mob.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(mob.getWorld()).thenReturn(player.getWorld()); when(mob.getLocation()).thenReturn(player.getLocation());
         manager.onTarget(new EntityTargetEvent(mob, player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER));
         var index = MobAiManager.class.getDeclaredField("mobTargets"); index.setAccessible(true);
         assertEquals(1, ((Map<?, ?>) index.get(manager)).size(), "target control must enter the index");
@@ -907,11 +911,13 @@ class HardeningTest {
         String context = "entity";
         Entity owner;
         boolean queueOffOwner;
+        int regionDispatches;
         final List<Runnable> entities = new ArrayList<>();
         final List<Runnable> async = new ArrayList<>(), later = new ArrayList<>(), timers = new ArrayList<>();
         final List<Long> periods = new ArrayList<>();
         void run(String owner, Runnable task) { String old = context; context = owner; try { task.run(); } finally { context = old; } }
         public void runGlobal(Runnable task) { run("global", task); }
+        public void runRegion(World world, int x, int z, Runnable task) { regionDispatches++; runGlobal(task); }
         public void runLaterGlobal(Runnable task, long ticks) { later.add(task); }
         public void runTimerGlobal(Runnable task, long delay, long period) { timers.add(task); periods.add(period); }
         public void runEntity(Entity entity, Runnable task, Runnable retired) {

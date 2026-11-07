@@ -37,46 +37,114 @@ public class MobAiManager implements Listener {
         this.plugin = plugin;
     }
 
+    private static final int ENTITY_WORK_PER_TICK = 64;
+    private static final long WORK_INTERVAL_TICKS = 1L;
+    private record ChunkWork(World world, int x, int z) {}
+    private record MobHandle(java.util.UUID id, java.lang.ref.WeakReference<Mob> mob, ChunkWork region) {}
+    private record MobWork(MobHandle handle, java.util.UUID target) {}
     private final java.util.Map<java.util.UUID, java.util.UUID> mobTargets = new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.util.Map<java.util.UUID, java.util.Map<java.util.UUID, Mob>> targeting = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<java.util.UUID, java.util.Set<java.util.UUID>> targeting = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<java.util.UUID, MobHandle> handles = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Queue<ChunkWork> chunks = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.Queue<MobHandle> initializing = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.Queue<java.util.UUID> requests = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.Set<java.util.UUID> requested = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Set<java.util.UUID> inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private java.util.Iterator<java.util.UUID> currentTargets = java.util.Collections.emptyIterator();
+    private java.util.UUID currentPlayer;
 
     public void register() {
+        plugin.getVanishScheduler().runTimerGlobal(this::workTick, WORK_INTERVAL_TICKS, WORK_INTERVAL_TICKS);
         if (plugin.hasPaperApi()) plugin.getVanishScheduler().runGlobal(() -> {
             for (World world : Bukkit.getWorlds()) {
                 for (org.bukkit.Chunk chunk : world.getLoadedChunks()) {
-                    int x = chunk.getX(), z = chunk.getZ();
-                    plugin.getVanishScheduler().runRegion(world, x, z, () -> {
-                        if (!world.isChunkLoaded(x, z)) return;
-                        for (Entity entity : chunk.getEntities()) if (entity instanceof Mob mob)
-                            plugin.getVanishScheduler().runEntityNow(mob, () -> watch(mob));
-                    });
+                    chunks.add(new ChunkWork(world, chunk.getX(), chunk.getZ()));
                 }
             }
         });
     }
 
+    private void workTick() {
+        // Admit one loaded chunk each tick; entity work from it shares the same bounded queue.
+        ChunkWork chunk = chunks.poll();
+        if (chunk != null) plugin.getVanishScheduler().runRegion(chunk.world(), chunk.x(), chunk.z(), () -> {
+            if (!chunk.world().isChunkLoaded(chunk.x(), chunk.z())) return;
+            for (Entity entity : chunk.world().getChunkAt(chunk.x(), chunk.z()).getEntities())
+                if (entity instanceof Mob mob) initializing.add(handle(mob));
+        });
+        java.util.Map<ChunkWork, List<MobWork>> batches = new java.util.HashMap<>();
+        for (int work = 0; work < ENTITY_WORK_PER_TICK; work++) {
+            if (!currentTargets.hasNext()) {
+                if (currentPlayer != null) requested.remove(currentPlayer);
+                currentPlayer = requests.poll();
+                currentTargets = currentPlayer == null ? java.util.Collections.emptyIterator()
+                        : targeting.getOrDefault(currentPlayer, java.util.Set.of()).iterator();
+            }
+            if (currentTargets.hasNext()) {
+                java.util.UUID uuid = currentTargets.next();
+                var handle = handles.get(uuid);
+                Mob mob = handle == null ? null : handle.mob().get();
+                if (mob == null) forget(uuid);
+                else if (inFlight.add(uuid)) batches.computeIfAbsent(handle.region(), key -> new ArrayList<>()).add(new MobWork(handle, currentPlayer));
+            } else {
+                var handle = initializing.poll();
+                if (handle == null) {
+                    if (currentPlayer == null) break;
+                    continue;
+                }
+                if (handle.mob().get() != null) {
+                    if (inFlight.add(handle.id())) batches.computeIfAbsent(handle.region(), key -> new ArrayList<>()).add(new MobWork(handle, null));
+                    else initializing.add(handle);
+                }
+            }
+        }
+        batches.forEach((region, batch) -> plugin.getVanishScheduler().runRegion(region.world(), region.x(), region.z(), () -> {
+            for (MobWork work : batch) {
+                Mob mob = work.handle().mob().get();
+                if (mob == null) { forget(work.handle().id()); continue; }
+                Runnable apply = () -> {
+                    try {
+                        if (!mob.isValid()) { forget(work.handle().id()); return; }
+                        if (work.target() == null) watch(mob); else clearTargetOwned(mob, work.target());
+                    } finally { inFlight.remove(work.handle().id()); }
+                };
+                if (!plugin.getVanishScheduler().regionThreaded() || plugin.getVanishScheduler().owns(mob)) apply.run();
+                else plugin.getVanishScheduler().runEntity(mob, apply, () -> forget(work.handle().id()));
+            }
+        }));
+    }
+
+    private MobHandle handle(Mob mob) {
+        org.bukkit.Location location = mob.getLocation();
+        return new MobHandle(mob.getUniqueId(), new java.lang.ref.WeakReference<>(mob),
+                new ChunkWork(mob.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4));
+    }
+
     public void clearTargets(Player player) {
-        if (!plugin.getConfigManager().disableMobTarget) return;
-        java.util.Map<java.util.UUID, Mob> mobs = targeting.remove(player.getUniqueId());
-        if (mobs != null) for (Mob mob : mobs.values()) clearTarget(mob, player.getUniqueId());
-        // Paper permits a one-time world snapshot; Folia uses owner-published target references.
-        if (!plugin.getVanishScheduler().regionThreaded()) {
-            for (Entity entity : player.getWorld().getEntities()) if (entity instanceof Mob mob) clearTarget(mob, player.getUniqueId());
+        if (!plugin.getConfigManager().disableMobTarget || plugin.getRuleManager().getRule(player, RuleManager.MOB_TARGETING)) return;
+        if (requested.add(player.getUniqueId())) requests.add(player.getUniqueId());
+    }
+
+    private void clearTargetOwned(Mob mob, java.util.UUID player) {
+        java.util.UUID uuid = mob.getUniqueId();
+        if (!mob.isValid()) { forget(uuid); return; }
+        org.bukkit.entity.LivingEntity target = mob.getTarget();
+        if (target != null && player.equals(target.getUniqueId()) && plugin.isVanished(player)
+                && plugin.getConfigManager().disableMobTarget
+                && !plugin.getRuleManager().getRule(player, RuleManager.MOB_TARGETING)) {
+            mob.setTarget(null);
+            mob.getPathfinder().stopPathfinding();
+            forget(uuid);
         }
     }
 
-    private void clearTarget(Mob mob, java.util.UUID player) {
-        plugin.getVanishScheduler().runEntityNow(mob, () -> {
-            org.bukkit.entity.LivingEntity target = mob.getTarget();
-            if (target != null && player.equals(target.getUniqueId()) && plugin.isVanished(player)) {
-                mob.setTarget(null);
-                mob.getPathfinder().stopPathfinding();
-                forget(mob.getUniqueId());
-            }
-        });
+    private void forget(java.util.UUID mob) {
+        inFlight.remove(mob);
+        handles.remove(mob);
+        removeTarget(mob);
     }
 
-    private void forget(java.util.UUID mob) {
+    private void removeTarget(java.util.UUID mob) {
         java.util.UUID previous = mobTargets.remove(mob);
         if (previous != null) targeting.computeIfPresent(previous, (uuid, mobs) -> {
             mobs.remove(mob);
@@ -85,12 +153,14 @@ public class MobAiManager implements Listener {
     }
 
     private void recordTarget(Mob mob, Entity target) {
-        forget(mob.getUniqueId());
+        removeTarget(mob.getUniqueId());
+        handles.remove(mob.getUniqueId());
         if (target instanceof Player player) {
+            handles.put(mob.getUniqueId(), handle(mob));
             mobTargets.put(mob.getUniqueId(), player.getUniqueId());
             targeting.compute(player.getUniqueId(), (uuid, mobs) -> {
-                if (mobs == null) mobs = new java.util.concurrent.ConcurrentHashMap<>();
-                mobs.put(mob.getUniqueId(), mob);
+                if (mobs == null) mobs = java.util.concurrent.ConcurrentHashMap.newKeySet();
+                mobs.add(mob.getUniqueId());
                 return mobs;
             });
         }
@@ -100,7 +170,7 @@ public class MobAiManager implements Listener {
         recordTarget(mob, mob.getTarget());
         if (mob.getTarget() instanceof Player target && plugin.isVanished(target)
                 && plugin.getConfigManager().disableMobTarget
-                && !plugin.getRuleManager().getRule(target, RuleManager.MOB_TARGETING)) clearTarget(mob, target.getUniqueId());
+                && !plugin.getRuleManager().getRule(target, RuleManager.MOB_TARGETING)) clearTargetOwned(mob, target.getUniqueId());
         if (plugin.hasPaperApi()) injectIfMissing(mob);
     }
 
@@ -116,7 +186,7 @@ public class MobAiManager implements Listener {
 
     @EventHandler
     public void onEntitiesLoad(EntitiesLoadEvent event) {
-        for (Entity entity : event.getEntities()) if (entity instanceof Mob mob) watch(mob);
+        for (Entity entity : event.getEntities()) if (entity instanceof Mob mob) initializing.add(handle(mob));
     }
 
     @EventHandler
@@ -126,6 +196,11 @@ public class MobAiManager implements Listener {
 
     @EventHandler
     public void onDeath(org.bukkit.event.entity.EntityDeathEvent event) {
+        forget(event.getEntity().getUniqueId());
+    }
+
+    @EventHandler
+    public void onRemove(com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent event) {
         forget(event.getEntity().getUniqueId());
     }
     /**

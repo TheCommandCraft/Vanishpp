@@ -139,6 +139,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private final net.thecommandcraft.vanishpp.config.PlayerDataCache playerData = new net.thecommandcraft.vanishpp.config.PlayerDataCache(this);
     private final java.util.concurrent.atomic.AtomicBoolean refreshingPlayerData = new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.atomic.AtomicBoolean pruningHistory = new java.util.concurrent.atomic.AtomicBoolean();
+    private static final int DEFAULT_HISTORY_RETENTION_DAYS = 30;
+    private static final long HISTORY_MAINTENANCE_INTERVAL_TICKS = 1200L;
     private net.thecommandcraft.vanishpp.scoreboard.VanishBossbar vanishBossbar;
 
     @Override
@@ -724,22 +726,27 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getLogger().info("Storage migration complete: " + count + " player(s) migrated.");
     }
 
+    private record NetworkEffects(long version, boolean before, boolean hidden) {}
+    private final Map<UUID, NetworkEffects> networkEffects = new ConcurrentHashMap<>();
+
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {
         if (stopping) return;
-        long decisionVersion = beginStateDecision(uuid);
-        stateWrites.submit(() -> persistState(uuid, vanish, decisionVersion));
-        // Idempotency check: skip if state already matches network message
-        boolean isCurrentlyVanished = vanishedPlayers.contains(uuid);
-        if (isCurrentlyVanished == vanish) {
-            // Already in desired state — this is a duplicate message, skip it
-            getLogger().fine("Ignoring duplicate network vanish sync for " + uuid + " (already " + (vanish ? "vanished" : "unvanished") + ")");
-            return;
-        }
-
         Player p = Bukkit.getPlayer(uuid);
-        if (vanish) vanishedPlayers.add(uuid); else vanishedPlayers.remove(uuid);
-        if (p != null) vanishScheduler.runEntityNow(p, () -> {
-            if (!p.isOnline() || stopping || stateVersion(uuid) != decisionVersion) return;
+        NetworkEffects effects;
+        synchronized (stateDecisionLock) {
+            NetworkEffects pending = networkEffects.get(uuid);
+            boolean before = pending != null && pending.version() == stateVersion(uuid)
+                    ? pending.before() : isVanished(uuid);
+            long version = beginStateDecision(uuid);
+            stateWrites.submit(() -> persistState(uuid, vanish, version));
+            if (vanish) vanishedPlayers.add(uuid); else vanishedPlayers.remove(uuid);
+            effects = new NetworkEffects(version, before, vanish);
+            if (p == null || before == vanish) { networkEffects.remove(uuid); return; }
+            networkEffects.put(uuid, effects);
+        }
+        vanishScheduler.runEntityNow(p, () -> {
+            if (!p.isOnline() || stopping || stateVersion(uuid) != effects.version()
+                    || !networkEffects.remove(uuid, effects)) return;
             if (vanish) applyVanishEffects(p, false); else removeVanishEffects(p, false);
             postStateChange(p, vanish);
         });
@@ -1140,6 +1147,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void cleanupPlayerCache(UUID uuid) {
+        networkEffects.remove(uuid);
         playerData.forget(uuid);
         abortProxyJoin(uuid);
         stateVersions.merge(uuid, 1L, Long::sum);
@@ -1299,14 +1307,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     private void startSyncTask() {
         vanishScheduler.runTimerGlobal(() -> {
-            int retention = configManager.getConfig().getInt("vanish-history.retention-days", 30);
+            int retention = configManager.getConfig().getInt("vanish-history.retention-days", DEFAULT_HISTORY_RETENTION_DAYS);
             if (retention <= 0 || !pruningHistory.compareAndSet(false, true)) return;
             vanishScheduler.runAsync(() -> {
                 try { storageProvider.pruneHistory(retention); }
                 catch (RuntimeException e) { getLogger().warning("History retention will retry: " + e.getMessage()); }
                 finally { pruningHistory.set(false); }
             });
-        }, 1L, 1200L);
+        }, 1L, HISTORY_MAINTENANCE_INTERVAL_TICKS);
         vanishScheduler.runTimerGlobal(() -> {
             voiceAudience.refresh();
             if (!hasProtocolLib) viewerTeams.refresh();
@@ -1645,39 +1653,55 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private final Set<UUID> changingPlayers = ConcurrentHashMap.newKeySet();
 
     private void changeVanish(Player player, CommandSender executor, boolean hidden, String reason, TransitionMessages messages) {
-        vanishScheduler.runEntityNow(player, () -> {
-            UUID uuid = player.getUniqueId();
-            ProxyJoin pending = proxyJoins.get(uuid);
-            boolean previouslyHidden = pending != null && pending.version() == stateVersion(uuid)
-                    ? pending.previouslyHidden() : isVanished(uuid);
-            if (stopping || !player.isOnline() || hidden == previouslyHidden
-                    || (proxyBridge != null && proxyBridge.isTransferPending(uuid)) || !changingPlayers.add(uuid)) return;
-            CommandSender source = executor == null ? player : executor;
-            boolean changed = false;
-            try {
-                if (worldGuardHook != null && (hidden ? worldGuardHook.isDenyVanish(player) : worldGuardHook.isDenyUnvanish(player))) return;
-                org.bukkit.event.Cancellable before = hidden
-                        ? new net.thecommandcraft.vanishpp.api.events.VanishEvent(player, source)
-                        : new net.thecommandcraft.vanishpp.api.events.UnvanishEvent(player, source);
-                Bukkit.getPluginManager().callEvent((org.bukkit.event.Event) before);
-                if (before.isCancelled() || stopping || (proxyBridge != null && proxyBridge.isTransferPending(uuid))) return;
-                if (hidden && reason != null && !reason.isEmpty()) vanishReasons.put(uuid, reason);
-                if (hidden) applyVanishEffects(player, true); else removeVanishEffects(player, true);
-                changed = isVanished(uuid) == hidden;
-                if (!changed) return;
-                if (messages != TransitionMessages.NONE) {
-                    String message = hidden ? configManager.vanishMessage : configManager.unvanishMessage;
-                    if (isValidMessage(message)) player.sendMessage(messageManager.parse(message, player));
-                }
-                if (messages == TransitionMessages.FULL) {
-                    announceTransition(player, hidden);
-                    notifyStaff(player, source, hidden);
-                }
-            } finally {
-                changingPlayers.remove(uuid);
-                if (changed) postStateChange(player, hidden);
+        changeVanish(player, executor, hidden, reason, messages, accepted -> {});
+    }
+
+    /** Completes on the player's owner after acceptance; retired requests complete with false. */
+    public void requestVanish(Player player, CommandSender executor, boolean hidden, String reason,
+                              java.util.function.Consumer<Boolean> completed) {
+        changeVanish(player, executor, hidden, reason, TransitionMessages.FULL, completed);
+    }
+
+    private void changeVanish(Player player, CommandSender executor, boolean hidden, String reason,
+                              TransitionMessages messages, java.util.function.Consumer<Boolean> completed) {
+        Runnable transition = () -> completed.accept(changeVanishOwned(player, executor, hidden, reason, messages));
+        if (vanishScheduler.owns(player)) transition.run();
+        else vanishScheduler.runEntity(player, transition, () -> completed.accept(false));
+    }
+
+    private boolean changeVanishOwned(Player player, CommandSender executor, boolean hidden, String reason, TransitionMessages messages) {
+        UUID uuid = player.getUniqueId();
+        ProxyJoin pending = proxyJoins.get(uuid);
+        boolean previouslyHidden = pending != null && pending.version() == stateVersion(uuid)
+                ? pending.previouslyHidden() : isVanished(uuid);
+        if (stopping || !player.isOnline() || hidden == previouslyHidden
+                || (proxyBridge != null && proxyBridge.isTransferPending(uuid)) || !changingPlayers.add(uuid)) return false;
+        CommandSender source = executor == null ? player : executor;
+        boolean changed = false;
+        try {
+            if (worldGuardHook != null && (hidden ? worldGuardHook.isDenyVanish(player) : worldGuardHook.isDenyUnvanish(player))) return false;
+            org.bukkit.event.Cancellable before = hidden
+                    ? new net.thecommandcraft.vanishpp.api.events.VanishEvent(player, source)
+                    : new net.thecommandcraft.vanishpp.api.events.UnvanishEvent(player, source);
+            Bukkit.getPluginManager().callEvent((org.bukkit.event.Event) before);
+            if (before.isCancelled() || stopping || (proxyBridge != null && proxyBridge.isTransferPending(uuid))) return false;
+            if (hidden && reason != null && !reason.isEmpty()) vanishReasons.put(uuid, reason);
+            if (hidden) applyVanishEffects(player, true); else removeVanishEffects(player, true);
+            changed = isVanished(uuid) == hidden;
+            if (!changed) return false;
+            if (messages != TransitionMessages.NONE) {
+                String message = hidden ? configManager.vanishMessage : configManager.unvanishMessage;
+                if (isValidMessage(message)) player.sendMessage(messageManager.parse(message, player));
             }
-        });
+            if (messages == TransitionMessages.FULL) {
+                announceTransition(player, hidden);
+                notifyStaff(player, source, hidden);
+            }
+        } finally {
+            changingPlayers.remove(uuid);
+            if (changed) postStateChange(player, hidden);
+        }
+        return changed;
     }
 
     private void postStateChange(Player player, boolean hidden) {

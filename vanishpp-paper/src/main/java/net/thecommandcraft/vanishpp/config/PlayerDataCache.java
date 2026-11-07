@@ -14,6 +14,7 @@ public final class PlayerDataCache {
     private static final class Entry {
         volatile Snapshot snapshot;
         long revision;
+        long readGeneration;
         boolean loading;
     }
     private final Map<UUID, Entry> entries = new ConcurrentHashMap<>();
@@ -26,12 +27,14 @@ public final class PlayerDataCache {
         if (!(provider instanceof SqlStorage)) return;
         Entry entry = entries.computeIfAbsent(uuid, key -> new Entry());
         long revision;
-        synchronized (entry) { revision = entry.revision; }
+        long readGeneration;
+        synchronized (entry) { revision = entry.revision; readGeneration = ++entry.readGeneration; }
         Map<String, Object> rules = Collections.unmodifiableMap(new HashMap<>(provider.getRecoveryRules(uuid)));
         int level = provider.getRecoveryVanishLevel(uuid);
         Set<String> acknowledgements = Set.copyOf(provider.getRecoveryAcknowledgements(uuid));
         synchronized (entry) {
-            if (provider == plugin.getStorageProvider() && entries.get(uuid) == entry && revision == entry.revision)
+            if (provider == plugin.getStorageProvider() && entries.get(uuid) == entry
+                    && revision == entry.revision && readGeneration == entry.readGeneration)
                 entry.snapshot = new Snapshot(provider, rules, level, acknowledgements);
         }
     }

@@ -151,7 +151,9 @@ WorldGuard's `vanishpp-deny-vanish` and `vanishpp-deny-unvanish` flags apply to 
 
 `VanishEvent` and `UnvanishEvent` fire before a local request changes reasons, messages, effects or persistence; cancellation stops it. Proxy/Redis reconciliation and persisted login restoration are authoritative and cannot be vetoed by a local listener. `VanishStateChangeEvent` fires only for an actual accepted change. Mutation calls dispatch to the player's owning scheduler. Storage-query API methods must be called asynchronously when using SQL.
 
-Gameplay rules and scoreboard levels use SQL snapshots loaded before login and refreshed every five seconds. Completed local rule changes update the snapshot; a failed refresh retains the last complete values. Mob targeting uses events and a one-time detarget pass, without an every-tick mob sweep.
+Gameplay rules and scoreboard levels use SQL snapshots loaded before login and refreshed every five seconds. Completed local rule changes update the snapshot; failed or superseded reads cannot replace newer values. Mob targeting uses events and a resumable queue capped at 64 entities per tick, grouped into chunk batches. Repeated detarget requests coalesce; startup admits one loaded chunk per tick and removal events retire tracked mobs.
+
+Proxy sends preserve order and retry transient carrier failures with backoff. Invalid packets or five consecutive failures suspend outbound delivery with a diagnostic; repair the channel and restart the server. Pending state decisions remain persisted, while unanswered joins and transfers retain their existing timeout behavior.
 
 `vanish-history.enabled` controls recording. `retention-days` removes old entries in asynchronous minute-by-minute maintenance; `0` retains them indefinitely. `/vhistory <name>` resolves disconnected players from saved history. Webhooks send `webhook.auth-header` as `Authorization` and escape all substituted JSON strings. The older `webhook.authorization` spelling is accepted when `auth-header` is absent.
 

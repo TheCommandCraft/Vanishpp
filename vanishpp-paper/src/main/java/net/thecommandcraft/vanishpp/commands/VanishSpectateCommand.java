@@ -68,9 +68,17 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
 
         // Auto-vanish if not already vanished
         if (!plugin.isVanished(player)) {
-            plugin.vanishPlayer(player, player);
+            plugin.requestVanish(player, player, true, null, accepted -> {
+                if (accepted) startSpec(player, target);
+            });
+        } else {
+            startSpec(player, target);
         }
+        return true;
+    }
 
+    private void startSpec(Player player, Player target) {
+        if (!player.isOnline() || !target.isOnline() || !plugin.getPermissionManager().canSee(player, target)) return;
         // Save origin
         plugin.spectateOrigins.put(player.getUniqueId(), player.getLocation().clone());
         plugin.saveGamemodeForRestore(player);
@@ -80,7 +88,8 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
         plugin.getVanishScheduler().runEntityNow(target, () -> {
             Location destination = target.getLocation().clone();
             plugin.getVanishScheduler().runEntityNow(player, () -> {
-                if (player.isOnline() && plugin.isVanished(player)
+                if (player.isOnline() && (plugin.isVanished(player)
+                        || plugin.getPermissionManager().hasPermission(player, "vanishpp.spectator.bypass"))
                         && target.getUniqueId().equals(plugin.spectateFollowTargets.get(player.getUniqueId())))
                     player.teleportAsync(destination);
             });
@@ -89,7 +98,6 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
         plugin.getMessageManager().sendMessage(player,
                 plugin.getConfigManager().getLanguageManager().getMessage("vspec.started")
                         .replace("%player%", target.getName()));
-        return true;
     }
 
     private void stopSpec(Player player) {

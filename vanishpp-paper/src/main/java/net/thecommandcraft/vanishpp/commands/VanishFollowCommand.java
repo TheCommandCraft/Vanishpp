@@ -145,9 +145,13 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
             String overlay = String.format("§7Following: §e%s §8| §7XYZ: §f%.1f, %.1f, %.1f §8| §7HP: §c%.1f §8| §7%s",
                     target.getName(), location.getX(), location.getY(), location.getZ(), target.getHealth(), target.getGameMode().name());
             plugin.getVanishScheduler().runEntityNow(follower, () -> {
-                if (!follower.isOnline() || !plugin.isVanished(follower)
+                if (!follower.isOnline()
                         || !targetUuid.equals(plugin.spectateFollowTargets.get(follower.getUniqueId()))
                         || !java.util.Objects.equals(requests.get(follower.getUniqueId()), request)) return;
+                if (!plugin.isVanished(follower) && !plugin.getPermissionManager().hasPermission(follower, "vanishpp.spectator.bypass")) {
+                    stopFollow(follower);
+                    return;
+                }
                 if (!plugin.getPermissionManager().canSee(follower, target)) { stopFollow(follower); return; }
                 follower.teleportAsync(location);
                 follower.sendActionBar(plugin.getMessageManager().parse(overlay, follower));
