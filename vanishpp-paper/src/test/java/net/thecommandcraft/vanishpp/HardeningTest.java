@@ -44,10 +44,16 @@ class HardeningTest {
     private PlayerMock player;
     private ControlledScheduler scheduler;
     private final Map<Inventory, Component> titles = new IdentityHashMap<>();
+    private boolean countScoreboardAccesses;
+    private int scoreboardAccesses;
 
     @BeforeEach
     void setUp() throws Exception {
         server = MockBukkit.mock(new ServerMock() {
+            @Override public be.seeseemelk.mockbukkit.scoreboard.ScoreboardManagerMock getScoreboardManager() {
+                if (countScoreboardAccesses) scoreboardAccesses++;
+                return super.getScoreboardManager();
+            }
             @Override public be.seeseemelk.mockbukkit.inventory.InventoryMock createInventory(InventoryHolder holder, int size, Component title) {
                 var inventory = super.createInventory(holder, size, PlainTextComponentSerializer.plainText().serialize(title));
                 titles.put(inventory, title);
@@ -269,6 +275,22 @@ class HardeningTest {
     }
 
     @Test
+    void foliaDoesNotUseTheUnsupportedScoreboardApi() throws Exception {
+        field(plugin, "vanishScheduler", new FoliaSchedulerBridge(plugin) {
+            @Override public boolean owns(Entity entity) { return true; }
+            @Override public void runEntityNow(Entity entity, Runnable task) { task.run(); }
+            @Override public void runEntity(Entity entity, Runnable task, Runnable retired) { task.run(); }
+            @Override public void runGlobal(Runnable task) { task.run(); }
+            @Override public void runTimerGlobal(Runnable task, long delay, long period) {}
+            @Override public void runAsync(Runnable task) { scheduler.async.add(task); }
+        });
+        countScoreboardAccesses = true;
+        try { plugin.getVanishScoreboard().show(player); }
+        catch (RuntimeException ignored) { /* The assertion concerns entering the unsupported API, not MockBukkit's renderer. */ }
+        assertEquals(0, scoreboardAccesses, "Folia must avoid unsupported scoreboard API calls");
+    }
+
+    @Test
     void gameplayRuleReadsUsePreparedSnapshotsWithoutStorageQueries() throws Exception {
         SqlStorage storage = mock(SqlStorage.class);
         field(plugin, "storageProvider", storage);
@@ -413,7 +435,7 @@ class HardeningTest {
     @Test
     void unsupportedControlsAreNotAdvertisedAsWorkingSettings() {
         var config = plugin.getConfigManager().getConfig();
-        var unsupported = List.of("anti-combat-vanish", "vanish-rate-limit", "timed-vanish", "afk-auto-vanish", "world-rules");
+        var unsupported = List.of("anti-combat-vanish", "vanish-rate-limit", "timed-vanish", "afk-auto-vanish", "world-rules", "staff-sounds");
         assertEquals(List.of(), unsupported.stream().filter(config::contains).toList(),
                 "unimplemented controls must be removed from the shipped configuration");
     }
