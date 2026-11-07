@@ -53,6 +53,7 @@ class ConfigSecurityTest {
         player.setOp(false);
         assertFalse(player.hasPermission("vanishpp.config"));
         player.performCommand("vack apply_proxy");
+        awaitStorageWrites();
         int unauthorizedPatches = sent.size();
         String acknowledgement = "proxy_config_v" + plugin.getConfigManager().getLatestVersion();
         boolean unauthorizedAck = plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), acknowledgement);
@@ -60,12 +61,14 @@ class ConfigSecurityTest {
         sent.clear();
         player.addAttachment(plugin, "vanishpp.config", true);
         player.performCommand("vack apply_proxy");
+        awaitStorageWrites();
         assertEquals(1, sent.size(), "a permitted player must still send a network patch");
         assertEquals("7", sent.getFirst().get("permissions.default-see-level"));
         assertTrue(plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), acknowledgement));
 
         PlayerMock ordinary = server.addPlayer();
         ordinary.performCommand("vack proxy_config");
+        awaitStorageWrites();
         assertTrue(plugin.getStorageProvider().hasAcknowledged(ordinary.getUniqueId(), acknowledgement));
         assertAll(
                 () -> assertEquals(0, unauthorizedPatches, "apply_proxy must not send a patch without vanishpp.config"),
@@ -101,4 +104,10 @@ class ConfigSecurityTest {
                 () -> assertTrue(unprivilegedValues.isEmpty(), "config values require vanishpp.config"),
                 () -> assertTrue(leakedPaths.isEmpty(), "secret values must never be suggested: " + leakedPaths));
     }
+    private void awaitStorageWrites() {
+        var completed = new java.util.concurrent.CountDownLatch(1);
+        plugin.submitStorageWork(completed::countDown);
+        assertDoesNotThrow(() -> assertTrue(completed.await(5, java.util.concurrent.TimeUnit.SECONDS), "accepted storage writes must finish"));
+    }
+
 }

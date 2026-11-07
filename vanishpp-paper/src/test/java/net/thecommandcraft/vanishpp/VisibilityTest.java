@@ -157,6 +157,7 @@ class VisibilityTest {
     void silentJoinNotificationRespectsLevels() {
         lowRank();
         drain(viewer);
+        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(subject.getName(), InetAddress.getLoopbackAddress(), subject.getUniqueId()));
         listener.onJoin(new PlayerJoinEvent(subject, Component.text("joined")));
         assertFalse(drain(viewer).contains(subject.getName()), "silent-join notice must not disclose higher rank identities");
     }

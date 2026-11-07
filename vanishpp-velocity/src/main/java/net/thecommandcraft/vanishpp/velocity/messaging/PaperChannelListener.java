@@ -28,6 +28,7 @@ public class PaperChannelListener {
     private final ProxyStateManager stateManager;
     private final PaperChannelDispatcher dispatcher;
     private final VelocityConfigManager configManager;
+    private final Map<String, Long> clientRevisions = new java.util.concurrent.ConcurrentHashMap<>();
 
     public PaperChannelListener(VanishppVelocity plugin, ProxyStateManager stateManager,
                                 PaperChannelDispatcher dispatcher, VelocityConfigManager configManager) {
@@ -59,7 +60,8 @@ public class PaperChannelListener {
         switch (packet.type()) {
             case HELLO              -> handleHello(server, serverName, json);
             case VANISH_EVENT       -> handleVanishEvent(serverName, json);
-            case STATE_QUERY        -> handleStateQuery(server);
+            case TRANSFER_READY     -> stateManager.getTransfers().complete(serverConn, json, () -> handleVanishEvent(serverName, json));
+            case STATE_QUERY        -> handleStateQuery(serverConn, server, json);
             case CONFIG_REQUEST     -> handleConfigRequest(server, serverName);
             case RELOAD_REQUEST     -> handleReloadRequest(json);
             case PLAYER_LIST_QUERY  -> handlePlayerListQuery(server, json);
@@ -90,38 +92,80 @@ public class PaperChannelListener {
         String version = json.has("pluginVersion") ? json.get("pluginVersion").getAsString() : "?";
         plugin.getLogger().info("VanishPP Paper plugin connected: {} (plugin v{})", serverName, version);
 
+        if (json.has("vanished")) {
+            java.util.List<net.thecommandcraft.vanishpp.common.state.NetworkVanishState> restored = new java.util.ArrayList<>();
+            for (var entry : json.getAsJsonArray("vanished")) {
+                var state = entry.getAsJsonObject();
+                restored.add(new net.thecommandcraft.vanishpp.common.state.NetworkVanishState(
+                        UUID.fromString(state.get("uuid").getAsString()), "", serverName,
+                        state.has("vanishLevel") ? state.get("vanishLevel").getAsInt() : 1));
+            }
+            if (stateManager.bootstrap(restored)) {
+                for (RegisteredServer backend : plugin.getProxy().getAllServers())
+                    if (!backend.equals(server)) dispatcher.sendStateResponse(backend, stateManager);
+            }
+        }
+
         // PONG
-        dispatcher.sendPong(server, plugin.getProxy().getVersion().getVersion());
+        dispatcher.sendPong(server, plugin.getProxy().getVersion().getVersion(), stateManager.getSession());
 
         // Config push with server-specific overrides applied
         ProxyConfigSnapshot snapshot = configManager.getSnapshot().applyOverride(serverName);
         dispatcher.pushConfigTo(server, snapshot);
 
         // Full state sync
-        dispatcher.sendStateResponse(server, stateManager.getAllVanishedPlayers());
+        dispatcher.sendStateResponse(server, stateManager);
 
         // If a proxy update is already known, push it immediately to the newly connected server
         plugin.getUpdateChecker().notifyServer(server);
     }
 
     /** A player vanished or unvanished on a Paper server — update state and broadcast to all other servers. */
-    private void handleVanishEvent(String serverName, JsonObject json) {
+    private boolean handleVanishEvent(String serverName, JsonObject json) {
         UUID uuid = UUID.fromString(json.get("uuid").getAsString());
         String playerName = json.has("playerName") ? json.get("playerName").getAsString() : "";
         boolean vanished  = json.get("vanished").getAsBoolean();
         int     level     = json.has("vanishLevel") ? json.get("vanishLevel").getAsInt() : 1;
 
-        stateManager.setVanished(uuid, playerName, serverName, vanished, level);
-
-        // Broadcast to all other connected Paper servers
-        dispatcher.broadcastVanishSync(uuid, vanished, serverName);
+        if (plugin.getProxy().getPlayer(uuid).flatMap(player -> player.getCurrentServer())
+                .map(connection -> !connection.getServerInfo().getName().equals(serverName)).orElse(false)) return false;
+        synchronized (stateManager) {
+            String clientKey = null;
+            long sequence = 0L;
+            if (json.has("clientSession") && json.has("sequence")) {
+                clientKey = serverName + ":" + uuid + ":" + json.get("clientSession").getAsString();
+                sequence = json.get("sequence").getAsLong();
+                long previous = clientRevisions.getOrDefault(clientKey, -1L);
+                if (sequence <= previous) {
+                    if (sequence == previous) acknowledge(serverName, uuid, json);
+                    return sequence == previous;
+                }
+            }
+            stateManager.setVanished(uuid, playerName, serverName, vanished, level);
+            if (clientKey != null) clientRevisions.put(clientKey, sequence);
+            dispatcher.broadcastVanishSync(uuid, vanished, serverName, stateManager.getSession(), stateManager.getRevision());
+            acknowledge(serverName, uuid, json);
+        }
 
         plugin.getLogger().debug("VanishEvent: {} {} on {}", playerName, vanished ? "vanished" : "unvanished", serverName);
+        return true;
+    }
+
+    private void acknowledge(String serverName, UUID uuid, JsonObject json) {
+        if (json.has("clientSession") && json.has("sequence")) {
+            plugin.getProxy().getServer(serverName).ifPresent(server -> dispatcher.acknowledgeVanish(server, uuid,
+                    stateManager.isVanished(uuid), stateManager.getSession(), stateManager.getRevision(),
+                    json.get("clientSession").getAsString(), json.get("sequence").getAsLong()));
+        }
     }
 
     /** Paper wants the full vanished player set. */
-    private void handleStateQuery(RegisteredServer server) {
-        dispatcher.sendStateResponse(server, stateManager.getAllVanishedPlayers());
+    private void handleStateQuery(ServerConnection carrier, RegisteredServer server, JsonObject json) {
+        if (json.has("joiningUuid") && json.has("requestId")) {
+            UUID joining = UUID.fromString(json.get("joiningUuid").getAsString());
+            stateManager.getTransfers().sourceConnected(joining, carrier);
+            dispatcher.sendStateResponse(server, stateManager, joining, json.get("requestId").getAsString());
+        } else dispatcher.sendStateResponse(server, stateManager);
     }
 
     /** Paper explicitly requests an up-to-date config push. */

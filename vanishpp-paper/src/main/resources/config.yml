@@ -195,6 +195,8 @@ hooks:
 
 # --- [ STORAGE ] ---
 # How player data (vanish status, rules, levels) is stored.
+# State writes are ordered. Reload migrates every stored category to an empty backend.
+# Failed reads retain hidden state and retry; unknown-state logins must reconnect.
 storage:
   # Options: YAML, MYSQL, POSTGRESQL
   type: "YAML"
@@ -288,6 +290,8 @@ world-rules: {}
 proxy:
   # Enable only behind a secured Velocity proxy with the companion plugin installed.
   # Upgrade both Vanish++ jars together. Restart Paper after changing this setting.
+  # Joins wait for proxy state; transfers wait for the source decision (five seconds).
+  # An unanswered transfer is denied; install the companion on every backend.
   # Standalone servers leave this off and do not register the proxy control channel.
   enabled: false
   # Optional backend name; otherwise the server IP and port are used.

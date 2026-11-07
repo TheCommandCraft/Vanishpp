@@ -113,8 +113,11 @@ class RuleManagerTest {
     }
 
     @Test
-    void testSetRule_persistsInStorage() {
+    void testSetRule_persistsInStorage() throws Exception {
         rules.setRule(player, RuleManager.CAN_CHAT, true);
+        java.util.concurrent.CountDownLatch persisted = new java.util.concurrent.CountDownLatch(1);
+        plugin.submitStorageWork(persisted::countDown);
+        assertTrue(persisted.await(5, java.util.concurrent.TimeUnit.SECONDS), "queued rule write must finish");
         // Verify directly in storage
         java.util.Map<String, Object> stored = plugin.getStorageProvider().getRules(player.getUniqueId());
         assertEquals(true, stored.get(RuleManager.CAN_CHAT));

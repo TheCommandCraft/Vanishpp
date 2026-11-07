@@ -39,13 +39,12 @@ public class UpdateChecker {
     }
 
     public void startPeriodicCheck() {
-        if (!plugin.getConfigManager().updateCheckerEnabled) return;
         // Re-check every 6 hours (6 * 60 * 60 * 20 = 432000 ticks).
         // The timer callback runs on the main/global thread and must never block it:
         // dispatch the synchronous HTTP request (fetchAndCompare) onto an async thread,
         // so a slow or unreachable Modrinth API cannot stall the server thread.
         plugin.getVanishScheduler().runTimerGlobal(
-                () -> plugin.getVanishScheduler().runAsync(this::fetchAndCompare),
+                () -> { if (plugin.getConfigManager().updateCheckerEnabled) plugin.getVanishScheduler().runAsync(this::fetchAndCompare); },
                 432000L, 432000L);
     }
 

@@ -161,7 +161,7 @@ public class ProxySqlStorage {
                 try { players.add(UUID.fromString(rs.getString("uuid"))); }
                 catch (IllegalArgumentException ignored) {}
             }
-        } catch (SQLException e) { handleDbError(e); }
+        } catch (SQLException e) { handleDbError(e); throw new IllegalStateException("Could not load proxy state", e); }
         return players;
     }
 

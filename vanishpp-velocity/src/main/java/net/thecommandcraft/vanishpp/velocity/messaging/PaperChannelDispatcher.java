@@ -64,10 +64,15 @@ public class PaperChannelDispatcher {
      * @param originServer the server that sent the original VANISH_EVENT (do not echo back)
      */
     public void broadcastVanishSync(UUID uuid, boolean vanished, String originServer) {
+        broadcastVanishSync(uuid, vanished, originServer, null, 0L);
+    }
+
+    public void broadcastVanishSync(UUID uuid, boolean vanished, String originServer, String session, long revision) {
         JsonObject payload = new JsonObject();
         payload.addProperty("uuid", uuid.toString());
         payload.addProperty("vanished", vanished);
         payload.addProperty("serverName", originServer);
+        if (session != null) { payload.addProperty("session", session); payload.addProperty("revision", revision); }
         byte[] data = VppPacket.encode(VppMessage.VANISH_SYNC, payload.toString());
 
         for (RegisteredServer server : proxy.getAllServers()) {
@@ -76,11 +81,47 @@ public class PaperChannelDispatcher {
         }
     }
 
+    public void acknowledgeVanish(RegisteredServer server, UUID uuid, boolean vanished,
+                                   String session, long revision, String clientSession, long sequence) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("uuid", uuid.toString());
+        payload.addProperty("vanished", vanished);
+        payload.addProperty("session", session);
+        payload.addProperty("revision", revision);
+        payload.addProperty("clientSession", clientSession);
+        payload.addProperty("sequence", sequence);
+        send(server, VppMessage.VANISH_SYNC, payload.toString());
+    }
+
     /** Sends the full vanished player set to a specific server (response to STATE_QUERY). */
     public void sendStateResponse(RegisteredServer server, Set<NetworkVanishState> allVanished) {
         JsonObject payload = new JsonObject();
         payload.add("vanished", serializeStates(allVanished));
         send(server, VppMessage.STATE_RESPONSE, payload.toString());
+    }
+
+    public void sendStateResponse(RegisteredServer server, net.thecommandcraft.vanishpp.velocity.ProxyStateManager states) {
+        sendStateResponse(server, states, null, null);
+    }
+
+    public void sendStateResponse(RegisteredServer server, net.thecommandcraft.vanishpp.velocity.ProxyStateManager states,
+                                  UUID joiningUuid, String requestId) {
+        synchronized (states) {
+            JsonObject payload = new JsonObject();
+            payload.add("vanished", serializeStates(states.getAllVanishedPlayers()));
+            JsonArray visible = new JsonArray();
+            states.getKnownVisible().forEach(uuid -> visible.add(uuid.toString()));
+            payload.add("visible", visible);
+            payload.addProperty("authoritative", states.isSqlAuthoritative());
+            payload.addProperty("session", states.getSession());
+            payload.addProperty("revision", states.getRevision());
+            if (joiningUuid != null && requestId != null) {
+                payload.addProperty("joiningUuid", joiningUuid.toString());
+                payload.addProperty("requestId", requestId);
+                payload.addProperty("joiningVanished", states.isVanished(joiningUuid));
+            }
+            send(server, VppMessage.STATE_RESPONSE, payload.toString());
+        }
     }
 
     /** Sends a PLAYER_LIST_RESPONSE to a specific server. */
@@ -105,9 +146,12 @@ public class PaperChannelDispatcher {
     }
 
     /** Sends a PONG to a server to confirm this is a VanishPP proxy. */
-    public void sendPong(RegisteredServer server, String proxyVersion) {
+    public void sendPong(RegisteredServer server, String proxyVersion) { sendPong(server, proxyVersion, null); }
+
+    public void sendPong(RegisteredServer server, String proxyVersion, String session) {
         JsonObject payload = new JsonObject();
         payload.addProperty("proxyVersion", proxyVersion);
+        if (session != null) payload.addProperty("session", session);
         send(server, VppMessage.PONG, payload.toString());
     }
 

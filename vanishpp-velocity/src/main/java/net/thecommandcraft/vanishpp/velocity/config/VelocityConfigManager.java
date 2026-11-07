@@ -18,14 +18,14 @@ public class VelocityConfigManager {
     private final Path dataDirectory;
     private final Logger logger;
     private Map<String, Object> rawConfig = new LinkedHashMap<>();
-    private ProxyConfigSnapshot snapshot = new ProxyConfigSnapshot();
+    private volatile ProxyConfigSnapshot snapshot = new ProxyConfigSnapshot();
 
     public VelocityConfigManager(Path dataDirectory, Logger logger) {
         this.dataDirectory = dataDirectory;
         this.logger = logger;
     }
 
-    public void load() {
+    public synchronized void load() {
         Path configFile = dataDirectory.resolve("config.yml");
 
         // Extract default config from JAR on first run
@@ -65,15 +65,27 @@ public class VelocityConfigManager {
 
     /**
      * Applies a map of dotted config keys → string values directly into the in-memory
-     * rawConfig, then rebuilds the snapshot. Does NOT write to disk.
+     * configuration on disk, then rebuilds the snapshot.
      * Called when a Paper server sends a CONFIG_SYNC packet.
      *
      * @param entries map of dotted path (e.g. "invisibility-features.god-mode") → value string
      */
-    public void applyRuntimePatch(Map<String, String> entries) {
+    public synchronized void applyRuntimePatch(Map<String, String> entries) {
+        Map<String, Object> updated = castMap(new Yaml().load(new Yaml().dump(rawConfig)));
         for (Map.Entry<String, String> e : entries.entrySet()) {
-            setDotted(rawConfig, e.getKey(), parseValue(e.getValue()));
+            setDotted(updated, e.getKey(), parseValue(e.getValue()));
         }
+        Path temporary = dataDirectory.resolve("config.yml.tmp");
+        try {
+            Files.createDirectories(dataDirectory);
+            Files.writeString(temporary, new Yaml().dump(updated), java.nio.charset.StandardCharsets.UTF_8);
+            try {
+                Files.move(temporary, dataDirectory.resolve("config.yml"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, dataDirectory.resolve("config.yml"), StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) { throw new IllegalStateException("Could not persist proxy config", e); }
+        rawConfig = updated;
         buildSnapshot();
         logger.info("Applied {} runtime config override(s) from Paper server.", entries.size());
     }
@@ -101,6 +113,8 @@ public class VelocityConfigManager {
         try { return Integer.parseInt(s); } catch (NumberFormatException ignored) {}
         return s;
     }
+
+    public Path getDataDirectory() { return dataDirectory; }
 
     public ProxyConfigSnapshot getSnapshot() {
         return snapshot;

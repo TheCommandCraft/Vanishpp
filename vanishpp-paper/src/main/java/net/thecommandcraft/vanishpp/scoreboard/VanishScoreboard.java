@@ -35,6 +35,7 @@ public class VanishScoreboard {
     // Epoch-based cancellation: incrementing taskEpoch makes the previous timer runnable a no-op.
     private volatile int taskEpoch = 0;
     private boolean timerRunning = false;
+    private Runnable cancelTimer = () -> {};
 
     public VanishScoreboard(Vanishpp plugin) {
         this.plugin = plugin;
@@ -118,13 +119,14 @@ public class VanishScoreboard {
         boards.remove(player.getUniqueId());
         movementCooldowns.remove(player.getUniqueId());
         player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
-        if (boards.isEmpty()) { taskEpoch++; timerRunning = false; } // last board closed — stop the timer
+        if (boards.isEmpty()) { cancelTimer.run(); taskEpoch++; timerRunning = false; }
     }
 
     public void cleanup(UUID uuid) {
         boards.remove(uuid);
         manuallyHidden.remove(uuid);
         movementCooldowns.remove(uuid);
+        if (boards.isEmpty()) { cancelTimer.run(); taskEpoch++; timerRunning = false; }
     }
 
     // -------------------------------------------------------------------------
@@ -139,10 +141,11 @@ public class VanishScoreboard {
     }
 
     private void startTimerTask() {
+        cancelTimer.run();
         timerRunning = true;
         final int myEpoch = ++taskEpoch; // invalidate any previously scheduled task
         int interval = Math.max(1, plugin.getScoreboardConfig().getInt("update-interval", 1));
-        plugin.getVanishScheduler().runTimerGlobal(() -> {
+        cancelTimer = plugin.getVanishScheduler().startTimer(() -> {
             if (taskEpoch != myEpoch) return;
             for (UUID uuid : new ArrayList<>(boards.keySet())) {
                 Player p = Bukkit.getPlayer(uuid);
@@ -165,6 +168,7 @@ public class VanishScoreboard {
     }
 
     public void shutdown() {
+        cancelTimer.run();
         taskEpoch++; // invalidate running timer task
         timerRunning = false;
         if (movementListener != null) {
