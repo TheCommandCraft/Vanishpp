@@ -177,6 +177,22 @@ class StateDurabilityTest {
     }
 
     @Test
+    void invalidTemporaryDurationDoesNotChangeTheRule() {
+        player.setOp(true);
+        plugin.getRuleManager().setRule(player, "can_chat", false);
+        server.dispatchCommand(player, "vrules can_chat true not-a-number");
+        assertFalse(plugin.getRuleManager().getRule(player, "can_chat"), "invalid temporary duration must leave the rule unchanged");
+    }
+
+    @Test
+    void negativeTemporaryDurationDoesNotChangeTheRule() {
+        player.setOp(true);
+        plugin.getRuleManager().setRule(player, "can_chat", false);
+        server.dispatchCommand(player, "vrules can_chat true -1");
+        assertFalse(plugin.getRuleManager().getRule(player, "can_chat"), "negative temporary duration must leave the rule unchanged");
+    }
+
+    @Test
     void expiredTemporaryRuleSurvivesReload() {
         plugin.getRuleManager().setRule(player, "can_chat", true);
         plugin.scheduleRuleRevert(player, "can_chat", false, 0);
