@@ -41,6 +41,10 @@ public class ProxyBridge implements PluginMessageListener {
     private final java.util.concurrent.atomic.AtomicLong outboundSequence = new java.util.concurrent.atomic.AtomicLong();
     private String networkSession;
     private final Map<UUID, Long> networkRevisions = new HashMap<>();
+    private record PendingChange(long sequence, byte[] packet) {}
+    private final Map<UUID, PendingChange> pendingChanges = new ConcurrentHashMap<>();
+    private record JoinRequest(UUID uuid, Consumer<Boolean> callback) {}
+    private final Map<String, JoinRequest> pendingJoins = new ConcurrentHashMap<>();
 
     /** Pending player-list request callbacks, keyed by request ID. */
     private final ConcurrentHashMap<String, CompletableFuture<List<NetworkVanishState>>> pendingListRequests
@@ -82,6 +86,7 @@ public class ProxyBridge implements PluginMessageListener {
         handshakeComplete = false;
         networkSession = null;
         networkRevisions.clear();
+        pendingChanges.clear();
         pendingPackets.clear();
         plugin.getServer().getMessenger().unregisterOutgoingPluginChannel(plugin, VppChannel.CHANNEL);
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, VppChannel.CHANNEL);
@@ -109,7 +114,7 @@ public class ProxyBridge implements PluginMessageListener {
         payload.addProperty("serverName", name);
         payload.addProperty("pluginVersion", plugin.getDescription().getVersion());
         JsonArray restored = new JsonArray();
-        for (UUID uuid : plugin.getRawVanishedPlayers()) {
+        for (UUID uuid : plugin.getBootstrapVanishedPlayers()) {
             JsonObject state = new JsonObject();
             state.addProperty("uuid", uuid.toString());
             state.addProperty("vanishLevel", plugin.getStorageProvider().getVanishLevel(uuid));
@@ -170,6 +175,7 @@ public class ProxyBridge implements PluginMessageListener {
         plugin.getLogger().info("[Proxy] VanishPP proxy detected (proxy v" + proxyVersion + ") — running in proxy mode.");
         // Request initial full state sync
         sendPacket(VppPacket.encode(VppMessage.STATE_QUERY, "{}"));
+        pendingJoins.forEach(this::sendJoinQuery);
     }
 
     private void handleConfigPush(JsonObject json) {
@@ -202,10 +208,27 @@ public class ProxyBridge implements PluginMessageListener {
                 visible.removeAll(hidden);
             }
             for (UUID uuid : visible) if (acceptRevision(uuid, json)) plugin.handleNetworkVanishSync(uuid, false);
+            if (json.has("requestId") && json.has("joiningUuid") && json.has("joiningVanished")) {
+                String requestId = json.get("requestId").getAsString();
+                JoinRequest request = pendingJoins.get(requestId);
+                if (request != null && request.uuid().toString().equals(json.get("joiningUuid").getAsString())
+                        && (!json.has("session") || networkSession == null || networkSession.equals(json.get("session").getAsString()))
+                        && pendingJoins.remove(requestId, request)) {
+                    boolean accepted = acceptRevision(request.uuid(), json);
+                    request.callback().accept(accepted ? json.get("joiningVanished").getAsBoolean() : plugin.isVanished(request.uuid()));
+                }
+            }
         });
     }
 
     private boolean acceptRevision(UUID uuid, JsonObject json) {
+        if (pendingJoins.values().stream().anyMatch(request -> request.uuid().equals(uuid))) return false;
+        PendingChange pending = pendingChanges.get(uuid);
+        if (pending != null) {
+            if (!json.has("clientSession") || !clientSession.equals(json.get("clientSession").getAsString())
+                    || !json.has("sequence") || json.get("sequence").getAsLong() < pending.sequence()) return false;
+            pendingChanges.remove(uuid, pending);
+        }
         if (!json.has("session") || !json.has("revision")) return true;
         String session = json.get("session").getAsString();
         if (networkSession == null) networkSession = session;
@@ -239,15 +262,57 @@ public class ProxyBridge implements PluginMessageListener {
 
     /** Informs the proxy that a player vanished or unvanished on this server. */
     public void sendVanishEvent(UUID uuid, String playerName, boolean vanished, int vanishLevel) {
-        if (!proxyDetected) return;
+        byte[] packet = prepareVanishEvent(uuid, playerName, vanished, vanishLevel);
+        if (packet != null) sendPacket(packet);
+    }
+
+    public byte[] prepareVanishEvent(UUID uuid, String playerName, boolean vanished, int vanishLevel) {
+        if (!active) return null;
+        long sequence = outboundSequence.incrementAndGet();
         JsonObject payload = new JsonObject();
         payload.addProperty("uuid", uuid.toString());
         payload.addProperty("playerName", playerName);
         payload.addProperty("vanished", vanished);
         payload.addProperty("vanishLevel", vanishLevel);
         payload.addProperty("clientSession", clientSession);
-        payload.addProperty("sequence", outboundSequence.incrementAndGet());
-        sendPacket(VppPacket.encode(VppMessage.VANISH_EVENT, payload.toString()));
+        payload.addProperty("sequence", sequence);
+        byte[] packet = VppPacket.encode(VppMessage.VANISH_EVENT, payload.toString());
+        pendingChanges.compute(uuid, (key, old) -> old == null || old.sequence() < sequence ? new PendingChange(sequence, packet) : old);
+        return packet;
+    }
+
+    public void forgetPlayer(UUID uuid) {
+        pendingChanges.remove(uuid);
+        pendingJoins.entrySet().removeIf(entry -> entry.getValue().uuid().equals(uuid));
+    }
+
+    public void requestJoinState(Player player, Consumer<Boolean> callback) {
+        if (!active) init();
+        String requestId = UUID.randomUUID().toString();
+        JoinRequest request = new JoinRequest(player.getUniqueId(), callback);
+        pendingJoins.entrySet().removeIf(entry -> entry.getValue().uuid().equals(player.getUniqueId()));
+        pendingJoins.put(requestId, request);
+        if (handshakeComplete) sendJoinQuery(requestId, request);
+        plugin.getVanishScheduler().runLaterGlobal(() -> {
+            if (!pendingJoins.remove(requestId, request)) return;
+            if (!plugin.isEnabled()) { plugin.abortProxyJoin(player.getUniqueId()); return; }
+            plugin.getVanishScheduler().runEntity(player, () -> {
+                if (player.isOnline()) player.kick(net.kyori.adventure.text.Component.text("Proxy vanish state is unavailable. Please reconnect shortly."));
+                plugin.abortProxyJoin(player.getUniqueId());
+            }, () -> plugin.abortProxyJoin(player.getUniqueId()));
+        }, 100L);
+    }
+
+    private void sendJoinQuery(String requestId, JoinRequest request) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("requestId", requestId);
+        payload.addProperty("joiningUuid", request.uuid().toString());
+        sendPacket(VppPacket.encode(VppMessage.STATE_QUERY, payload.toString()));
+    }
+
+    public void retryPendingChanges() {
+        if (!active || !proxyDetected) return;
+        for (PendingChange pending : pendingChanges.values()) sendPacket(pending.packet());
     }
 
     /** Asks the proxy for the cross-server vanished player list asynchronously. */

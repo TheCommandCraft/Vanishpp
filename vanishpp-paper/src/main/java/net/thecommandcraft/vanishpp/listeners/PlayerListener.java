@@ -92,7 +92,7 @@ public class PlayerListener implements Listener {
         long version = plugin.stateVersion(uuid);
         boolean proxy = plugin.isProxyAuthoritative();
         boolean vanished = proxy ? plugin.isVanished(uuid) : plugin.getStorageProvider().isVanished(uuid);
-        return new JoinState(vanished, !proxy && plugin.getStorageProvider().getAutoVanishOnJoin(uuid),
+        return new JoinState(vanished, plugin.getStorageProvider().getAutoVanishOnJoin(uuid),
                 plugin.getStorageProvider().hasAcknowledged(uuid, "protocol-lib-warning"), version);
     }
 
@@ -113,14 +113,45 @@ public class PlayerListener implements Listener {
                 if (state.warningIgnored()) plugin.getIgnoredWarningPlayers().add(uuid);
                 else plugin.getIgnoredWarningPlayers().remove(uuid);
                 if (state.version() == plugin.stateVersion(uuid))
-                    plugin.reconcileVanishState(player, state.vanished()
-                            || (state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")));
+                    applyJoinState(player, state);
             });
         });
     }
 
+    private void applyJoinState(Player player, JoinState state) {
+        if (plugin.isProxyJoinPending(player.getUniqueId())) return;
+        boolean auto = state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");
+        if (auto && !state.vanished() && !plugin.isVanished(player)) plugin.applyVanishEffects(player);
+        else plugin.reconcileVanishState(player, state.vanished());
+    }
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        if (plugin.getProxyBridge() != null && config.getConfig().getBoolean("proxy.enabled", false)) {
+            Component originalMessage = event.joinMessage();
+            event.joinMessage(null);
+            plugin.resumeVisibility(player);
+            plugin.holdProxyJoin(player);
+            plugin.getProxyBridge().requestJoinState(player, hidden -> plugin.getVanishScheduler().runEntity(player, () -> {
+                if (!player.isOnline() || !plugin.isEnabled()) return;
+                plugin.completeProxyJoin(player, hidden);
+                UUID uuid = player.getUniqueId();
+                JoinState prefetched = preFetchedVanishState.get(uuid);
+                if (prefetched != null) preFetchedVanishState.put(uuid, new JoinState(plugin.isVanished(player),
+                        prefetched.autoVanish(), prefetched.warningIgnored(), plugin.stateVersion(uuid)));
+                finishJoin(new PlayerJoinEvent(player, (Component) null));
+                if (originalMessage != null && (!plugin.isVanished(player) || !config.hideRealJoin)) {
+                    for (Player observer : Bukkit.getOnlinePlayers()) observer.sendMessage(originalMessage);
+                    Bukkit.getConsoleSender().sendMessage(originalMessage);
+                }
+            }, () -> plugin.abortProxyJoin(player.getUniqueId())));
+            return;
+        }
+        finishJoin(event);
+    }
+
+    private void finishJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         final UUID joinUuid = player.getUniqueId();
         plugin.resumeVisibility(player);
@@ -135,8 +166,7 @@ public class PlayerListener implements Listener {
             else plugin.getIgnoredWarningPlayers().remove(joinUuid);
         }
         if (prefetched != null && prefetched.version() == plugin.stateVersion(joinUuid)) {
-            plugin.reconcileVanishState(player, prefetched.vanished()
-                    || (prefetched.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")));
+            applyJoinState(player, prefetched);
         }
 
         // Immediate Vanish Logic
@@ -407,7 +437,8 @@ public class PlayerListener implements Listener {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
         plugin.retireVisibility(player);
-        if (plugin.isVanished(player)) {
+        if (plugin.isProxyJoinPending(uuid)) event.quitMessage(null);
+        if (plugin.isVanished(player) && !plugin.isProxyJoinPending(uuid)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
             plugin.pendingChatMessages.remove(uuid);

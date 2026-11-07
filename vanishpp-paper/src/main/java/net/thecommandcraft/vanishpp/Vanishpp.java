@@ -56,6 +56,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private static final String SAVED_GAMEMODE = "__gamemode_restore";
     private int expiryEpoch;
     private volatile boolean stopping;
+    private record ProxyJoin(boolean previouslyHidden, long version) {}
+    private final Map<UUID, ProxyJoin> proxyJoins = new ConcurrentHashMap<>();
     private RedisStorage redisStorage;
     private PermissionManager permissionManager;
     private RuleManager ruleManager;
@@ -337,12 +339,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null && p.isOnline()) {
-                applyVanishEffects(p);
+                restoreVanishEffects(p);
                 integrationManager.updateHooks(p, true);
                 if (tabPluginHook != null)
                     tabPluginHook.update(p, true);
                 updateVanishVisibility(p);
             }
+        }
+
+        if (configManager.getConfig().getBoolean("proxy.enabled", false)) {
+            for (Player player : Bukkit.getOnlinePlayers()) vanishScheduler.runEntity(player, () -> {
+                holdProxyJoin(player);
+                proxyBridge.requestJoinState(player, hidden -> vanishScheduler.runEntity(player, () -> {
+                    if (player.isOnline() && isEnabled()) completeProxyJoin(player, hidden);
+                }, () -> abortProxyJoin(player.getUniqueId())));
+            }, null);
         }
 
         getLogger().info("Vanish++ " + getDescription().getVersion() + " enabled.");
@@ -476,7 +487,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         configManager.load();
 
         // Keep accepted writes on their original provider until migration is ready.
-        stateWrites.drain();
         if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
         if (luckPermsHook != null) { luckPermsHook.unload(); luckPermsHook = null; }
         if (Bukkit.getPluginManager().getPlugin("LuckPerms") != null) {
@@ -485,7 +495,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 this.luckPermsHook.load();
             } catch (Throwable ignored) { this.luckPermsHook = null; }
         }
-        initStorage();
+        synchronized (stateWrites) {
+            stateWrites.drain();
+            initStorage();
+        }
 
         // Reload scoreboard config
         java.io.File sbFile = new java.io.File(getDataFolder(), "scoreboards.yml");
@@ -566,6 +579,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
             newProvider.init();
         } catch (Exception e) {
             getLogger().severe("FAILED TO INITIALIZE STORAGE: " + e.getMessage());
+            newProvider.shutdown();
+            if (storageProvider != null) {
+                getLogger().warning("Keeping the previous storage provider.");
+                return;
+            }
             getLogger().severe("Falling back to YAML storage.");
             newProvider = new YamlStorage(this);
             try {
@@ -591,7 +609,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         // Migrate data from old storage if the new storage is empty and another source has data
-        migrateIfNeeded(newProvider, type);
+        try { migrateIfNeeded(newProvider, type); }
+        catch (RuntimeException e) {
+            newProvider.shutdown();
+            throw e;
+        }
 
         StorageProvider previous = this.storageProvider;
         this.storageProvider = newProvider;
@@ -676,21 +698,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
-    /**
-     * Reconciles this server's in-memory vanish state against the DB-authoritative value
-     * for a player who just joined. Must run on the main/global thread.
-     *
-     * <p>Three outcomes:
-     * <ul>
-     *   <li>DB == memory: already in sync, no-op.</li>
-     *   <li>DB vanished, not in memory: player was vanished on another server — apply locally.</li>
-     *   <li>DB not vanished, but in memory: player was unvanished on another server — clear locally.</li>
-     * </ul>
-     *
-     * <p>Both corrective branches call the normal apply/remove methods, which re-persist to DB
-     * (idempotent INSERT IGNORE / DELETE on an already-correct row) and re-broadcast via Redis
-     * (idempotent — other servers' handleNetworkVanishSync sees no state change and skips).
-     */
+    /** Reconciliation restores effects without publishing a new user decision. */
     public long stateVersion(UUID uuid) { return stateVersions.getOrDefault(uuid, 0L); }
 
     public Map<UUID, Long> stateVersionsSnapshot() {
@@ -699,9 +707,50 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return versions;
     }
 
+    public boolean isProxyJoinPending(UUID uuid) { return proxyJoins.containsKey(uuid); }
+
+    public void holdProxyJoin(Player player) {
+        UUID uuid = player.getUniqueId();
+        proxyJoins.computeIfAbsent(uuid, key -> new ProxyJoin(isVanished(uuid), stateVersions.merge(uuid, 1L, Long::sum)));
+        vanishedPlayers.add(uuid);
+        voiceAudience.invalidate(uuid);
+        player.setMetadata("vanished", new FixedMetadataValue(this, true));
+        player.setInvisible(true);
+        player.setCollidable(false);
+        updateVanishVisibility(player);
+        for (UUID hidden : vanishedPlayers) {
+            Player subject = Bukkit.getPlayer(hidden);
+            if (subject != null && !permissionManager.canSee(player, subject)) player.hidePlayer(this, subject);
+        }
+    }
+
+    public void completeProxyJoin(Player player, boolean hidden) {
+        UUID uuid = player.getUniqueId();
+        ProxyJoin pending = proxyJoins.remove(uuid);
+        if (pending == null || pending.version() != stateVersion(uuid)) return;
+        stateVersions.merge(uuid, 1L, Long::sum);
+        stateWrites.submit(() -> storageProvider.setVanished(uuid, hidden));
+        if (hidden) applyVanishEffects(player, false);
+        else removeVanishEffects(player, false);
+    }
+
+    public void abortProxyJoin(UUID uuid) {
+        ProxyJoin pending = proxyJoins.remove(uuid);
+        if (pending != null && !pending.previouslyHidden() && pending.version() == stateVersion(uuid)) vanishedPlayers.remove(uuid);
+    }
+
+    public Set<UUID> getBootstrapVanishedPlayers() {
+        Set<UUID> hidden = new HashSet<>(vanishedPlayers);
+        proxyJoins.forEach((uuid, pending) -> {
+            if (!pending.previouslyHidden() && pending.version() == stateVersion(uuid)) hidden.remove(uuid);
+        });
+        return hidden;
+    }
+
     public boolean isProxyAuthoritative() { return proxyBridge != null && proxyBridge.isProxyDetected(); }
 
     public void reconcileVanishState(Player player, boolean dbVanished) {
+        if (isProxyJoinPending(player.getUniqueId())) return;
         if (isProxyAuthoritative()) dbVanished = isVanished(player);
         boolean memVanished = vanishedPlayers.contains(player.getUniqueId());
         if (dbVanished == memVanished) {
@@ -874,7 +923,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     /**
      * Applies a full vanish state snapshot received from the proxy (STATE_RESPONSE).
-     * Players listed as vanished are added to the local set; all others are removed.
+     * Missing entries are unknown; only explicit proxy decisions can remove them.
      * Must run on the global/main thread.
      */
     public void applyNetworkVanishState(java.util.List<NetworkVanishState> states) {
@@ -931,6 +980,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void cleanupPlayerCache(UUID uuid) {
+        abortProxyJoin(uuid);
+        if (proxyBridge != null) proxyBridge.forgetPlayer(uuid);
         viewerTeams.forget(uuid);
         voiceAudience.invalidate(uuid);
         publishedVisibilityLevels.remove(uuid);
@@ -1054,7 +1105,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 // /vspec and /vfollow own the action bar for this player while active (their
                 // own periodic task drives the spectate overlay) - sending the generic text
                 // here too raced with it and caused visible flicker between the two.
-                if (spectateFollowTargets.containsKey(uuid)) continue;
+                if (spectateFollowTargets.containsKey(uuid) || isProxyJoinPending(uuid)) continue;
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline()) {
                     long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
@@ -1094,6 +1145,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             for (UUID uuid : vanishedCopy) {
                 Player vanished = Bukkit.getPlayer(uuid);
                 if (vanished == null || !vanished.isOnline()) continue;
+                if (isProxyJoinPending(uuid)) { updateVanishVisibility(vanished); continue; }
                 if (proxyBridge != null && proxyBridge.isProxyDetected()) {
                     int level = permissionManager.vanishLevel(vanished);
                     Integer previous = publishedVisibilityLevels.put(uuid, level);
@@ -1132,6 +1184,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // already connected here (so no PlayerJoinEvent fired to trigger the join-time check).
         // DB lookup is async; message delivery is marshalled back to the main thread.
         vanishScheduler.runTimerGlobal(() -> {
+            if (proxyBridge != null) proxyBridge.retryPendingChanges();
             Collection<? extends Player> online = List.copyOf(Bukkit.getOnlinePlayers());
             if (online.isEmpty()) return;
             vanishScheduler.runAsync(() -> {
@@ -1279,6 +1332,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         int persistLevel = permissionManager.vanishLevel(player);
         publishedVisibilityLevels.put(persistUuid, persistLevel);
         String reason = vanishReasons.getOrDefault(persistUuid, null);
+        byte[] proxyPacket = persist && proxyBridge != null
+                ? proxyBridge.prepareVanishEvent(persistUuid, persistName, true, persistLevel) : null;
         if (persist) stateWrites.submit(() -> {
             storageProvider.setVanished(persistUuid, true);
             // Add history entry
@@ -1289,7 +1344,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
             } catch (Exception ignored) {}
             if (proxyBridge != null && proxyBridge.isProxyDetected()) {
                 // Proxy handles cross-server broadcast
-                proxyBridge.sendVanishEvent(persistUuid, persistName, true, persistLevel);
+                if (proxyPacket != null) proxyBridge.sendPacket(proxyPacket);
+                else proxyBridge.sendVanishEvent(persistUuid, persistName, true, persistLevel);
             } else if (redisStorage != null) {
                 redisStorage.broadcastVanish(persistUuid, true);
             }
@@ -1390,6 +1446,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         UUID persistUuid = player.getUniqueId();
         String persistNameUv = player.getName();
+        byte[] proxyPacket = persist && proxyBridge != null
+                ? proxyBridge.prepareVanishEvent(persistUuid, persistNameUv, false, 1) : null;
+        if (!persist && sessionDuration > 0) stateWrites.submit(() -> storageProvider.recordVanishSession(persistUuid, sessionDuration));
         if (persist) stateWrites.submit(() -> {
             storageProvider.setVanished(persistUuid, false);
             // Add history entry
@@ -1402,7 +1461,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 }
             } catch (Exception ignored) {}
             if (proxyBridge != null && proxyBridge.isProxyDetected()) {
-                proxyBridge.sendVanishEvent(persistUuid, persistNameUv, false, 1);
+                if (proxyPacket != null) proxyBridge.sendPacket(proxyPacket);
+                else proxyBridge.sendVanishEvent(persistUuid, persistNameUv, false, 1);
             } else if (redisStorage != null) {
                 redisStorage.broadcastVanish(persistUuid, false);
             }

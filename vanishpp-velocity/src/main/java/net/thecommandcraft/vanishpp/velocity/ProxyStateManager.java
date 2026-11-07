@@ -80,6 +80,8 @@ public class ProxyStateManager {
     // ── Vanish state ─────────────────────────────────────────────────────────
 
     public synchronized void setVanished(UUID uuid, String playerName, String serverName, boolean vanished, int vanishLevel) {
+        NetworkVanishState previous = vanishedPlayers.get(uuid);
+        boolean wasVisible = knownVisible.contains(uuid);
         revision++;
         if (vanished) {
             knownVisible.remove(uuid);
@@ -88,7 +90,13 @@ public class ProxyStateManager {
             vanishedPlayers.remove(uuid);
             knownVisible.add(uuid);
         }
-        saveLocal();
+        try { saveLocal(); }
+        catch (RuntimeException e) {
+            if (previous == null) vanishedPlayers.remove(uuid); else vanishedPlayers.put(uuid, previous);
+            if (wasVisible) knownVisible.add(uuid); else knownVisible.remove(uuid);
+            revision--;
+            throw e;
+        }
         if (sqlStorage != null) {
             writes.submit(() -> sqlStorage.setVanished(uuid, vanished));
         }

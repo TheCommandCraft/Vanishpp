@@ -60,7 +60,7 @@ public class PaperChannelListener {
         switch (packet.type()) {
             case HELLO              -> handleHello(server, serverName, json);
             case VANISH_EVENT       -> handleVanishEvent(serverName, json);
-            case STATE_QUERY        -> handleStateQuery(server);
+            case STATE_QUERY        -> handleStateQuery(server, json);
             case CONFIG_REQUEST     -> handleConfigRequest(server, serverName);
             case RELOAD_REQUEST     -> handleReloadRequest(json);
             case PLAYER_LIST_QUERY  -> handlePlayerListQuery(server, json);
@@ -129,22 +129,40 @@ public class PaperChannelListener {
         if (plugin.getProxy().getPlayer(uuid).flatMap(player -> player.getCurrentServer())
                 .map(connection -> !connection.getServerInfo().getName().equals(serverName)).orElse(false)) return;
         synchronized (stateManager) {
+            String clientKey = null;
+            long sequence = 0L;
             if (json.has("clientSession") && json.has("sequence")) {
-                String key = serverName + ":" + uuid + ":" + json.get("clientSession").getAsString();
-                long sequence = json.get("sequence").getAsLong();
-                if (sequence <= clientRevisions.getOrDefault(key, -1L)) return;
-                clientRevisions.put(key, sequence);
+                clientKey = serverName + ":" + uuid + ":" + json.get("clientSession").getAsString();
+                sequence = json.get("sequence").getAsLong();
+                long previous = clientRevisions.getOrDefault(clientKey, -1L);
+                if (sequence <= previous) {
+                    if (sequence == previous) acknowledge(serverName, uuid, json);
+                    return;
+                }
             }
             stateManager.setVanished(uuid, playerName, serverName, vanished, level);
+            if (clientKey != null) clientRevisions.put(clientKey, sequence);
             dispatcher.broadcastVanishSync(uuid, vanished, serverName, stateManager.getSession(), stateManager.getRevision());
+            acknowledge(serverName, uuid, json);
         }
 
         plugin.getLogger().debug("VanishEvent: {} {} on {}", playerName, vanished ? "vanished" : "unvanished", serverName);
     }
 
+    private void acknowledge(String serverName, UUID uuid, JsonObject json) {
+        if (json.has("clientSession") && json.has("sequence")) {
+            plugin.getProxy().getServer(serverName).ifPresent(server -> dispatcher.acknowledgeVanish(server, uuid,
+                    stateManager.isVanished(uuid), stateManager.getSession(), stateManager.getRevision(),
+                    json.get("clientSession").getAsString(), json.get("sequence").getAsLong()));
+        }
+    }
+
     /** Paper wants the full vanished player set. */
-    private void handleStateQuery(RegisteredServer server) {
-        dispatcher.sendStateResponse(server, stateManager);
+    private void handleStateQuery(RegisteredServer server, JsonObject json) {
+        if (json.has("joiningUuid") && json.has("requestId")) {
+            dispatcher.sendStateResponse(server, stateManager, UUID.fromString(json.get("joiningUuid").getAsString()),
+                    json.get("requestId").getAsString());
+        } else dispatcher.sendStateResponse(server, stateManager);
     }
 
     /** Paper explicitly requests an up-to-date config push. */

@@ -37,3 +37,5 @@ Incognito changes display and tab text, including TAB's name override; it does n
 Voice callbacks use immutable audience facts published on player-owned server tasks. Built-in permission changes and LuckPerms recalculation invalidate facts immediately; unknown facts deny hidden-player audio until refreshed. Other permission providers are sampled by the regular visibility synchronization task.
 
 State synchronization includes proxy session/revision fields and explicit visible-player decisions. Upgrade both jars together. Back up Velocity `state.yml` alongside `config.yml`; it preserves decisions when SQL writes are still queued or the proxy uses YAML. Older peers do not provide the revision and bootstrap guarantees.
+
+Native-proxy joins now wait for a targeted state response before becoming visible. This includes the first carrier on an empty backend and players online during a plugin restart. A missing response disconnects that joining player after five seconds; it does not turn unknown state into an unvanish.

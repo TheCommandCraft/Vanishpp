@@ -81,6 +81,18 @@ public class PaperChannelDispatcher {
         }
     }
 
+    public void acknowledgeVanish(RegisteredServer server, UUID uuid, boolean vanished,
+                                   String session, long revision, String clientSession, long sequence) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("uuid", uuid.toString());
+        payload.addProperty("vanished", vanished);
+        payload.addProperty("session", session);
+        payload.addProperty("revision", revision);
+        payload.addProperty("clientSession", clientSession);
+        payload.addProperty("sequence", sequence);
+        send(server, VppMessage.VANISH_SYNC, payload.toString());
+    }
+
     /** Sends the full vanished player set to a specific server (response to STATE_QUERY). */
     public void sendStateResponse(RegisteredServer server, Set<NetworkVanishState> allVanished) {
         JsonObject payload = new JsonObject();
@@ -89,6 +101,11 @@ public class PaperChannelDispatcher {
     }
 
     public void sendStateResponse(RegisteredServer server, net.thecommandcraft.vanishpp.velocity.ProxyStateManager states) {
+        sendStateResponse(server, states, null, null);
+    }
+
+    public void sendStateResponse(RegisteredServer server, net.thecommandcraft.vanishpp.velocity.ProxyStateManager states,
+                                  UUID joiningUuid, String requestId) {
         synchronized (states) {
             JsonObject payload = new JsonObject();
             payload.add("vanished", serializeStates(states.getAllVanishedPlayers()));
@@ -98,6 +115,11 @@ public class PaperChannelDispatcher {
             payload.addProperty("authoritative", states.isSqlAuthoritative());
             payload.addProperty("session", states.getSession());
             payload.addProperty("revision", states.getRevision());
+            if (joiningUuid != null && requestId != null) {
+                payload.addProperty("joiningUuid", joiningUuid.toString());
+                payload.addProperty("requestId", requestId);
+                payload.addProperty("joiningVanished", states.isVanished(joiningUuid));
+            }
             send(server, VppMessage.STATE_RESPONSE, payload.toString());
         }
     }

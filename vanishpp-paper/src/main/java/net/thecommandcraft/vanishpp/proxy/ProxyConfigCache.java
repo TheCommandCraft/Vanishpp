@@ -25,11 +25,10 @@ public class ProxyConfigCache {
      * Updates the in-memory snapshot and triggers a re-sync of all online vanished players.
      *
      * @param json       the raw JSON from the CONFIG_PUSH payload's "config" field
-     * @param serverName this server's name (used to apply per-server overrides)
+     * @param serverName this server's name (for diagnostics; Velocity already resolved overrides)
      */
     public void update(String json, String serverName) {
-        ProxyConfigSnapshot global = ProxyConfigSnapshot.fromJson(json);
-        this.snapshot = global;
+        this.snapshot = ProxyConfigSnapshot.fromJson(json);
 
         plugin.getLogger().info("[Proxy] Config cache updated from proxy (server: " + serverName + ").");
 
