@@ -50,7 +50,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
                         plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
                 return true;
             }
-            if (!sender.hasPermission("vanishpp.vanish")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish")) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
@@ -63,7 +63,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
 
         // Info: /vanish version, /vanish info
         if (first.equals("version") || first.equals("info")) {
-            if (!sender.hasPermission("vanishpp.vanish")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish")) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
@@ -74,27 +74,19 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
 
         // Bulk: /vanish all
         if (first.equals("all")) {
-            if (!sender.hasPermission("vanishpp.vanish.bulk")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.bulk")) {
                 plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
                 return true;
             }
             String reason = buildReason(args, 1);
-            int count = 0;
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                if (!plugin.isVanished(p)) {
-                    plugin.vanishPlayer(p, sender, reason.isEmpty() ? null : reason);
-                    count++;
-                }
-            }
-            plugin.getMessageManager().sendMessage(sender,
-                    plugin.getConfigManager().getLanguageManager().getMessage("bulk.vanished-all")
-                            .replace("%count%", String.valueOf(count)));
+            vanishBulk(new ArrayList<>(Bukkit.getOnlinePlayers()), sender, reason,
+                    plugin.getConfigManager().getLanguageManager().getMessage("bulk.vanished-all"));
             return true;
         }
 
         // Bulk: /vanish world
         if (first.equals("world")) {
-            if (!sender.hasPermission("vanishpp.vanish.bulk")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.bulk")) {
                 plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
                 return true;
             }
@@ -105,22 +97,14 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
             }
             String reason = buildReason(args, 1);
             World world = senderPlayer.getWorld();
-            int count = 0;
-            for (Player p : world.getPlayers()) {
-                if (!plugin.isVanished(p)) {
-                    plugin.vanishPlayer(p, sender, reason.isEmpty() ? null : reason);
-                    count++;
-                }
-            }
-            plugin.getMessageManager().sendMessage(sender,
+            vanishBulk(new ArrayList<>(world.getPlayers()), sender, reason,
                     plugin.getConfigManager().getLanguageManager().getMessage("bulk.vanished-world")
-                            .replace("%count%", String.valueOf(count))
                             .replace("%world%", world.getName()));
             return true;
         }
 
         // Targeting a specific player: /vanish <player> [reason...]
-        if (!sender.hasPermission("vanishpp.vanish.others")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.others")) {
             plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
             return true;
         }
@@ -186,15 +170,15 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
             @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
-            if (sender.hasPermission("vanishpp.vanish")) {
+            if (plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish")) {
                 completions.add("version");
                 completions.add("info");
             }
-            if (sender.hasPermission("vanishpp.vanish.bulk")) {
+            if (plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.bulk")) {
                 completions.add("all");
                 completions.add("world");
             }
-            if (sender.hasPermission("vanishpp.vanish.others")) {
+            if (plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.others")) {
                 for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             }
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
@@ -203,28 +187,27 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
     }
 
     private void toggleVanish(Player target, CommandSender executor, String reason) {
-        if (plugin.isVanished(target)) {
-            // Unvanish
-            plugin.unvanishPlayer(target, executor);
+        boolean hidden = !plugin.isVanished(target);
+        plugin.requestVanish(target, executor, hidden, reason, accepted -> {
+            if (!accepted || target.equals(executor)) return;
+            String template = hidden ? plugin.getConfigManager().vanishedOtherMessage : plugin.getConfigManager().unvanishedOtherMessage;
+            String message = template.replace("%player%", target.getName());
+            plugin.getVanishScheduler().runSender(executor, () -> plugin.getMessageManager().sendMessage(executor, message));
+        });
+    }
 
-            // Notify executor if they are not the target
-            if (!target.equals(executor)) {
-                String msg = plugin.getConfigManager().unvanishedOtherMessage.replace("%player%", target.getName());
-                plugin.getMessageManager().sendMessage(executor, msg);
-            }
-        } else {
-            // Vanish (with optional reason)
-            if (reason != null && !reason.isEmpty()) {
-                plugin.vanishPlayer(target, executor, reason);
-            } else {
-                plugin.vanishPlayer(target, executor);
-            }
-
-            // Notify executor if they are not the target
-            if (!target.equals(executor)) {
-                String msg = plugin.getConfigManager().vanishedOtherMessage.replace("%player%", target.getName());
-                plugin.getMessageManager().sendMessage(executor, msg);
-            }
+    private void vanishBulk(List<Player> players, CommandSender sender, String reason, String template) {
+        players.removeIf(plugin::isVanished);
+        var remaining = new java.util.concurrent.atomic.AtomicInteger(players.size());
+        var acceptedCount = new java.util.concurrent.atomic.AtomicInteger();
+        Runnable report = () -> plugin.getVanishScheduler().runSender(sender, () ->
+                plugin.getMessageManager().sendMessage(sender, template.replace("%count%", String.valueOf(acceptedCount.get()))));
+        if (players.isEmpty()) { report.run(); return; }
+        for (Player target : players) {
+            plugin.requestVanish(target, sender, true, reason.isEmpty() ? null : reason, accepted -> {
+                if (accepted) acceptedCount.incrementAndGet();
+                if (remaining.decrementAndGet() == 0) report.run();
+            });
         }
     }
 }

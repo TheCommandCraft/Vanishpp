@@ -31,7 +31,7 @@ public class VanishWandCommand implements CommandExecutor {
                     plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
             return true;
         }
-        if (!player.hasPermission("vanishpp.wand")) {
+        if (!plugin.getPermissionManager().hasPermission(player, "vanishpp.wand")) {
             plugin.getMessageManager().sendMessage(player,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;

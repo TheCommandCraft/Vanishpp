@@ -36,7 +36,7 @@ public class VanishZoneCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.zone")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.zone")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -137,7 +137,7 @@ public class VanishZoneCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.zone")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.zone")) return new ArrayList<>();
         if (args.length == 1) {
             return StringUtil.copyPartialMatches(args[0],
                     List.of("create", "delete", "list", "reload"), new ArrayList<>());

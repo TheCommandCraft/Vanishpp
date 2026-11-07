@@ -29,7 +29,7 @@ Works out of the box with zero configuration required.
 Most plugins just hide you visually. Vanish++ removes you physically.
 
 - **Invincibility:** No damage, immune to all potion effects, cannot burn.
-- **Smart Mob AI:** Mobs completely ignore vanished players. Targeting is cancelled via `EntityTargetEvent` before the mob ever commits to an attack path. Mobs that had already locked on before you vanished are force-detargeted immediately.
+- **Smart Mob AI:** Mobs ignore vanished players. New targeting is cancelled via `EntityTargetEvent`; mobs already targeting you are detached through a bounded queue over subsequent ticks.
 - **Projectile Pass-Through:** Arrows, tridents, and snowballs fly physically through your body via native Paper events — impossible to hit a vanished player.
 - **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you.
 - **No Physical Triggers:** Walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration.
@@ -73,7 +73,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 - **Vanish Scoreboard (`/vscoreboard`):** Fully configurable sidebar scoreboard showing world, TPS, player counts, real-time coordinates, direction, biome, ping, health, food, armor, time, date, and more. `%time%`/`%date%` respect `timezone` (IANA ID or `"default"` for server time) and `timezone-offset-hours` in `scoreboards.yml`. Coordinates refresh on movement via ProtocolLib packet listening. Supports all built-in placeholders plus full PlaceholderAPI.
 - **Live Config Editor (`/vconfig`):** Edit any setting in `config.yml` directly in-game. Command completion requires `vanishpp.config` and never suggests database passwords, webhook authorization values, or webhook URLs. Applying local settings network-wide with `/vack apply_proxy` also requires `vanishpp.config`; dismissing notifications does not.
 - **Personal Rules System (`/vrules`):** Per-player toggles for block breaking, entity interaction, chat confirmation, item pickup, mob targeting, and more.
-- **Async Data Persistence:** All data saved asynchronously. State is preserved across restarts.
+- **Async Data Persistence:** Ordered state writes run asynchronously and are drained during clean shutdown. Completed writes survive restarts.
 - **Database Connection Monitoring:** Staff notified in-game when database connectivity fails.
 - **Native Velocity Proxy Plugin:** The companion `vanishpp-velocity` plugin provides a dedicated real-time messaging channel between all Paper servers and Velocity. Vanish state, config changes, and `/vanishreload` propagate network-wide instantly. Timed rule expiry notifications are delivered to whichever server the player is currently on — no reconnect required. Set `proxy.enabled: true` on secured Velocity backends and restart Paper to enable the handshake; standalone servers leave it off. Upgrade both jars together. See [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).
 
@@ -95,10 +95,10 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 | `/vchat confirm` | `/vanishchat` | Confirm a chat message (if safety is on) | `vanishpp.chat` |
 | `/vreload` | `/vanishreload` | Reload config and resync all vanish effects | `vanishpp.reload` |
 | `/vscoreboard` | — | Toggle the vanish sidebar scoreboard | `vanishpp.scoreboard` |
-| `/vspec <player\|stop>` | — | Quick-spectate a player. `/vspec stop` to return. | `vanishpp.spec` |
-| `/vfollow <player\|stop>` | — | Lock camera to silently follow a player. | `vanishpp.follow` |
+| `/vspec <player\|stop>` | — | Quick-spectate a player. `/vspec stop` to return. | `vanishpp.spectator` |
+| `/vfollow <player\|stop>` | — | Lock camera to silently follow a player. | `vanishpp.spectator` |
 | `/vhistory [player]` | — | View vanish/unvanish audit log. | `vanishpp.history` |
-| `/vautovanish [player]` | — | Toggle auto-vanish on join for a player. | `vanishpp.autovanish` |
+| `/vautovanish [player]` | — | Toggle auto-vanish on join for a player. | `vanishpp.vanish` |
 | `/vstats [player]` | — | View vanish time statistics. | `vanishpp.stats` |
 | `/vadmin` | — | In-game dashboard GUI for vanish overview. | `vanishpp.admin` |
 | `/vwand` | — | Give the vanish wand (Blaze Rod toggle item). | `vanishpp.wand` |
@@ -141,6 +141,25 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 
 ---
 
+## Permissions, events, and configuration
+
+`/vperms` grants authorize command execution, completion and GUI controls through the same permission resolver. Editing someone else's rules requires both `vanishpp.rules` and `vanishpp.rules.others` at every click. Read-only built-in invsee blocks collection, shift-clicks, hotbar swaps and drags that could change the target inventory. Plugin hiding retains the server's `bukkit.command.plugins` check.
+
+Vanish flight requires `vanishpp.fly`. Flight that Vanish++ grants is restored when that permission is revoked; existing flight from another provider is preserved. The vanish wand remains usable while ordinary interactions are restricted. The configuration GUI keeps its session across redraws, supports translated titles, and displays current settings.
+
+WorldGuard's `vanishpp-deny-vanish` and `vanishpp-deny-unvanish` flags apply to locally requested transitions, including commands, the wand, the dashboard and the API. Set these feature flags to `allow` to activate them. There is no Vanish++ permission bypass. `worldguard.enabled: false` disables the integration.
+
+`VanishEvent` and `UnvanishEvent` fire before a local request changes reasons, messages, effects or persistence; cancellation stops it. Proxy/Redis reconciliation and persisted login restoration are authoritative and cannot be vetoed by a local listener. `VanishStateChangeEvent` fires only for an actual accepted change. Mutation calls dispatch to the player's owning scheduler. Storage-query API methods must be called asynchronously when using SQL.
+
+Gameplay rules and scoreboard levels use SQL snapshots loaded before login and refreshed every five seconds. Completed local rule changes update the snapshot; failed or superseded reads cannot replace newer values. Mob targeting uses events and a resumable queue: at most 64 entities are admitted per global tick, with one shared allowance of 64 outstanding operations held until owner work completes. Work is grouped into chunk batches and repeated requests coalesce. Startup admits one loaded chunk per tick; removal events retire tracked mobs. A failed mob is logged and settled without stranding healthy work behind it.
+
+Proxy sends preserve order and retry transient carrier failures with backoff. Invalid packets or five consecutive failures suspend outbound delivery with a diagnostic; repair the channel and restart the server. Pending state decisions remain persisted, while unanswered joins and transfers retain their existing timeout behavior.
+
+`vanish-history.enabled` controls recording. `retention-days` removes old entries in asynchronous minute-by-minute maintenance; `0` retains them indefinitely. `/vhistory <name>` resolves disconnected players from saved history. Webhooks send `webhook.auth-header` as `Authorization` and escape all substituted JSON strings. The older `webhook.authorization` spelling is accepted when `auth-header` is absent.
+
+The mob-targeting and accidental-chat master switches are honored, as are advancement announcements and the entity-interaction restriction. Server-list sample hiding is independent of count adjustment. Unimplemented anti-combat, rate-limit, timed-vanish, AFK, per-world-rule and staff-sound controls are no longer advertised in the bundled configuration.
+
+On Folia, entity visibility and supported packet filtering remain active. Scoreboard-backed overlays and the optional info scoreboard are disabled because Folia does not support the scoreboard API. Paper keeps those displays.
 ## Requirements & Compatibility
 
 **Requirements:**
@@ -154,7 +173,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 | :--- | :--- | :--- |
 | **Paper** | Recommended | Full feature support |
 | **Purpur** | Supported | Paper fork, fully compatible |
-| **Folia** | Supported | Multi-region scheduler bridge, automatic detection |
+| **Folia** | Supported with limits | Entity region scheduling; scoreboard overlays and info board disabled |
 | **Spigot** | Compatible | Physics/projectile features degrade without Paper API |
 | **Bukkit** | Compatible | Same limitations as Spigot |
 
@@ -163,6 +182,13 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 **Optional integrations:** TAB (NEZNAMY), PlaceholderAPI, Dynmap, EssentialsX, DiscordSRV, Statusbot, Simple Voice Chat
 
 **Storage options:** YAML (default), MySQL 5.7+, PostgreSQL 12+, Redis (cross-server sync)
+
+Vanish state writes are ordered and drained before storage closes. Failed writes retry the latest accepted decision with backoff; superseded retries cannot overwrite newer toggles. A failed database read retains known hidden state and retries. Failed SQL initialization retains that provider for recovery rather than falling back to unrelated YAML; SQL stays unavailable until migration, deadline recovery, and acknowledgements have finished; a login with no safe cached state must reconnect after storage recovers. Reload keeps following, mob checks, bridge retries, and other feature timers running. Equipped armour is never removed when unvanishing.
+
+Original gamemodes are saved with player data before plugin-entered spectator changes, so restoring them needs no database read. Temporary-rule deadlines and warning acknowledgements survive reconnects and restarts. A newer rule decision cancels an older expiry, including shared SQL changes. Automatic migration to an empty backend copies preferences, presets, history, statistics, rules, levels, acknowledgements, and vanish state in either direction. YAML reload reuses its existing file owner. Acknowledgements, preferences, presets and state mutations share the ordered worker with storage migration; the previous provider stays open until migration completes. History is copied from one stable snapshot, including rows with identical timestamps. SQL destination copies commit as one transaction, so an interrupted copy rolls back and retries without duplicated history. YAML migration writes every category, including history, to one temporary snapshot beside data.yml, then replaces data.yml with an atomic rename. A failed copy or destination write leaves the previous snapshot untouched. Failed deadline scans retain the previous schedules and retry; replaced timers are cancelled.
+
+The Velocity companion persists vanish and explicit unvanish decisions in `state.yml`, including with default YAML storage. During bootstrap it imports unknown vanished players from backends without overriding known proxy decisions. Proxy state takes precedence over backend YAML on login. With `proxy.enabled`, joins remain hidden until a targeted state reply arrives; a five-second timeout requires reconnecting instead of revealing unknown state. Server switches wait up to five seconds for the source backend to settle its accepted toggle before the destination can query state. An unanswered transfer is denied, and new source-side toggles are held until confirmed detach or cancellation, including when the connection takes longer than ten seconds. Ordinary visible joins preserve spectator mode and flight. Queued local toggles are protected until the proxy acknowledges them; unacknowledged updates are retried and older revisions are ignored. Network configuration patches are saved to proxy `config.yml`. Override order is global defaults, `all`, matching comma-separated groups (alphabetical key order), then an exact server name; Velocity resolves these once. Redis subscriptions reconnect with backoff from 250 ms to 30 seconds and close their connection on shutdown. Shared SQL state is reconciled behind queued writes when a subscription recovers; unsettled local decisions are preserved. Shutdown attempts every final session save and closes resources even if one save fails, logging each failure.
+
 
 ---
 

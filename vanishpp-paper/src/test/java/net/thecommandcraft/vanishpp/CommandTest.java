@@ -337,6 +337,7 @@ class CommandTest {
         // Mark as migrated this boot so the report is sendable
         // Directly acknowledge via the command
         player.performCommand("vack migration");
+        awaitStorageWrites();
         assertTrue(plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(),
                 "migration_v" + plugin.getConfigManager().getLatestVersion()),
                 "vack migration must record the acknowledgement");
@@ -347,6 +348,7 @@ class CommandTest {
         player.setOp(true); // gives vanishpp.config
         plugin.getConfigManager().hideFromPluginList = true;
         player.performCommand("vack disable_hiding");
+        awaitStorageWrites();
         assertFalse(plugin.getConfigManager().hideFromPluginList,
                 "vack disable_hiding must set hide-from-plugin-list to false in config");
     }
@@ -550,4 +552,10 @@ class CommandTest {
         assertFalse(plugin.isVanished(executor), "Executor must be unvanished");
         assertTrue(plugin.isVanished(target), "Target must remain vanished");
     }
+    private void awaitStorageWrites() {
+        var completed = new java.util.concurrent.CountDownLatch(1);
+        plugin.submitStorageWork(completed::countDown);
+        assertDoesNotThrow(() -> assertTrue(completed.await(5, java.util.concurrent.TimeUnit.SECONDS), "accepted storage writes must finish"));
+    }
+
 }

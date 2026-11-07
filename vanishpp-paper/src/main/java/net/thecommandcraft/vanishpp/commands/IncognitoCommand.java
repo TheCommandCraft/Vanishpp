@@ -35,7 +35,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.incognito")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.incognito")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -67,7 +67,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
                 Player online = Bukkit.getPlayer(args[0]);
                 if (online != null && !online.equals(sender) && plugin.getPermissionManager().canSee(sender, online)) {
                     // Treat as targeting another player
-                    if (!sender.hasPermission("vanishpp.incognito.others")) {
+                    if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.incognito.others")) {
                         plugin.getMessageManager().sendMessage(sender,
                                 plugin.getConfigManager().noPermissionMessage);
                         return true;
@@ -86,7 +86,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
             }
         } else {
             // /vincognito <player> <fakename|off>
-            if (!sender.hasPermission("vanishpp.incognito.others")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.incognito.others")) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().noPermissionMessage);
                 return true;
@@ -166,7 +166,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.incognito")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.incognito")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             // self options: off + fake names
@@ -174,7 +174,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
             List<String> pool = plugin.getConfigManager().incognitoFakeNames;
             if (pool != null) completions.addAll(pool);
             // other-player options (if they have permission)
-            if (sender.hasPermission("vanishpp.incognito.others")) {
+            if (plugin.getPermissionManager().hasPermission(sender, "vanishpp.incognito.others")) {
                 for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             }
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());

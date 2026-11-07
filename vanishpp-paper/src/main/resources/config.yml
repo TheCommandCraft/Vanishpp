@@ -74,12 +74,11 @@ vanish-gamemodes:
 # --- [ FLIGHT MANAGEMENT ] ---
 # Configuration for flight behavior relating to vanish status.
 flight-control:
-  # If true, flight is automatically enabled when the player vanishes.
+  # Grant flight while vanished only with vanishpp.fly.
   vanish-enable-fly: true
   
-  # If true, flight is automatically disabled when the player unvanishes.
-  # If false, players with external fly permissions (like rank-based fly) 
-  # will retain their flight status after unvanishing.
+  # Restore the flight state that existed before Vanish++ granted it.
+  # Existing flight supplied by another provider is preserved.
   unvanish-disable-fly: true
 
 # --- [ CHAT SETTINGS ] ---
@@ -99,7 +98,7 @@ invisibility-features:
   # Give vanished players automatic night vision.
   night-vision: true
   
-  # Prevent mobs from targeting vanished players.
+  # Master switch for combat-target prevention; the mob_targeting rule can opt out.
   disable-mob-targeting: true
   
   # Prevent hunger loss while vanished.
@@ -126,19 +125,21 @@ invisibility-features:
   # Prevent vanished players from sleeping in beds.
   prevent-sleeping: true
   
-  # Prevent interacting with entities (e.g., riding horses) while vanished.
+  # Block entity interaction even when the player's can_interact rule allows it.
   prevent-entity-interact: true
   
-  # If true, players must confirm chat messages to avoid accidental voice leaks.
+  # Require confirmation when can_chat is false. Disabling this skips confirmation,
+  # while vanished chat still respects its authorized audience.
   prevent-accidental-chat: true
 
   # Allow staff with vanishpp.invsee to shift-right-click a player to view their inventory.
+  # Without vanishpp.invsee.modify, all actions that alter the target are cancelled.
   invsee-shift-click: true
 
 # --- [ VANISH EFFECTS ] ---
 # Advanced packet-level hiding techniques.
 vanish-effects:
-  # Hide player from the server list hover (sample).
+  # Hide vanished players from the hover sample independently of count adjustment.
   hide-from-server-list: true
   
   # Block the REAL vanilla quit messages.
@@ -195,6 +196,8 @@ hooks:
 
 # --- [ STORAGE ] ---
 # How player data (vanish status, rules, levels) is stored.
+# State writes are ordered. Reload migrates every stored category to an empty backend.
+# Failed reads retain hidden state and retry; unknown-state logins must reconnect.
 storage:
   # Options: YAML, MYSQL, POSTGRESQL
   type: "YAML"
@@ -226,40 +229,6 @@ scoreboard:
   # Players can still toggle manually with /vsb regardless of this setting.
   auto-show-on-vanish: true
 
-# --- [ ANTI-COMBAT VANISH ] ---
-# Prevent staff from vanishing immediately after combat.
-anti-combat-vanish:
-  enabled: false
-  # Seconds after PvP damage before vanish is allowed again.
-  pvp-cooldown-seconds: 10
-  # Seconds after PvE damage before vanish is allowed again.
-  pve-cooldown-seconds: 5
-
-# --- [ VANISH RATE LIMIT ] ---
-# Prevent rapid vanish/unvanish toggling.
-vanish-rate-limit:
-  enabled: false
-  # Minimum seconds between consecutive vanish toggles.
-  seconds: 3
-
-# --- [ TIMED VANISH ] ---
-# Allow vanish with an automatic expiry timer (/vanish <player> <duration>).
-timed-vanish:
-  enabled: true
-
-# --- [ STAFF SOUNDS ] ---
-# Play sounds to staff when a player vanishes/unvanishes.
-staff-sounds:
-  enabled: false
-  vanish:
-    sound: "BLOCK_NOTE_BLOCK_PLING"
-    volume: 1.0
-    pitch: 1.2
-  unvanish:
-    sound: "BLOCK_NOTE_BLOCK_PLING"
-    volume: 1.0
-    pitch: 0.8
-
 # --- [ BOSSBAR ] ---
 # Show a bossbar to the vanished player as a status indicator.
 bossbar:
@@ -272,22 +241,16 @@ bossbar:
 # Audit log of vanish/unvanish events.
 vanish-history:
   enabled: true
-  # Days to keep history entries. Set to 0 to keep forever.
+  # Days to keep history entries; asynchronous maintenance runs every minute.
+  # Set to 0 to keep forever, including while recording is disabled.
   retention-days: 30
-
-# --- [ PER-WORLD RULE DEFAULTS ] ---
-# Override default vanish rules for specific worlds.
-# world-rules:
-#   world_nether:
-#     can_break_blocks: true
-#   world_the_end:
-#     mob_targeting: true
-world-rules: {}
 
 # --- [ VELOCITY PROXY ] ---
 proxy:
   # Enable only behind a secured Velocity proxy with the companion plugin installed.
   # Upgrade both Vanish++ jars together. Restart Paper after changing this setting.
+  # Joins wait for proxy state; transfers wait for the source decision (five seconds).
+  # An unanswered transfer is denied; install the companion on every backend.
   # Standalone servers leave this off and do not register the proxy control channel.
   enabled: false
   # Optional backend name; otherwise the server IP and port are used.
@@ -299,6 +262,7 @@ webhook:
   enabled: false
   urls: []
   # Template variables: {player}, {uuid}, {action}, {reason}, {server}, {timestamp}
+  # Use variables inside JSON strings; substituted text is escaped automatically.
   payload-template: '{"player":"{player}","action":"{action}","reason":"{reason}","server":"{server}","timestamp":"{timestamp}"}'
   # Optional Authorization header value (e.g., "Bearer mytoken")
   auth-header: ""
@@ -306,12 +270,6 @@ webhook:
 # --- [ WORLDGUARD ] ---
 worldguard:
   enabled: true
-
-# --- [ AFK AUTO-VANISH ] ---
-afk-auto-vanish:
-  enabled: false
-  # Seconds of no movement before auto-vanishing.
-  seconds: 300
 
 # --- [ VANISH WAND ] ---
 vanish-wand:

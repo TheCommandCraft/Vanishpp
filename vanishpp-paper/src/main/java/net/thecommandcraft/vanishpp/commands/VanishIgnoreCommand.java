@@ -25,7 +25,7 @@ public class VanishIgnoreCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.ignorewarning")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.ignorewarning")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -33,7 +33,7 @@ public class VanishIgnoreCommand implements CommandExecutor, TabCompleter {
         Player target;
 
         if (args.length > 0) {
-            if (!sender.hasPermission("vanishpp.ignorewarning.others")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.ignorewarning.others")) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
@@ -69,8 +69,8 @@ public class VanishIgnoreCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.ignorewarning")) return new ArrayList<>();
-        if (args.length == 1 && sender.hasPermission("vanishpp.ignorewarning.others")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.ignorewarning")) return new ArrayList<>();
+        if (args.length == 1 && plugin.getPermissionManager().hasPermission(sender, "vanishpp.ignorewarning.others")) {
             List<String> names = new ArrayList<>();
             for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) names.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], names, new ArrayList<>());

@@ -42,6 +42,7 @@ public class PluginHider implements Listener {
             return;
 
         Player player = event.getPlayer();
+        if (!player.hasPermission("bukkit.command.plugins")) return;
         event.setCancelled(true);
 
         // Build filtered plugin list (exclude Vanishpp)
@@ -67,7 +68,7 @@ public class PluginHider implements Listener {
         // AND who haven't acknowledged it for this version
         if (plugin.getPermissionManager().hasPermission(player, "vanishpp.see")) {
             String ackKey = "hiding_v" + plugin.getConfigManager().getLatestVersion();
-            if (!plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), ackKey)) {
+            if (!plugin.getPlayerData().acknowledged(player.getUniqueId(), ackKey)) {
                 var lm = plugin.getConfigManager().getLanguageManager();
                 Component info = Component.text("ℹ ", NamedTextColor.GRAY)
                         .append(plugin.getMessageManager().parse(lm.getMessage("plugins.hidden-info"), player))

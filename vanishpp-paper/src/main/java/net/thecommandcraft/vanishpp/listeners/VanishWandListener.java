@@ -28,7 +28,7 @@ public class VanishWandListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
         Action action = event.getAction();
@@ -46,7 +46,7 @@ public class VanishWandListener implements Listener {
         if (player.isSneaking()) {
             // Shift-right-click → open Rules GUI
             if (plugin.getPermissionManager().hasPermission(player, "vanishpp.rules")) {
-                new RulesGUI(plugin).open(player, player);
+                plugin.getRulesGUI().open(player, player);
             }
         } else {
             // Regular right-click → toggle vanish

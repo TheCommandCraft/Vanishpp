@@ -50,7 +50,7 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.config")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.config")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -132,7 +132,7 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.config")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.config")) return new ArrayList<>();
         if (args.length == 1) {
             var cfg = plugin.getConfigManager().getConfig();
             List<String> keys = new ArrayList<>(cfg.getKeys(true));

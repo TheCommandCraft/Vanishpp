@@ -29,14 +29,42 @@ public class FoliaSchedulerBridge implements VanishScheduler {
     }
 
     @Override
+    public Runnable startLater(Runnable runnable, long ticks) {
+        return Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> runnable.run(), Math.max(1L, ticks))::cancel;
+    }
+
+    @Override
+    public Runnable startTimer(Runnable runnable, long delay, long period) {
+        return Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> runnable.run(), delay, period)::cancel;
+    }
+
+    @Override
     public void runEntity(Entity entity, Runnable runnable, Runnable retired) {
-        entity.getScheduler().run(plugin, task -> runnable.run(), retired);
+        var settled = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable unavailable = () -> {
+            if (settled.compareAndSet(false, true) && retired != null) retired.run();
+        };
+        if (entity.getScheduler().run(plugin, task -> {
+            if (settled.compareAndSet(false, true)) runnable.run();
+        }, unavailable) == null) unavailable.run();
     }
 
     @Override
     public void runEntityNow(Entity entity, Runnable runnable) {
         if (Bukkit.isOwnedByCurrentRegion(entity)) runnable.run();
         else runEntity(entity, runnable, null);
+    }
+
+    @Override public boolean owns(Entity entity) { return Bukkit.isOwnedByCurrentRegion(entity); }
+    @Override public boolean supportsScoreboards() { return false; }
+    @Override public boolean regionThreaded() { return true; }
+
+    @Override public void runLaterEntity(Entity entity, Runnable runnable, long ticks) {
+        entity.getScheduler().runDelayed(plugin, task -> runnable.run(), null, Math.max(1L, ticks));
+    }
+
+    @Override public void runRegion(org.bukkit.World world, int chunkX, int chunkZ, Runnable runnable) {
+        Bukkit.getRegionScheduler().execute(plugin, world, chunkX, chunkZ, runnable);
     }
 
     @Override

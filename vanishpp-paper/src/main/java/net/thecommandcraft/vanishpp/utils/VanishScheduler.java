@@ -10,10 +10,42 @@ public interface VanishScheduler {
 
     void runTimerGlobal(Runnable runnable, long delay, long period);
 
+    default Runnable startLater(Runnable runnable, long ticks) {
+        java.util.concurrent.atomic.AtomicBoolean active = new java.util.concurrent.atomic.AtomicBoolean(true);
+        runLaterGlobal(() -> { if (active.getAndSet(false)) runnable.run(); }, ticks);
+        return () -> active.set(false);
+    }
+
+    default Runnable startTimer(Runnable runnable, long delay, long period) {
+        java.util.concurrent.atomic.AtomicBoolean active = new java.util.concurrent.atomic.AtomicBoolean(true);
+        runTimerGlobal(() -> { if (active.get()) runnable.run(); }, delay, period);
+        return () -> active.set(false);
+    }
+
+    /**
+     * Runs on the entity owner or settles retirement exactly once. Rejection before scheduling
+     * calls retired on the caller thread; later retirement uses the scheduler's retirement thread.
+     * Retirement callbacks must limit themselves to thread-safe cleanup or scheduling new work.
+     */
     void runEntity(Entity entity, Runnable runnable, Runnable retired);
 
     /** Like runEntity, but runs right away when the current thread already owns the entity. */
     void runEntityNow(Entity entity, Runnable runnable);
+
+    default boolean owns(Entity entity) { return true; }
+    default boolean supportsScoreboards() { return true; }
+    default boolean regionThreaded() { return false; }
+
+    default void runLaterEntity(Entity entity, Runnable runnable, long ticks) {
+        runLaterGlobal(() -> runEntityNow(entity, runnable), ticks);
+    }
+
+    default void runSender(org.bukkit.command.CommandSender sender, Runnable runnable) {
+        if (sender instanceof Entity entity) runEntityNow(entity, runnable);
+        else runGlobal(runnable);
+    }
+
+    default void runRegion(org.bukkit.World world, int chunkX, int chunkZ, Runnable runnable) { runGlobal(runnable); }
 
     void runAsync(Runnable runnable);
 

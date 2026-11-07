@@ -35,6 +35,7 @@ public class VanishScoreboard {
     // Epoch-based cancellation: incrementing taskEpoch makes the previous timer runnable a no-op.
     private volatile int taskEpoch = 0;
     private boolean timerRunning = false;
+    private Runnable cancelTimer = () -> {};
 
     public VanishScoreboard(Vanishpp plugin) {
         this.plugin = plugin;
@@ -75,6 +76,7 @@ public class VanishScoreboard {
     }
 
     public void show(Player player) {
+        if (!plugin.getVanishScheduler().supportsScoreboards()) return;
         if (boards.containsKey(player.getUniqueId())) return;
         boolean wasEmpty = boards.isEmpty();
 
@@ -118,13 +120,14 @@ public class VanishScoreboard {
         boards.remove(player.getUniqueId());
         movementCooldowns.remove(player.getUniqueId());
         player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
-        if (boards.isEmpty()) { taskEpoch++; timerRunning = false; } // last board closed — stop the timer
+        if (boards.isEmpty()) { cancelTimer.run(); taskEpoch++; timerRunning = false; }
     }
 
     public void cleanup(UUID uuid) {
         boards.remove(uuid);
         manuallyHidden.remove(uuid);
         movementCooldowns.remove(uuid);
+        if (boards.isEmpty()) { cancelTimer.run(); taskEpoch++; timerRunning = false; }
     }
 
     // -------------------------------------------------------------------------
@@ -139,19 +142,21 @@ public class VanishScoreboard {
     }
 
     private void startTimerTask() {
+        cancelTimer.run();
         timerRunning = true;
         final int myEpoch = ++taskEpoch; // invalidate any previously scheduled task
         int interval = Math.max(1, plugin.getScoreboardConfig().getInt("update-interval", 1));
-        plugin.getVanishScheduler().runTimerGlobal(() -> {
+        cancelTimer = plugin.getVanishScheduler().startTimer(() -> {
             if (taskEpoch != myEpoch) return;
             for (UUID uuid : new ArrayList<>(boards.keySet())) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) tick(p);
+                if (p != null) plugin.getVanishScheduler().runEntityNow(p, () -> { if (p.isOnline()) tick(p); });
             }
         }, interval, interval);
     }
 
     private void registerMovementListener() {
+        if (!plugin.getVanishScheduler().supportsScoreboards()) return;
         // Remove stale listener before re-adding
         if (movementListener != null) {
             movementListener.unregister();
@@ -165,6 +170,7 @@ public class VanishScoreboard {
     }
 
     public void shutdown() {
+        cancelTimer.run();
         taskEpoch++; // invalidate running timer task
         timerRunning = false;
         if (movementListener != null) {
@@ -416,8 +422,8 @@ public class VanishScoreboard {
             .replace("%max_health%", String.format("%.1f", maxHp))
             .replace("%food%",       String.valueOf(player.getFoodLevel()))
             .replace("%armor%",      String.valueOf((int) armorVal))
-            .replace("%level%",      String.valueOf(plugin.getStorageProvider().getVanishLevel(player.getUniqueId())))
-            .replace("%vanish_level%", String.valueOf(plugin.getStorageProvider().getVanishLevel(player.getUniqueId())))
+            .replace("%level%",      String.valueOf(plugin.getPlayerData().level(player.getUniqueId())))
+            .replace("%vanish_level%", String.valueOf(plugin.getPlayerData().level(player.getUniqueId())))
             .replace("%world%",      player.getWorld().getName())
             // Server stats
             .replace("%tps%",        tpsColor + String.format("%.1f", tps))

@@ -42,7 +42,7 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.manageperms")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.manageperms")) {
             plugin.getMessageManager().sendMessage(sender,
                     configManager.getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -107,7 +107,7 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.manageperms")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.manageperms")) return new ArrayList<>();
         final List<String> completions = new ArrayList<>();
         if (args.length == 1) {
             List<String> suggestions = new ArrayList<>();

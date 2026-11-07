@@ -13,6 +13,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -37,7 +38,8 @@ public class RulesGUI implements Listener {
 
     private final Vanishpp plugin;
     /** viewer UUID → target player UUID */
-    private final Map<UUID, UUID> openGuis = new HashMap<>();
+    private final Map<UUID, UUID> openGuis = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Inventory> inventories = new java.util.concurrent.ConcurrentHashMap<>();
     /** NBT key carrying the rule id on each wool item — invisible, unlike a lore line. */
     private final NamespacedKey ruleKey;
 
@@ -66,6 +68,7 @@ public class RulesGUI implements Listener {
         }
 
         openGuis.put(viewer.getUniqueId(), target.getUniqueId());
+        inventories.put(viewer.getUniqueId(), inv);
         viewer.openInventory(inv);
     }
 
@@ -73,12 +76,10 @@ public class RulesGUI implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player viewer)) return;
         UUID viewerUuid = viewer.getUniqueId();
-        // Identification relies solely on the viewer being tracked in openGuis — not on
-        // matching the inventory title text, since that title is now a live language-file
-        // lookup and could change mid-session across a /vconfig reload.
-        if (!openGuis.containsKey(viewerUuid)) return;
+        if (inventories.get(viewerUuid) != event.getView().getTopInventory()) return;
 
         event.setCancelled(true);
+        if (event.getRawSlot() < 0 || event.getRawSlot() >= event.getView().getTopInventory().getSize()) return;
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || clicked.getType() == Material.AIR) return;
         ItemMeta meta = clicked.getItemMeta();
@@ -92,8 +93,9 @@ public class RulesGUI implements Listener {
         // string and can no longer be parsed back into a rule key.
         String ruleName = meta.getPersistentDataContainer().get(ruleKey, PersistentDataType.STRING);
         if (ruleName == null || !plugin.getRuleManager().getAvailableRules().contains(ruleName)) return;
-        if (!viewer.hasPermission("vanishpp.rules")
-                && (!viewer.equals(target) || !viewer.hasPermission("vanishpp.rules.others"))) return;
+        if (!plugin.getPermissionManager().hasPermission(viewer, "vanishpp.rules")
+                || (!viewer.equals(target) && !plugin.getPermissionManager().hasPermission(viewer, "vanishpp.rules.others"))
+                || !plugin.getPermissionManager().canSee(viewer, target)) return;
 
         boolean current = plugin.getRuleManager().getRule(target, ruleName);
         plugin.getRuleManager().setRule(target, ruleName, !current);
@@ -104,7 +106,14 @@ public class RulesGUI implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        openGuis.remove(event.getPlayer().getUniqueId());
+        UUID uuid = event.getPlayer().getUniqueId();
+        if (inventories.remove(uuid, event.getInventory())) openGuis.remove(uuid);
+    }
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (inventories.get(event.getWhoClicked().getUniqueId()) == event.getView().getTopInventory())
+            event.setCancelled(true);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

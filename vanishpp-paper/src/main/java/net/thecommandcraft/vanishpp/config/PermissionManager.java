@@ -123,6 +123,7 @@ public class PermissionManager {
         save();
     }
 
+
     /**
      * Checks if a UUID has a permission in the custom file.
      * Supports 'vanishpp.*' and category groups like 'vanishpp.abilities'.
@@ -158,6 +159,15 @@ public class PermissionManager {
      * Checks permission via Bukkit (OP/Plugins) OR Custom File.
      */
     public boolean hasPermission(Player player, String permission) {
+        if (!plugin.getVanishScheduler().owns(player)) {
+            var facts = plugin.voiceAudience.facts(player.getUniqueId());
+            return hasPermission(player.getUniqueId(), permission)
+                    || (permission.equals("vanishpp.see") && facts != null && facts.permission());
+        }
+        return hasPermissionOwned(player, permission);
+    }
+
+    private boolean hasPermissionOwned(Player player, String permission) {
         try {
             if (player.hasPermission(permission)) {
                 return true;
@@ -168,6 +178,10 @@ public class PermissionManager {
             return false;
         }
         return hasPermission(player.getUniqueId(), permission);
+    }
+
+    public boolean hasPermission(CommandSender sender, String permission) {
+        return sender instanceof Player player ? hasPermission(player, permission) : sender.hasPermission(permission);
     }
 
     public boolean canSee(Player observer, Player target) {
@@ -194,8 +208,10 @@ public class PermissionManager {
 
     public net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts voiceFacts(Player player) {
         ConfigManager cm = plugin.getConfigManager();
-        return new net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts(hasPermission(player, "vanishpp.see"),
-                getLevel(player, "vanishpp.see.level.", cm.defaultSeeLevel), vanishLevel(player));
+        // Called only inside VoiceAudience's player-owned capture. Never recapture the old snapshot.
+        return new net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts(hasPermissionOwned(player, "vanishpp.see"),
+                getLevelOwned(player, "vanishpp.see.level.", cm.defaultSeeLevel),
+                getLevelOwned(player, "vanishpp.vanish.level.", cm.defaultVanishLevel));
     }
 
     public int vanishLevel(Player target) {
@@ -230,12 +246,21 @@ public class PermissionManager {
     }
 
     private int getLevel(Player player, String prefix, int def) {
-        if (hasPermission(player, "vanishpp.*"))
+        if (!plugin.getVanishScheduler().owns(player)) {
+            var facts = plugin.voiceAudience.facts(player.getUniqueId());
+            boolean subject = prefix.equals("vanishpp.vanish.level.");
+            return facts == null ? (subject ? Integer.MAX_VALUE : 0) : subject ? facts.vanishLevel() : facts.seeLevel();
+        }
+        return getLevelOwned(player, prefix, def);
+    }
+
+    private int getLevelOwned(Player player, String prefix, int def) {
+        if (hasPermissionOwned(player, "vanishpp.*"))
             return plugin.getConfigManager().maxLevel;
 
         int max = plugin.getConfigManager().maxLevel;
         for (int i = max; i > 0; i--) {
-            if (hasPermission(player, prefix + i)) {
+            if (hasPermissionOwned(player, prefix + i)) {
                 return i;
             }
         }

@@ -8,7 +8,8 @@ import org.bukkit.event.player.PlayerEvent;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Fired just before a player is unvanished. Can be cancelled to keep the player vanished.
+ * Fired before a locally requested unvanish, before messages, effects or persistence.
+ * Cancellation stops the request. Authoritative restoration does not fire this cancellable event.
  */
 public class UnvanishEvent extends PlayerEvent implements Cancellable {
 
