@@ -308,6 +308,7 @@ class StateDurabilityTest {
     void reloadKeepsFollowingAMovingTarget() {
         FollowingPlayer follower = new FollowingPlayer(server);
         server.addPlayer(follower);
+        plugin.applyVanishEffects(follower);
         new VanishFollowCommand(plugin);
         plugin.spectateFollowTargets.put(follower.getUniqueId(), player.getUniqueId());
         scheduler.fireTimers();

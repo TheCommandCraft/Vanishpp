@@ -20,7 +20,7 @@ public final class PlayerDataCache {
 
     public PlayerDataCache(Vanishpp plugin) { this.plugin = plugin; }
 
-    /** Called by pre-login or the ordered storage worker, never by a gameplay callback. */
+    /** Called by pre-login or a background worker, never by a gameplay callback. */
     public void load(UUID uuid) {
         StorageProvider provider = plugin.getStorageProvider();
         if (!(provider instanceof SqlStorage)) return;
@@ -40,7 +40,7 @@ public final class PlayerDataCache {
         if (!(plugin.getStorageProvider() instanceof SqlStorage)) return;
         Entry entry = entries.computeIfAbsent(uuid, key -> new Entry());
         synchronized (entry) { if (entry.loading) return; entry.loading = true; }
-        plugin.submitStorageWork(() -> {
+        plugin.getVanishScheduler().runAsync(() -> {
             try { if (entries.get(uuid) == entry) load(uuid); }
             catch (RuntimeException e) { plugin.getLogger().warning("Player settings refresh will retry: " + e.getMessage()); }
             finally { synchronized (entry) { entry.loading = false; } }
@@ -49,7 +49,7 @@ public final class PlayerDataCache {
 
     public void refreshKnown() {
         if (!(plugin.getStorageProvider() instanceof SqlStorage)) return;
-        plugin.submitStorageWork(() -> {
+        plugin.getVanishScheduler().runAsync(() -> {
             try {
                 Set<UUID> players = new HashSet<>(plugin.getStorageProvider().getVanishedPlayers());
                 plugin.getServer().getOnlinePlayers().forEach(player -> players.add(player.getUniqueId()));

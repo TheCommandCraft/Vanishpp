@@ -131,6 +131,23 @@ public class ConfigManager {
         }
     }
 
+    /** Values shown by the editor follow the active proxy settings when present. */
+    public Object currentValue(String path, Object fallback) {
+        if (plugin.getProxyConfigCache() == null || !plugin.getProxyConfigCache().isReady()) return config.get(path, fallback);
+        return switch (path) {
+            case "vanish-appearance.action-bar.enabled" -> actionBarEnabled;
+            case "vanish-gamemodes.enabled" -> vanishGamemodesEnabled;
+            case "vanish-gamemodes.default-spectator" -> defaultSpectatorOnVanish;
+            case "permissions.default-vanish-level" -> defaultVanishLevel;
+            case "permissions.default-see-level" -> defaultSeeLevel;
+            case "permissions.max-level" -> maxLevel;
+            case "flight-control.vanish-enable-fly" -> enableFly;
+            case "flight-control.unvanish-disable-fly" -> disableFlyOnUnvanish;
+            case "invisibility-features.prevent-sleeping" -> preventSleeping;
+            default -> config.get(path, fallback);
+        };
+    }
+
     public void logMigrationChange(String note) {
         this.migrationNotes.add(note);
     }

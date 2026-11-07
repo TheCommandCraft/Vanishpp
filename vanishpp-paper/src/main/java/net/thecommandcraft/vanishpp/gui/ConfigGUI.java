@@ -170,7 +170,7 @@ public class ConfigGUI implements Listener {
      * Handle boolean setting toggle.
      */
     private void handleBooleanClick(Player player, ConfigCategory.ConfigValue value) {
-        Object current = plugin.getConfigManager().getConfig().get(value.key);
+        Object current = plugin.getConfigManager().currentValue(value.key, value.defaultValue);
         if (current == null) current = value.defaultValue;
         boolean newValue = !(current instanceof Boolean && (Boolean) current);
 
@@ -184,7 +184,7 @@ public class ConfigGUI implements Listener {
      * Handle numeric setting adjustment.
      */
     private void handleNumericClick(Player player, ConfigCategory.ConfigValue value, int delta) {
-        Object current = plugin.getConfigManager().getConfig().get(value.key);
+        Object current = plugin.getConfigManager().currentValue(value.key, value.defaultValue);
         int currentValue = (current instanceof Integer) ? (Integer) current : (Integer) value.defaultValue;
         int newValue = currentValue + delta;
 

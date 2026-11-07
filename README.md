@@ -171,7 +171,7 @@ On Folia, entity visibility and supported packet filtering remain active. Scoreb
 | :--- | :--- | :--- |
 | **Paper** | Recommended | Full feature support |
 | **Purpur** | Supported | Paper fork, fully compatible |
-| **Folia** | Supported | Multi-region scheduler bridge, automatic detection |
+| **Folia** | Supported with limits | Entity region scheduling; scoreboard overlays and info board disabled |
 | **Spigot** | Compatible | Physics/projectile features degrade without Paper API |
 | **Bukkit** | Compatible | Same limitations as Spigot |
 

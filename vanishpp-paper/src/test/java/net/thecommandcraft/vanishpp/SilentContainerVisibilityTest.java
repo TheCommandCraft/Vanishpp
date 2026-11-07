@@ -39,6 +39,9 @@ class SilentContainerVisibilityTest {
         plugin.getRuleManager().setRule(player, RuleManager.CAN_INTERACT, true);
         set("hasProtocolLib", true);
         VanishScheduler scheduler = mock(VanishScheduler.class);
+        when(scheduler.owns(any())).thenReturn(true);
+        doAnswer(call -> { ((Runnable) call.getArgument(1)).run(); return null; })
+                .when(scheduler).runEntityNow(any(), any());
         doAnswer(call -> { closes.add(call.getArgument(0)); return null; }).when(scheduler).runLaterGlobal(any(), eq(60L));
         set("vanishScheduler", scheduler);
         listener = new PlayerListener(plugin);

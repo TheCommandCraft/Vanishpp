@@ -154,7 +154,7 @@ public class ConfigRenderer {
      */
     private ItemStack createSettingItem(ConfigCategory.ConfigValue value) {
         ItemStack item;
-        Object currentValue = plugin.getConfigManager().getConfig().get(value.key, value.defaultValue);
+        Object currentValue = plugin.getConfigManager().currentValue(value.key, value.defaultValue);
 
         if (value.type.isBoolean()) {
             // Boolean: show true/false state

@@ -164,6 +164,10 @@ public class PermissionManager {
             return hasPermission(player.getUniqueId(), permission)
                     || (permission.equals("vanishpp.see") && facts != null && facts.permission());
         }
+        return hasPermissionOwned(player, permission);
+    }
+
+    private boolean hasPermissionOwned(Player player, String permission) {
         try {
             if (player.hasPermission(permission)) {
                 return true;
@@ -204,8 +208,10 @@ public class PermissionManager {
 
     public net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts voiceFacts(Player player) {
         ConfigManager cm = plugin.getConfigManager();
-        return new net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts(hasPermission(player, "vanishpp.see"),
-                getLevel(player, "vanishpp.see.level.", cm.defaultSeeLevel), vanishLevel(player));
+        // Called only inside VoiceAudience's player-owned capture. Never recapture the old snapshot.
+        return new net.thecommandcraft.vanishpp.utils.VoiceAudience.Facts(hasPermissionOwned(player, "vanishpp.see"),
+                getLevelOwned(player, "vanishpp.see.level.", cm.defaultSeeLevel),
+                getLevelOwned(player, "vanishpp.vanish.level.", cm.defaultVanishLevel));
     }
 
     public int vanishLevel(Player target) {
@@ -245,12 +251,16 @@ public class PermissionManager {
             boolean subject = prefix.equals("vanishpp.vanish.level.");
             return facts == null ? (subject ? Integer.MAX_VALUE : 0) : subject ? facts.vanishLevel() : facts.seeLevel();
         }
-        if (hasPermission(player, "vanishpp.*"))
+        return getLevelOwned(player, prefix, def);
+    }
+
+    private int getLevelOwned(Player player, String prefix, int def) {
+        if (hasPermissionOwned(player, "vanishpp.*"))
             return plugin.getConfigManager().maxLevel;
 
         int max = plugin.getConfigManager().maxLevel;
         for (int i = max; i > 0; i--) {
-            if (hasPermission(player, prefix + i)) {
+            if (hasPermissionOwned(player, prefix + i)) {
                 return i;
             }
         }

@@ -464,8 +464,8 @@ public class ProxyBridge implements PluginMessageListener {
     /** Sends a raw packet via the first available online player, or queues it for later. */
     public void sendPacket(byte[] data) {
         if (!active) return;
-        pendingPackets.addLast(data);
         Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
+        pendingPackets.addLast(data);
         if (carrier != null) flushPendingPackets(carrier);
     }
 

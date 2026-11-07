@@ -137,6 +137,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private net.thecommandcraft.vanishpp.listeners.MobAiManager mobAiManager;
     private final Map<String, String> commandPermissions = new ConcurrentHashMap<>();
     private final net.thecommandcraft.vanishpp.config.PlayerDataCache playerData = new net.thecommandcraft.vanishpp.config.PlayerDataCache(this);
+    private final java.util.concurrent.atomic.AtomicBoolean refreshingPlayerData = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean pruningHistory = new java.util.concurrent.atomic.AtomicBoolean();
     private net.thecommandcraft.vanishpp.scoreboard.VanishBossbar vanishBossbar;
 
     @Override
@@ -1298,10 +1300,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private void startSyncTask() {
         vanishScheduler.runTimerGlobal(() -> {
             int retention = configManager.getConfig().getInt("vanish-history.retention-days", 30);
-            if (retention <= 0) return;
+            if (retention <= 0 || !pruningHistory.compareAndSet(false, true)) return;
             vanishScheduler.runAsync(() -> {
                 try { storageProvider.pruneHistory(retention); }
                 catch (RuntimeException e) { getLogger().warning("History retention will retry: " + e.getMessage()); }
+                finally { pruningHistory.set(false); }
             });
         }, 1L, 1200L);
         vanishScheduler.runTimerGlobal(() -> {
@@ -1333,8 +1336,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         vanishScheduler.runTimerGlobal(() -> {
             if (proxyBridge != null) proxyBridge.retryPendingChanges();
             Collection<? extends Player> online = List.copyOf(Bukkit.getOnlinePlayers());
-            if (online.isEmpty()) return;
+            if (online.isEmpty() || !refreshingPlayerData.compareAndSet(false, true)) return;
             vanishScheduler.runAsync(() -> {
+                try {
                 for (Player p : online) {
                     try { playerData.load(p.getUniqueId()); }
                     catch (RuntimeException e) { getLogger().warning("Player settings refresh will retry: " + e.getMessage()); continue; }
@@ -1355,6 +1359,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                         }
                     });
                 }
+                } finally { refreshingPlayerData.set(false); }
             });
         }, 100L, 100L);
 
@@ -1642,7 +1647,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private void changeVanish(Player player, CommandSender executor, boolean hidden, String reason, TransitionMessages messages) {
         vanishScheduler.runEntityNow(player, () -> {
             UUID uuid = player.getUniqueId();
-            if (stopping || !player.isOnline() || hidden == isVanished(uuid)
+            ProxyJoin pending = proxyJoins.get(uuid);
+            boolean previouslyHidden = pending != null && pending.version() == stateVersion(uuid)
+                    ? pending.previouslyHidden() : isVanished(uuid);
+            if (stopping || !player.isOnline() || hidden == previouslyHidden
                     || (proxyBridge != null && proxyBridge.isTransferPending(uuid)) || !changingPlayers.add(uuid)) return;
             CommandSender source = executor == null ? player : executor;
             boolean changed = false;
@@ -1718,8 +1726,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void updateVanishVisibility(Player subject) {
+        voiceAudience.refresh();
         vanishScheduler.runEntityNow(subject, () -> {
-            voiceAudience.publish(subject);
             for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
                 if (observer.equals(subject)) continue;
                 vanishScheduler.runEntityNow(observer, () -> {
