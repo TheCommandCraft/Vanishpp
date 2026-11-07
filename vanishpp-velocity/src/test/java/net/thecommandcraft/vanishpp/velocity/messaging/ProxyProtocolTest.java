@@ -217,13 +217,80 @@ class ProxyProtocolTest {
     }
 
     @Test
-    void lostSourceConnectionCannotReleaseAnUnconfirmedFallbackTransfer() throws Exception {
+    void kickFromAHandshakenBackendReachesTheFallback() throws Exception {
         var transfer = new ServerPreConnectEvent(player, destination.getServer(), source.getServer());
-        current = null; // A backend kick can clear currentServer before the fallback event.
+        current = null; // Velocity clears the current server before it redirects a kicked player.
         AtomicBoolean resumed = new AtomicBoolean();
         beginTransfer(transfer, resumed);
         assertTrue(resumed.get(), "a lost source must finish the event without waiting for an impossible reply");
-        assertFalse(transfer.getResult().isAllowed(), "lost source must deny an unconfirmed fallback instead of exposing stale state");
+        assertTrue(transfer.getResult().isAllowed(), "a kick from a handshaken backend must still reach the fallback server");
+        assertTrue(sent.stream().noneMatch(packet -> packet.type() == VppMessage.TRANSFER_PREPARE),
+                "a lost source has nothing left to settle");
+    }
+
+    @Test
+    void vanishedPlayerKickedToTheFallbackStaysHiddenFromTheLastAcceptedState() throws Exception {
+        event(source, VppMessage.VANISH_EVENT, decision("a-session", 1, true));
+        RegisteredServer lobby = hostingServer("lobby");
+        var transfer = new ServerPreConnectEvent(player, lobby, source.getServer());
+        current = null;
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(transfer, resumed);
+        assertTrue(transfer.getResult().isAllowed(), "a vanished player kicked from a handshaken backend must reach the fallback");
+        current = connection(lobby);
+        joinQuery(current);
+        assertTrue(joinAnswer().get("joiningVanished").getAsBoolean(),
+                "the fallback must hide the player from the proxy's last accepted state");
+        event(current, VppMessage.VANISH_EVENT, decision("lobby-session", 1, false));
+        joinQuery(current);
+        assertFalse(joinAnswer().get("joiningVanished").getAsBoolean(), "the join answer follows the proxy state");
+    }
+
+    @Test
+    void switchFromALiveHandshakenSourceIsStillHeld() throws Exception {
+        var transfer = new ServerPreConnectEvent(player, destination.getServer(), source.getServer());
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(transfer, resumed);
+        assertFalse(resumed.get(), "a live handshaken source must settle its state before the switch");
+        assertTrue(sent.stream().anyMatch(packet -> packet.type() == VppMessage.TRANSFER_PREPARE));
+    }
+
+    @Test
+    void switchWaitingOnALostSourceFinishesWhenThePlayerLandsElsewhere() throws Exception {
+        AtomicBoolean resumed = new AtomicBoolean();
+        var stranded = beginTransfer(resumed);
+        assertFalse(resumed.get());
+        RegisteredServer lobby = server("lobby");
+        current = connection(lobby); // The source went down and the player was sent to the fallback.
+        fire(new com.velocitypowered.api.event.player.ServerConnectedEvent(player, lobby, source.getServer()));
+        assertTrue(resumed.get(), "a switch still waiting on a lost source must finish instead of hanging");
+        assertFalse(stranded.getResult().isAllowed(), "a switch whose source was lost must not go ahead afterwards");
+    }
+
+    @Test
+    void switchWaitingWhenThePlayerQuitsFinishes() throws Exception {
+        AtomicBoolean resumed = new AtomicBoolean();
+        var stranded = beginTransfer(resumed);
+        assertFalse(resumed.get());
+        current = null;
+        fire(new com.velocitypowered.api.event.connection.DisconnectEvent(player,
+                com.velocitypowered.api.event.connection.DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN));
+        assertTrue(resumed.get(), "a switch still waiting when the player quits must finish instead of hanging");
+        assertFalse(stranded.getResult().isAllowed());
+    }
+
+    private JsonObject joinAnswer() {
+        return sent.stream().filter(packet -> packet.type() == VppMessage.STATE_RESPONSE)
+                .map(packet -> JsonParser.parseString(packet.jsonPayload()).getAsJsonObject())
+                .filter(json -> json.has("joiningUuid")).reduce((first, second) -> second).orElseThrow();
+    }
+
+    private void fire(Object event) throws Exception {
+        var listener = new VelocityPlayerListener(plugin, states, dispatcher);
+        for (Method method : listener.getClass().getMethods()) {
+            if (method.isAnnotationPresent(Subscribe.class) && Arrays.equals(method.getParameterTypes(), new Class<?>[]{event.getClass()}))
+                method.invoke(listener, event);
+        }
     }
 
     @Test
@@ -299,6 +366,16 @@ class ProxyProtocolTest {
         return stub(RegisteredServer.class, (method, args) -> switch (method.getName()) {
             case "getServerInfo" -> new ServerInfo(name, new InetSocketAddress("localhost", 25565));
             case "getPlayersConnected" -> List.of();
+            case "sendPluginMessage" -> { sent.add(VppPacket.decode((byte[]) args[1])); yield true; }
+            default -> null;
+        });
+    }
+
+    /** A backend the player is on, so messages to it travel over the player's connection. */
+    private RegisteredServer hostingServer(String name) {
+        return stub(RegisteredServer.class, (method, args) -> switch (method.getName()) {
+            case "getServerInfo" -> new ServerInfo(name, new InetSocketAddress("localhost", 25565));
+            case "getPlayersConnected" -> current != null && current.getServerInfo().getName().equals(name) ? List.of(player) : List.of();
             case "sendPluginMessage" -> { sent.add(VppPacket.decode((byte[]) args[1])); yield true; }
             default -> null;
         });
