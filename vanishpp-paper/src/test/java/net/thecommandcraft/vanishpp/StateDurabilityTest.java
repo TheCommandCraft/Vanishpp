@@ -33,7 +33,7 @@ import static org.mockito.Mockito.*;
 class StateDurabilityTest {
     private ServerMock server;
     private Vanishpp plugin;
-    private PlayerMock player;
+    private RecordingPlayer player;
     private ControlledScheduler scheduler;
 
     @BeforeEach
@@ -43,7 +43,8 @@ class StateDurabilityTest {
         plugin.getConfigManager().disableBlockTriggering = false;
         plugin.getConfigManager().preventSleeping = false;
         plugin.getConfigManager().enableFly = false;
-        player = server.addPlayer();
+        player = new RecordingPlayer(server);
+        server.addPlayer(player);
         server.getScheduler().cancelTasks(plugin);
         scheduler = new ControlledScheduler();
         field(plugin, "vanishScheduler", scheduler);
@@ -151,6 +152,20 @@ class StateDurabilityTest {
                         net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_RESPONSE,
                         "{\"session\":\"proxy-session\",\"revision\":0,\"authoritative\":true,\"vanished\":[],\"visible\":[]}"));
         assertTrue(plugin.isVanished(player), "older proxy snapshot must not undo a locally queued vanish");
+        scheduler.drainAsync();
+        var sent = player.packets.stream().filter(packet -> packet.type()
+                == net.thecommandcraft.vanishpp.common.protocol.VppMessage.VANISH_EVENT).findFirst().orElseThrow();
+        var payload = com.google.gson.JsonParser.parseString(sent.jsonPayload()).getAsJsonObject();
+        payload.addProperty("session", "proxy-session");
+        payload.addProperty("revision", 1);
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.VANISH_SYNC, payload.toString()));
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.VANISH_SYNC,
+                        "{\"uuid\":\"" + player.getUniqueId() + "\",\"session\":\"proxy-session\",\"revision\":2,\"vanished\":false}"));
+        assertFalse(plugin.isVanished(player), "acknowledgement must release the guard for subsequent proxy decisions");
     }
 
     @Test
@@ -391,6 +406,14 @@ class StateDurabilityTest {
             teleports++;
             lastDestination = location.clone();
             return CompletableFuture.completedFuture(true);
+        }
+    }
+
+    private static class RecordingPlayer extends PlayerMock {
+        final List<net.thecommandcraft.vanishpp.common.protocol.VppPacket.DecodedPacket> packets = new ArrayList<>();
+        RecordingPlayer(ServerMock server) { super(server, "Staff"); }
+        @Override public void sendPluginMessage(org.bukkit.plugin.Plugin source, String channel, byte[] message) {
+            if (channel.equals("vanishpp:proxy")) packets.add(net.thecommandcraft.vanishpp.common.protocol.VppPacket.decode(message));
         }
     }
 
