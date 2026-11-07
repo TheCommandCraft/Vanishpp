@@ -200,6 +200,51 @@ class HardeningTest {
     }
 
     @Test
+    void visibilityMutationsRunOnEachObserversOwner() {
+        List<String> violations = new ArrayList<>();
+        PlayerMock observer = new PlayerMock(server, "OtherRegion") {
+            @Override public void hidePlayer(org.bukkit.plugin.Plugin source, org.bukkit.entity.Player subject) {
+                if (scheduler.owner != this) violations.add("hide");
+                super.hidePlayer(source, subject);
+            }
+            @Override public void showPlayer(org.bukkit.plugin.Plugin source, org.bukkit.entity.Player subject) {
+                if (scheduler.owner != this) violations.add("show");
+                super.showPlayer(source, subject);
+            }
+        };
+        server.addPlayer(observer); violations.clear();
+        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        scheduler.run("global", () -> plugin.updateVanishVisibilityFolia(player));
+        assertFalse(observer.canSee(player), "ownership dispatch must still hide the subject");
+        assertTrue(violations.isEmpty(), "visibility operations must run on each observer's owner: " + violations);
+    }
+
+    @Test
+    void followingReadsTargetPositionOnItsOwner() throws Exception {
+        List<String> violations = new ArrayList<>();
+        var checking = new java.util.concurrent.atomic.AtomicBoolean();
+        PlayerMock target = new PlayerMock(server, "FollowTarget") {
+            @Override public Location getLocation() {
+                if (checking.get() && scheduler.owner != this) violations.add("location");
+                return super.getLocation();
+            }
+        };
+        PlayerMock follower = new PlayerMock(server, "FollowingStaff") {
+            @Override public java.util.concurrent.CompletableFuture<Boolean> teleportAsync(Location location) {
+                return java.util.concurrent.CompletableFuture.completedFuture(true);
+            }
+        };
+        server.addPlayer(target); server.addPlayer(follower);
+        follower.setOp(true); plugin.getRawVanishedPlayers().add(follower.getUniqueId());
+        var command = new net.thecommandcraft.vanishpp.commands.VanishFollowCommand(plugin);
+        checking.set(true);
+        scheduler.runEntity(follower, () -> command.onCommand(follower, plugin.getCommand("vfollow"), "vfollow",
+                new String[]{target.getName()}), null);
+        assertEquals(target.getUniqueId(), plugin.spectateFollowTargets.get(follower.getUniqueId()), "follow must start");
+        assertTrue(violations.isEmpty(), "follow must capture target location on its owner before teleporting the follower");
+    }
+
+    @Test
     void gameplayRuleReadsUsePreparedSnapshotsWithoutStorageQueries() throws Exception {
         SqlStorage storage = mock(SqlStorage.class);
         field(plugin, "storageProvider", storage);
@@ -496,14 +541,18 @@ class HardeningTest {
 
     private static class ControlledScheduler implements VanishScheduler {
         String context = "entity";
+        Entity owner;
         final List<Runnable> async = new ArrayList<>(), later = new ArrayList<>(), timers = new ArrayList<>();
         final List<Long> periods = new ArrayList<>();
         void run(String owner, Runnable task) { String old = context; context = owner; try { task.run(); } finally { context = old; } }
         public void runGlobal(Runnable task) { run("global", task); }
         public void runLaterGlobal(Runnable task, long ticks) { later.add(task); }
         public void runTimerGlobal(Runnable task, long delay, long period) { timers.add(task); periods.add(period); }
-        public void runEntity(Entity entity, Runnable task, Runnable retired) { run("entity", task); }
-        public void runEntityNow(Entity entity, Runnable task) { run("entity", task); }
+        public void runEntity(Entity entity, Runnable task, Runnable retired) {
+            Entity previous = owner; owner = entity;
+            try { run("entity", task); } finally { owner = previous; }
+        }
+        public void runEntityNow(Entity entity, Runnable task) { runEntity(entity, task, null); }
         public void runAsync(Runnable task) { async.add(task); }
         public void cancelAllTasks() { later.clear(); timers.clear(); async.clear(); }
         void drainAsync() { while (!async.isEmpty()) run("async", async.removeFirst()); }
