@@ -990,6 +990,7 @@ class StateDurabilityTest {
         Set<String> copied = new HashSet<>();
         AtomicBoolean admitted = new AtomicBoolean();
         try (var providers = mockConstruction(SqlStorage.class, (target, context) -> {
+            doAnswer(call -> { ((Runnable) call.getArgument(0)).run(); return null; }).when(target).migrateAtomically(any());
             doAnswer(call -> { copied.add(call.getArgument(1)); return null; }).when(target).addAcknowledgement(any(), anyString());
             doAnswer(call -> {
                 if (admitted.compareAndSet(false, true)) plugin.setWarningIgnored(player, true);

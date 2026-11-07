@@ -20,6 +20,9 @@ public class YamlStorage implements StorageProvider {
     // Separate file for history so data.yml stays small
     private File historyFile;
     private FileConfiguration historyConfig;
+    private File migrationFile;
+    private boolean migrating;
+    private record Checkpoint(FileConfiguration data, FileConfiguration history) {}
 
     public YamlStorage(Vanishpp plugin) {
         this.plugin = plugin;
@@ -44,6 +47,13 @@ public class YamlStorage implements StorageProvider {
             catch (IOException e) { plugin.getLogger().severe("Could not create history.yml!"); }
         }
         this.historyConfig = YamlConfiguration.loadConfiguration(this.historyFile);
+        this.migrationFile = new File(plugin.getDataFolder(), "migration.yml");
+        if (migrationFile.exists()) {
+            Checkpoint checkpoint = readCheckpoint();
+            this.config = checkpoint.data();
+            this.historyConfig = checkpoint.history();
+            installCommittedCheckpoint(checkpoint);
+        }
     }
 
     @Override
@@ -53,11 +63,77 @@ public class YamlStorage implements StorageProvider {
     }
 
     private synchronized void save() {
+        if (migrating) return;
+        finishCheckpointBeforeWrite();
         saveFile(config, file);
     }
 
     private synchronized void saveHistory() {
+        if (migrating) return;
+        finishCheckpointBeforeWrite();
         saveFile(historyConfig, historyFile);
+    }
+
+    /** A full snapshot is durable before either legacy file is replaced. */
+    public synchronized void migrateAtomically(Runnable copy) {
+        if (migrating) { copy.run(); return; }
+        finishCheckpointBeforeWrite();
+        FileConfiguration previousData = config, previousHistory = historyConfig;
+        config = parseYaml(previousData.saveToString());
+        historyConfig = parseYaml(previousHistory.saveToString());
+        migrating = true;
+        try {
+            copy.run();
+            YamlConfiguration journal = new YamlConfiguration();
+            journal.set("version", 1);
+            journal.set("data", config.saveToString());
+            journal.set("history", historyConfig.saveToString());
+            saveFile(journal, migrationFile);
+        } catch (RuntimeException | Error failure) {
+            config = previousData;
+            historyConfig = previousHistory;
+            throw failure;
+        } finally { migrating = false; }
+        // The checkpoint is now the complete authoritative copy, even if installation is interrupted.
+        installCommittedCheckpoint(new Checkpoint(config, historyConfig));
+    }
+
+    private YamlConfiguration parseYaml(String serialized) {
+        YamlConfiguration parsed = new YamlConfiguration();
+        try { parsed.loadFromString(serialized); }
+        catch (org.bukkit.configuration.InvalidConfigurationException e) {
+            throw new IllegalStateException("Invalid migration checkpoint", e);
+        }
+        return parsed;
+    }
+
+    private Checkpoint readCheckpoint() {
+        YamlConfiguration journal = new YamlConfiguration();
+        try { journal.load(migrationFile); }
+        catch (IOException | org.bukkit.configuration.InvalidConfigurationException e) {
+            throw new IllegalStateException("Could not read migration checkpoint", e);
+        }
+        if (journal.getInt("version") != 1 || !journal.isString("data") || !journal.isString("history"))
+            throw new IllegalStateException("Incomplete migration checkpoint");
+        return new Checkpoint(parseYaml(journal.getString("data")), parseYaml(journal.getString("history")));
+    }
+
+    private void finishCheckpointBeforeWrite() {
+        if (migrationFile != null && migrationFile.exists()) finishCheckpoint(readCheckpoint());
+    }
+
+    private void installCommittedCheckpoint(Checkpoint checkpoint) {
+        try { finishCheckpoint(checkpoint); }
+        catch (RuntimeException e) {
+            plugin.getLogger().warning("Complete migration checkpoint retained for replay: " + e.getMessage());
+        }
+    }
+
+    private void finishCheckpoint(Checkpoint checkpoint) {
+        saveFile(checkpoint.history(), historyFile);
+        saveFile(checkpoint.data(), file);
+        try { java.nio.file.Files.deleteIfExists(migrationFile.toPath()); }
+        catch (IOException e) { throw new IllegalStateException("Could not retire migration checkpoint", e); }
     }
 
     private void saveFile(FileConfiguration content, File target) {

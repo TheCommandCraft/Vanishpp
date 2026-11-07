@@ -673,19 +673,33 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void submitStorageWork(Runnable work) { if (!stopping) stateWrites.submit(work); }
 
     private void migrateIfNeeded(StorageProvider target, String targetType) {
-        if (!target.getAllKnownPlayers().isEmpty()) return; // target already has data, nothing to migrate
+        if (!target.getAllKnownPlayers().isEmpty()) return;
+        Runnable copy = () -> migrateEmptyTarget(target, targetType);
+        if (target instanceof SqlStorage sql) sql.migrateAtomically(copy);
+        else if (target instanceof YamlStorage yaml) yaml.migrateAtomically(copy);
+        else copy.run();
+    }
 
-        StorageProvider source = storageProvider == target ? null : storageProvider;
-        boolean sourceOwned = false;
-        if (source == null && !targetType.equals("YAML")) {
+    private void migrateEmptyTarget(StorageProvider target, String targetType) {
+        if (!target.getAllKnownPlayers().isEmpty()) return;
+        StorageProvider previous = storageProvider == target ? null : storageProvider;
+        boolean owned = false;
+        if (previous == null && !targetType.equals("YAML")) {
             YamlStorage yaml = new YamlStorage(this);
             yaml.init();
-            source = yaml;
-            sourceOwned = true;
+            previous = yaml;
+            owned = true;
         }
+        if (previous == null) return;
+        StorageProvider source = previous;
+        try {
+            Runnable copy = () -> copyStoredData(source, target);
+            if (source instanceof SqlStorage sql) sql.readForMigration(copy);
+            else copy.run();
+        } finally { if (owned) source.shutdown(); }
+    }
 
-        if (source == null) return;
-
+    private void copyStoredData(StorageProvider source, StorageProvider target) {
         getLogger().info("Migrating storage data from " + source.getClass().getSimpleName() + " → " + target.getClass().getSimpleName() + "...");
         int count = 0;
         for (UUID uuid : source.getAllKnownPlayers()) {
@@ -708,7 +722,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
         source.copyHistoryTo(target);
         getLogger().info("Storage migration complete: " + count + " player(s) migrated.");
-        if (sourceOwned) source.shutdown();
     }
 
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {

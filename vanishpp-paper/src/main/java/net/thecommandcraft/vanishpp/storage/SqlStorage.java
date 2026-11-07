@@ -79,7 +79,7 @@ public class SqlStorage implements StorageProvider {
             this.dataSource = new HikariDataSource(config);
         }
 
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             try (Statement st = conn.createStatement()) {
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_vanished (uuid VARCHAR(36) PRIMARY KEY)");
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_rules (uuid VARCHAR(36), rule_key VARCHAR(64), rule_value TEXT, PRIMARY KEY(uuid, rule_key))");
@@ -98,8 +98,8 @@ public class SqlStorage implements StorageProvider {
                     }
                 }
             }
-            runSchemaMigrations(conn);
-            checkPluginVersionStamp(conn);
+            runSchemaMigrations(conn.connection);
+            checkPluginVersionStamp(conn.connection);
         }
         initialized = true;
     }
@@ -108,6 +108,73 @@ public class SqlStorage implements StorageProvider {
         DataSource source = dataSource;
         if (closed || source == null) throw new SQLException("SQL storage is unavailable");
         return source.getConnection();
+    }
+
+    private static final class Migration {
+        final Connection connection;
+        boolean rollbackOnly;
+        Migration(Connection connection) { this.connection = connection; }
+    }
+
+    /** A borrowed migration connection cannot be closed or committed by an individual setter. */
+    private static final class SqlConnection implements AutoCloseable {
+        final Connection connection;
+        final Migration migration;
+        SqlConnection(Connection connection, Migration migration) { this.connection = connection; this.migration = migration; }
+        PreparedStatement prepareStatement(String sql) throws SQLException { return connection.prepareStatement(sql); }
+        PreparedStatement prepareStatement(String sql, int type, int concurrency) throws SQLException {
+            return connection.prepareStatement(sql, type, concurrency);
+        }
+        Statement createStatement() throws SQLException { return connection.createStatement(); }
+        DatabaseMetaData getMetaData() throws SQLException { return connection.getMetaData(); }
+        void setAutoCommit(boolean enabled) throws SQLException { if (migration == null) connection.setAutoCommit(enabled); }
+        void commit() throws SQLException { if (migration == null) connection.commit(); }
+        void rollback() throws SQLException {
+            if (migration == null) connection.rollback();
+            else migration.rollbackOnly = true;
+        }
+        @Override public void close() throws SQLException { if (migration == null) connection.close(); }
+    }
+
+    private final ThreadLocal<Migration> migration = new ThreadLocal<>();
+
+    private SqlConnection borrowConnection() throws SQLException {
+        Migration current = migration.get();
+        return new SqlConnection(current == null ? connection() : current.connection, current);
+    }
+
+    private void failMigration(SQLException failure) {
+        if (migration.get() != null) throw new IllegalStateException("Storage migration failed", failure);
+    }
+
+    public void migrateAtomically(Runnable copy) {
+        ensureInitialized();
+        if (writeSuspended) throw new IllegalStateException("Cannot migrate while SQL writes are suspended");
+        migrationTransaction(copy);
+    }
+
+    /** Gives all source reads one consistent snapshot and propagates unavailable categories. */
+    public void readForMigration(Runnable copy) {
+        ensureInitialized();
+        migrationTransaction(copy);
+    }
+
+    private void migrationTransaction(Runnable copy) {
+        if (migration.get() != null) { copy.run(); return; }
+        try (Connection connection = connection()) {
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            connection.setAutoCommit(false);
+            Migration transaction = new Migration(connection);
+            migration.set(transaction);
+            try {
+                copy.run();
+                if (transaction.rollbackOnly) throw new IllegalStateException("Migration was rolled back");
+                connection.commit();
+            } catch (RuntimeException | Error failure) {
+                try { connection.rollback(); } catch (SQLException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
+                throw failure;
+            } finally { migration.remove(); }
+        } catch (SQLException failure) { throw new IllegalStateException("Could not commit storage migration", failure); }
     }
 
     private void ensureInitialized() {
@@ -210,16 +277,18 @@ public class SqlStorage implements StorageProvider {
         Map<String, Long> summary = new LinkedHashMap<>();
         String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels",
                            "vpp_rule_presets", "vpp_history", "vpp_stats"};
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             for (String table : tables) {
                 try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM " + table);
                      ResultSet rs = ps.executeQuery()) {
                     summary.put(table, rs.next() ? rs.getLong(1) : 0L);
                 } catch (SQLException e) {
+                    failMigration(e);
                     summary.put(table, -1L);
                 }
             }
         } catch (SQLException e) {
+            failMigration(e);
             handleDatabaseError(e);
         }
         return summary;
@@ -229,7 +298,7 @@ public class SqlStorage implements StorageProvider {
     public void resetDatabase() {
         String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements",
                            "vpp_rule_presets", "vpp_preferences", "vpp_history", "vpp_stats"};
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              Statement st = conn.createStatement()) {
             for (String table : tables) {
                 st.execute("DELETE FROM " + table);
@@ -240,6 +309,7 @@ public class SqlStorage implements StorageProvider {
                 up.executeUpdate();
             }
         } catch (SQLException e) {
+            failMigration(e);
             handleDatabaseError(e);
             return;
         }
@@ -340,6 +410,7 @@ public class SqlStorage implements StorageProvider {
                 try {
                     st.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
                 } catch (SQLException e) {
+                    failMigration(e);
                     if (e.getMessage().contains("Duplicate column") || e.getMessage().contains("already exists")) {
                         plugin.getLogger().fine("Column " + table + "." + column + " already exists, skipping.");
                     } else {
@@ -348,6 +419,7 @@ public class SqlStorage implements StorageProvider {
                 }
             }
         } catch (SQLException e) {
+            failMigration(e);
             plugin.getLogger().warning("Error adding column " + table + "." + column + ": " + e.getMessage());
         }
     }
@@ -381,13 +453,14 @@ public class SqlStorage implements StorageProvider {
     @Override
     public boolean isVanished(UUID uuid) {
         ensureInitialized();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM vpp_vanished WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }
         } catch (SQLException e) {
+            failMigration(e);
             handleDatabaseError(e);
             throw new IllegalStateException("Could not read vanish state", e);
         }
@@ -403,11 +476,12 @@ public class SqlStorage implements StorageProvider {
             query = "INSERT INTO vpp_vanished (uuid) VALUES (?) ON CONFLICT (uuid) DO NOTHING";
         }
 
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, uuid.toString());
             ps.executeUpdate();
         } catch (SQLException e) {
+            failMigration(e);
             handleDatabaseError(e);
             throw new IllegalStateException("Could not persist vanish state", e);
         }
@@ -417,7 +491,7 @@ public class SqlStorage implements StorageProvider {
     public Set<UUID> getVanishedPlayers() {
         ensureInitialized();
         Set<UUID> players = new HashSet<>();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn.prepareStatement("SELECT uuid FROM vpp_vanished");
                 ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
@@ -428,6 +502,7 @@ public class SqlStorage implements StorageProvider {
                 }
             }
         } catch (SQLException e) {
+            failMigration(e);
             handleDatabaseError(e);
             throw new IllegalStateException("Could not read vanished players", e);
         }
@@ -437,7 +512,7 @@ public class SqlStorage implements StorageProvider {
     @Override
     public boolean getRule(UUID uuid, String rule, boolean defaultValue) {
         ensureInitialized();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn
                         .prepareStatement("SELECT rule_value FROM vpp_rules WHERE uuid = ? AND rule_key = ?")) {
             ps.setString(1, uuid.toString());
@@ -448,6 +523,7 @@ public class SqlStorage implements StorageProvider {
                 }
             }
         } catch (SQLException e) {
+            failMigration(e);
             handleDatabaseError(e);
         }
         return defaultValue;
@@ -457,17 +533,19 @@ public class SqlStorage implements StorageProvider {
     public void setRule(UUID uuid, String rule, Object value) {
         ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             conn.setAutoCommit(false);
             try {
-                if (!rule.startsWith(EXPIRY_PREFIX)) writeRule(conn, uuid, EXPIRY_PREFIX + rule, null);
-                writeRule(conn, uuid, rule, value);
+                if (!rule.startsWith(EXPIRY_PREFIX)) writeRule(conn.connection, uuid, EXPIRY_PREFIX + rule, null);
+                writeRule(conn.connection, uuid, rule, value);
                 conn.commit();
             } catch (SQLException e) {
+                failMigration(e);
                 conn.rollback();
                 throw e;
             }
         } catch (SQLException e) {
+            failMigration(e);
             throw new IllegalStateException("Could not save rule", e);
         }
     }
@@ -476,14 +554,16 @@ public class SqlStorage implements StorageProvider {
     public void setTemporaryRule(UUID uuid, String rule, boolean value, String token) {
         ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             conn.setAutoCommit(false);
             try {
-                writeRule(conn, uuid, EXPIRY_PREFIX + rule, token);
-                writeRule(conn, uuid, rule, value);
+                writeRule(conn.connection, uuid, EXPIRY_PREFIX + rule, token);
+                writeRule(conn.connection, uuid, rule, value);
                 conn.commit();
-            } catch (SQLException e) { conn.rollback(); throw e; }
-        } catch (SQLException e) { throw new IllegalStateException("Could not save temporary rule", e); }
+            } catch (SQLException e) {
+                failMigration(e); conn.rollback(); throw e; }
+        } catch (SQLException e) {
+            failMigration(e); throw new IllegalStateException("Could not save temporary rule", e); }
     }
 
     private void writeRule(Connection conn, UUID uuid, String rule, Object value) throws SQLException {
@@ -503,7 +583,7 @@ public class SqlStorage implements StorageProvider {
     public boolean expireRule(UUID uuid, String rule, String token) {
         ensureInitialized();
         if (writeSuspended) return false;
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement ps = conn.prepareStatement(
                     "SELECT rule_value FROM vpp_rules WHERE uuid = ? AND rule_key = ? FOR UPDATE")) {
@@ -512,16 +592,18 @@ public class SqlStorage implements StorageProvider {
                 boolean matches;
                 try (ResultSet rs = ps.executeQuery()) { matches = rs.next() && token.equals(rs.getString(1)); }
                 if (matches) {
-                    writeRule(conn, uuid, rule, Boolean.parseBoolean(token.split(":", 3)[1]));
-                    writeRule(conn, uuid, EXPIRY_PREFIX + rule, null);
+                    writeRule(conn.connection, uuid, rule, Boolean.parseBoolean(token.split(":", 3)[1]));
+                    writeRule(conn.connection, uuid, EXPIRY_PREFIX + rule, null);
                 }
                 conn.commit();
                 return matches;
             } catch (SQLException e) {
+                failMigration(e);
                 conn.rollback();
                 throw e;
             }
         } catch (SQLException e) {
+            failMigration(e);
             throw new IllegalStateException("Could not expire rule", e);
         }
     }
@@ -536,7 +618,7 @@ public class SqlStorage implements StorageProvider {
     public Map<String, Object> getRecoveryRules(UUID uuid) {
         ensureInitialized();
         Map<String, Object> rules = new HashMap<>();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn
                         .prepareStatement("SELECT rule_key, rule_value FROM vpp_rules WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
@@ -551,6 +633,7 @@ public class SqlStorage implements StorageProvider {
                 }
             }
         } catch (SQLException e) {
+            failMigration(e);
             throw new IllegalStateException("Could not read recovery rules", e);
         }
         return rules;
@@ -559,7 +642,7 @@ public class SqlStorage implements StorageProvider {
     @Override
     public boolean hasAcknowledged(UUID uuid, String notificationId) {
         ensureInitialized();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT 1 FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
             ps.setString(1, uuid.toString());
@@ -568,6 +651,7 @@ public class SqlStorage implements StorageProvider {
                 return rs.next();
             }
         } catch (SQLException e) {
+            failMigration(e);
             plugin.getLogger().severe("Database error: " + e.getMessage());
             return false;
         }
@@ -580,12 +664,13 @@ public class SqlStorage implements StorageProvider {
         String query = type.equals("postgresql")
                 ? "INSERT INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?) ON CONFLICT (uuid, notification_id) DO NOTHING"
                 : "INSERT IGNORE INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?)";
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, uuid.toString());
             ps.setString(2, notificationId);
             ps.executeUpdate();
         } catch (SQLException e) {
+            failMigration(e);
             plugin.getLogger().severe("Database error: " + e.getMessage());
         }
     }
@@ -593,7 +678,7 @@ public class SqlStorage implements StorageProvider {
     @Override
     public int getVanishLevel(UUID uuid) {
         ensureInitialized();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn.prepareStatement("SELECT level FROM vpp_levels WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
@@ -601,6 +686,7 @@ public class SqlStorage implements StorageProvider {
                     return rs.getInt("level");
             }
         } catch (SQLException e) {
+            failMigration(e);
             plugin.getLogger().severe("Database error: " + e.getMessage());
         }
         return 1;
@@ -615,12 +701,13 @@ public class SqlStorage implements StorageProvider {
             query = "INSERT INTO vpp_levels (uuid, level) VALUES (?, ?) ON CONFLICT (uuid) DO UPDATE SET level = EXCLUDED.level";
         }
 
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
                 PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, uuid.toString());
             ps.setInt(2, level);
             ps.executeUpdate();
         } catch (SQLException e) {
+            failMigration(e);
             plugin.getLogger().severe("Database error: " + e.getMessage());
         }
     }
@@ -637,7 +724,7 @@ public class SqlStorage implements StorageProvider {
                 ? "INSERT INTO vpp_rule_presets (uuid, preset_name, rule_key, rule_value) VALUES (?,?,?,?)"
                   + " ON CONFLICT (uuid, preset_name, rule_key) DO UPDATE SET rule_value = EXCLUDED.rule_value"
                 : "REPLACE INTO vpp_rule_presets (uuid, preset_name, rule_key, rule_value) VALUES (?,?,?,?)";
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             try (PreparedStatement d = conn.prepareStatement(del)) {
                 d.setString(1, uuid.toString()); d.setString(2, presetName); d.executeUpdate();
             }
@@ -649,13 +736,14 @@ public class SqlStorage implements StorageProvider {
                 }
                 i.executeBatch();
             }
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
     }
 
     @Override
     public Map<String, Boolean> loadRulePreset(UUID uuid, String presetName) {
         ensureInitialized();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT rule_key, rule_value FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?")) {
             ps.setString(1, uuid.toString()); ps.setString(2, presetName);
@@ -665,21 +753,23 @@ public class SqlStorage implements StorageProvider {
                     result.put(rs.getString("rule_key"), Boolean.parseBoolean(rs.getString("rule_value")));
                 return result.isEmpty() ? null : result;
             }
-        } catch (SQLException e) { handleDatabaseError(e); return null; }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); return null; }
     }
 
     @Override
     public Set<String> listRulePresets(UUID uuid) {
         ensureInitialized();
         Set<String> names = new LinkedHashSet<>();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT DISTINCT preset_name FROM vpp_rule_presets WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) names.add(rs.getString("preset_name"));
             }
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
         return names;
     }
 
@@ -687,12 +777,13 @@ public class SqlStorage implements StorageProvider {
     public void deleteRulePreset(UUID uuid, String presetName) {
         ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "DELETE FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?")) {
             ps.setString(1, uuid.toString()); ps.setString(2, presetName);
             ps.executeUpdate();
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
     }
 
     // ── Preferences ───────────────────────────────────────────────────────────
@@ -710,14 +801,15 @@ public class SqlStorage implements StorageProvider {
     }
 
     private String getPref(UUID uuid, String key, String def) {
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT pref_value FROM vpp_preferences WHERE uuid = ? AND pref_key = ?")) {
             ps.setString(1, uuid.toString()); ps.setString(2, key);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) return rs.getString("pref_value");
             }
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
         return def;
     }
 
@@ -726,11 +818,12 @@ public class SqlStorage implements StorageProvider {
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?) ON CONFLICT (uuid,pref_key) DO UPDATE SET pref_value=EXCLUDED.pref_value"
                 : "REPLACE INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?)";
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, uuid.toString()); ps.setString(2, key); ps.setString(3, value);
             ps.executeUpdate();
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
     }
 
     // ── Vanish History ────────────────────────────────────────────────────────
@@ -741,7 +834,7 @@ public class SqlStorage implements StorageProvider {
         if (writeSuspended) return;
         String q = "INSERT INTO vpp_history (uuid,player_name,action,timestamp,server,reason,duration_ms)"
                 + " VALUES (?,?,?,?,?,?,?)";
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, entry.getPlayerUuid().toString());
             ps.setString(2, entry.getPlayerName());
@@ -751,7 +844,8 @@ public class SqlStorage implements StorageProvider {
             ps.setString(6, entry.getReason() != null ? entry.getReason() : "");
             ps.setLong(7, entry.getDurationMs());
             ps.executeUpdate();
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
     }
 
     @Override
@@ -771,7 +865,7 @@ public class SqlStorage implements StorageProvider {
     @Override
     public void copyHistoryTo(StorageProvider target) {
         ensureInitialized();
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement ps = conn.prepareStatement("SELECT * FROM vpp_history ORDER BY timestamp DESC, id DESC",
                     ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) {
@@ -783,7 +877,8 @@ public class SqlStorage implements StorageProvider {
                 }
             }
             conn.commit();
-        } catch (SQLException e) { throw new IllegalStateException("Could not migrate history snapshot", e); }
+        } catch (SQLException e) {
+            failMigration(e); throw new IllegalStateException("Could not migrate history snapshot", e); }
     }
 
     private VanishHistoryEntry readHistoryEntry(ResultSet rs) throws SQLException {
@@ -795,7 +890,7 @@ public class SqlStorage implements StorageProvider {
 
     private List<VanishHistoryEntry> queryHistory(String query, String uuidFilter, int limit, int offset) {
         List<VanishHistoryEntry> list = new ArrayList<>();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
             int idx = 1;
             if (uuidFilter != null) ps.setString(idx++, uuidFilter);
@@ -806,7 +901,8 @@ public class SqlStorage implements StorageProvider {
                     list.add(readHistoryEntry(rs));
                 }
             }
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
         return list;
     }
 
@@ -815,12 +911,13 @@ public class SqlStorage implements StorageProvider {
         ensureInitialized();
         if (retentionDays <= 0) return 0;
         long cutoff = java.time.Instant.now().minusSeconds((long) retentionDays * 86400).toEpochMilli();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "DELETE FROM vpp_history WHERE timestamp < ?")) {
             ps.setLong(1, cutoff);
             return ps.executeUpdate();
-        } catch (SQLException e) { handleDatabaseError(e); return 0; }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); return 0; }
     }
 
     // ── Vanish Statistics ─────────────────────────────────────────────────────
@@ -828,7 +925,7 @@ public class SqlStorage implements StorageProvider {
     @Override
     public VanishStats getStats(UUID uuid) {
         ensureInitialized();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT total_ms, vanish_count, longest_ms FROM vpp_stats WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
@@ -837,7 +934,8 @@ public class SqlStorage implements StorageProvider {
                     return new VanishStats(rs.getLong("total_ms"),
                             rs.getInt("vanish_count"), rs.getLong("longest_ms"));
             }
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
         return VanishStats.empty();
     }
 
@@ -855,13 +953,14 @@ public class SqlStorage implements StorageProvider {
                   + " ON DUPLICATE KEY UPDATE total_ms=total_ms+VALUES(total_ms),"
                   + " vanish_count=vanish_count+1,"
                   + " longest_ms=GREATEST(longest_ms,VALUES(longest_ms))";
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, uuid.toString());
             ps.setLong(2, durationMs);
             ps.setLong(3, durationMs);
             ps.executeUpdate();
-        } catch (SQLException e) { throw new IllegalStateException("Could not record final session for " + uuid, e); }
+        } catch (SQLException e) {
+            failMigration(e); throw new IllegalStateException("Could not record final session for " + uuid, e); }
     }
 
     @Override
@@ -875,14 +974,15 @@ public class SqlStorage implements StorageProvider {
                 : "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,?,?)"
                   + " ON DUPLICATE KEY UPDATE total_ms=VALUES(total_ms),"
                   + " vanish_count=VALUES(vanish_count), longest_ms=VALUES(longest_ms)";
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, uuid.toString());
             ps.setLong(2, stats.getTotalVanishTimeMs());
             ps.setInt(3, stats.getVanishCount());
             ps.setLong(4, stats.getLongestSessionMs());
             ps.executeUpdate();
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) {
+            failMigration(e); handleDatabaseError(e); }
     }
 
     // ── Existing methods ──────────────────────────────────────────────────────
@@ -894,7 +994,7 @@ public class SqlStorage implements StorageProvider {
         String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements",
                 "vpp_rule_presets", "vpp_preferences", "vpp_history", "vpp_stats"};
         for (String table : tables) {
-            try (Connection conn = connection();
+            try (SqlConnection conn = borrowConnection();
                  PreparedStatement ps = conn.prepareStatement("SELECT DISTINCT uuid FROM " + table);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -902,6 +1002,7 @@ public class SqlStorage implements StorageProvider {
                     catch (IllegalArgumentException ignored) {}
                 }
             } catch (SQLException e) {
+                failMigration(e);
                 throw new IllegalStateException("Could not enumerate stored players in " + table, e);
             }
         }
@@ -918,7 +1019,7 @@ public class SqlStorage implements StorageProvider {
     public Set<String> getRecoveryAcknowledgements(UUID uuid) {
         ensureInitialized();
         Set<String> ids = new HashSet<>();
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT notification_id FROM vpp_acknowledgements WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
@@ -926,6 +1027,7 @@ public class SqlStorage implements StorageProvider {
                 while (rs.next()) ids.add(rs.getString("notification_id"));
             }
         } catch (SQLException e) {
+            failMigration(e);
             throw new IllegalStateException("Could not restore acknowledgements", e);
         }
         return ids;
@@ -935,19 +1037,20 @@ public class SqlStorage implements StorageProvider {
     public void removeAcknowledgement(UUID uuid, String notificationId) {
         ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = connection();
+        try (SqlConnection conn = borrowConnection();
              PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
             ps.setString(1, uuid.toString());
             ps.setString(2, notificationId);
             ps.executeUpdate();
-        } catch (SQLException e) { throw new IllegalStateException("Could not remove acknowledgement", e); }
+        } catch (SQLException e) {
+            failMigration(e); throw new IllegalStateException("Could not remove acknowledgement", e); }
     }
 
     @Override
     public void removePlayerData(UUID uuid) {
         ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = connection()) {
+        try (SqlConnection conn = borrowConnection()) {
             conn.setAutoCommit(false);
             try {
                 for (String table : new String[]{"vpp_rules","vpp_acknowledgements","vpp_levels",
@@ -958,12 +1061,14 @@ public class SqlStorage implements StorageProvider {
                 }
                 conn.commit();
             } catch (SQLException e) {
+                failMigration(e);
                 conn.rollback();
                 plugin.getLogger().severe("Database error during removePlayerData: " + e.getMessage());
             } finally {
                 conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
+            failMigration(e);
             plugin.getLogger().severe("Database error: " + e.getMessage());
         }
     }
