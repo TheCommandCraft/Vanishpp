@@ -83,9 +83,27 @@ class HardeningTest {
         };
         server.addPlayer(player);
         server.getScheduler().cancelTasks(plugin);
+        awaitStorageWork();
+        plugin.flushStorageWork();
+        leaveStorageWorkWithAWorkerThatHasNotStarted();
         scheduler = new ControlledScheduler();
         scheduler.owner = player;
         field(plugin, "vanishScheduler", scheduler);
+    }
+
+    /** Storage work queued during startup whose pool worker has not started yet, as on a loaded runner. */
+    private void leaveStorageWorkWithAWorkerThatHasNotStarted() throws Exception {
+        VanishScheduler pool = plugin.getVanishScheduler();
+        field(plugin, "vanishScheduler", java.lang.reflect.Proxy.newProxyInstance(VanishScheduler.class.getClassLoader(),
+                new Class<?>[]{VanishScheduler.class}, (self, method, args) -> method.getName().equals("runAsync") ? null : method.invoke(pool, args)));
+        plugin.submitStorageWork(() -> {});
+        field(plugin, "vanishScheduler", pool);
+    }
+
+    private void awaitStorageWork() throws InterruptedException {
+        var completed = new java.util.concurrent.CountDownLatch(1);
+        plugin.submitStorageWork(completed::countDown);
+        assertTrue(completed.await(5, java.util.concurrent.TimeUnit.SECONDS), "storage work queued during startup must finish");
     }
 
     @AfterEach
