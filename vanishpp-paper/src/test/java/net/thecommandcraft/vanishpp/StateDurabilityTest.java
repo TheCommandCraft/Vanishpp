@@ -137,6 +137,23 @@ class StateDurabilityTest {
     }
 
     @Test
+    void proxySnapshotCannotUndoAToggleWhoseWriteIsStillQueued() throws Exception {
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        for (String name : List.of("active", "helloSent", "handshakeComplete", "proxyDetected")) {
+            var field = ProxyBridge.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(bridge, true);
+        }
+        field(plugin, "proxyBridge", bridge);
+        plugin.applyVanishEffects(player);
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_RESPONSE,
+                        "{\"session\":\"proxy-session\",\"revision\":0,\"authoritative\":true,\"vanished\":[],\"visible\":[]}"));
+        assertTrue(plugin.isVanished(player), "older proxy snapshot must not undo a locally queued vanish");
+    }
+
+    @Test
     void cancellingDelayedUnvanishNeverRemovesEquippedArmour() {
         plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.nightvision");
         ItemStack[] armour = {new ItemStack(Material.DIAMOND_BOOTS), new ItemStack(Material.DIAMOND_LEGGINGS),
