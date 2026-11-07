@@ -835,6 +835,133 @@ class StateDurabilityTest {
         assertEquals(1L, longTasks, "repeated reload must retain exactly one live long-deadline task");
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void interruptedProxyJoinNeverBecomesBootstrapState(boolean timeout) throws Exception {
+        if (timeout) {
+            plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+            ProxyBridge bridge = new ProxyBridge(plugin);
+            field(plugin, "proxyBridge", bridge);
+            bridge.init(); scheduler.runImmediate();
+            bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                    net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                            net.thecommandcraft.vanishpp.common.protocol.VppMessage.PONG, "{\"session\":\"quit-proxy\"}"));
+            plugin.holdProxyJoin(player);
+            bridge.requestJoinState(player, hidden -> plugin.completeProxyJoin(player, hidden));
+            scheduler.runDelayedPass();
+            assertFalse(player.isOnline(), "timeout must kick the provisional join");
+        } else plugin.holdProxyJoin(player);
+        new PlayerListener(plugin).onQuit(new org.bukkit.event.player.PlayerQuitEvent(player, Component.text("quit")));
+        boolean staleHidden = plugin.isVanished(player);
+        boolean staleBootstrap = plugin.getBootstrapVanishedPlayers().contains(player.getUniqueId());
+        PlayerMock newer = server.addPlayer();
+        plugin.holdProxyJoin(newer);
+        plugin.applyVanishEffects(newer);
+        new PlayerListener(plugin).onQuit(new org.bukkit.event.player.PlayerQuitEvent(newer, Component.text("quit")));
+        assertAll(
+                () -> assertFalse(staleHidden, "quit-before-reply must undo provisional vanished state"),
+                () -> assertFalse(staleBootstrap, "interrupted provisional joins must never enter proxy bootstrap"),
+                () -> assertTrue(plugin.isVanished(newer), "cleanup must preserve a real decision newer than the provisional hold"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void failedStateWriteRetriesWithoutAnotherToggleAndReleasesReconciliation(boolean desired) throws Exception {
+        StorageProvider storage = spy(plugin.getStorageProvider());
+        field(plugin, "storageProvider", storage);
+        if (!desired) { plugin.applyVanishEffects(player); scheduler.drainAsync(); }
+        doThrow(new IllegalStateException("transient write failure")).doCallRealMethod()
+                .when(storage).setVanished(player.getUniqueId(), desired);
+        if (desired) plugin.applyVanishEffects(player); else plugin.removeVanishEffects(player);
+        scheduler.drainAsync();
+        assertTrue(plugin.hasPendingStateWrite(player.getUniqueId()), "failed decision must remain pending until retried");
+        scheduler.runDelayedPass(); scheduler.drainAsync();
+        boolean persisted = storage.isVanished(player.getUniqueId());
+        boolean pending = plugin.hasPendingStateWrite(player.getUniqueId());
+        storage.setVanished(player.getUniqueId(), !desired); // A later remote decision after local persistence settles.
+        plugin.reconcileSharedState(storage, () -> true);
+        scheduler.drainAsync();
+        assertAll(
+                () -> assertEquals(desired, persisted, "transient failure must retry the latest accepted state without another toggle"),
+                () -> assertFalse(pending, "successful retry must settle its pending marker"),
+                () -> assertEquals(!desired, plugin.isVanished(player), "subsequent remote reconciliation must no longer be excluded"));
+    }
+
+    @Test
+    void yamlReloadCannotFlushAnOldSnapshotOverANewAcknowledgement() throws Exception {
+        plugin.getStorageProvider().setVanished(UUID.randomUUID(), true); // Nonempty destination: no migration copy.
+        YamlStorage old = spy((YamlStorage) plugin.getStorageProvider());
+        field(plugin, "storageProvider", old);
+        AtomicBoolean accepted = new AtomicBoolean();
+        doAnswer(call -> {
+            plugin.setWarningIgnored(player, true); // Pause between replacement publication and old close.
+            accepted.set(true);
+            return call.callRealMethod();
+        }).when(old).shutdown();
+        plugin.reloadPluginConfig(); scheduler.drainAsync();
+        // Reusing the same owner has no replacement/close boundary; exercise its normal write path instead.
+        if (plugin.getStorageProvider() == old) { plugin.setWarningIgnored(player, true); accepted.set(true); }
+        assertTrue(accepted.get(), "the concurrent/new-owner acknowledgement must actually be accepted");
+        YamlStorage reopened = new YamlStorage(plugin);
+        reopened.init();
+        assertTrue(reopened.hasAcknowledged(player.getUniqueId(), "protocol-lib-warning"),
+                "old YAML shutdown must not overwrite a newer accepted acknowledgement");
+        doNothing().when(old).shutdown();
+    }
+
+    @Test
+    void activeSqlRecoveryIsUnavailableUntilYamlMigrationAndDeadlinesFinish() throws Exception {
+        plugin.getStorageProvider().setVanished(player.getUniqueId(), true);
+        plugin.setTemporaryRule(player, "can_chat", true, false, 0);
+        scheduler.drainAsync();
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:active_recovery_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage schema = sqlStorage(database); schema.init();
+        plugin.getConfigManager().getConfig().set("storage.type", "MYSQL");
+        field(plugin, "storageProvider", null);
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        try (var pools = mockConstruction(com.zaxxer.hikari.HikariDataSource.class, (pool, context) -> {
+            if (attempts.incrementAndGet() == 1) throw new IllegalStateException("initial SQL outage");
+            when(pool.getConnection()).thenAnswer(call -> database.getConnection());
+        })) {
+            var initialize = Vanishpp.class.getDeclaredMethod("initStorage"); initialize.setAccessible(true); initialize.invoke(plugin);
+            StorageProvider active = plugin.getStorageProvider();
+            assertInstanceOf(SqlStorage.class, active, "fixture must use the actual active recovering provider");
+            assertThrows(IllegalStateException.class, () -> active.isVanished(player.getUniqueId()));
+            scheduler.run("async", scheduler.async.removeFirst()); // Initialize, but leave queued migration/restoration paused.
+            assertAll(
+                    () -> assertThrows(IllegalStateException.class, () -> active.isVanished(player.getUniqueId()),
+                            "SQL must remain unavailable before migration/restoration publishes readiness"),
+                    () -> {
+                        scheduler.drainAsync();
+                        assertTrue(active.isVanished(player.getUniqueId()), "recovery must import persisted YAML vanish before authoritative reads");
+                        scheduler.runDelayedPass(); scheduler.drainAsync();
+                        assertFalse(active.getRule(player.getUniqueId(), "can_chat", true), "migrated deadlines must execute after recovery");
+                    });
+        }
+    }
+
+    @Test
+    void acceptedTransferKeepsItsDecisionFenceBeyondTenSeconds() throws Exception {
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin); field(plugin, "proxyBridge", bridge);
+        bridge.init(); scheduler.runImmediate();
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.PONG, "{\"session\":\"long-transfer\"}"));
+        plugin.applyVanishEffects(player);
+        String payload = "{\"uuid\":\"" + player.getUniqueId() + "\",\"requestId\":\"long-1\"}";
+        bridge.onPluginMessageReceived("vanishpp:proxy", player, rawPacket(14, payload));
+        scheduler.drainAsync();
+        assertTrue(player.packets.stream().anyMatch(packet -> packet.type().name().equals("TRANSFER_READY")), "source must be ready before the stalled-switch stimulus");
+        scheduler.runDelayedPass(); // Includes every scheduled task, including the 200-tick unlock.
+        plugin.removeVanishEffects(player);
+        assertTrue(plugin.isVanished(player), "elapsed source ticks must not unlock an accepted but unfinished transfer");
+        bridge.onPluginMessageReceived("vanishpp:proxy", player, rawPacket(16, payload));
+        plugin.removeVanishEffects(player);
+        assertFalse(plugin.isVanished(player), "authenticated cancellation must still release the source fence");
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
