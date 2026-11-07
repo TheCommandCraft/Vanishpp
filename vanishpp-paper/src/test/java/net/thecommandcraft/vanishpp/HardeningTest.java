@@ -694,7 +694,7 @@ class HardeningTest {
                 () -> assertFalse(spectator || follow || plugin.spectateOrigins.containsKey(player.getUniqueId()), "vetoed spectate must not change mode, origin or follow state"),
                 () -> assertFalse(specMessages.contains(target.getName()), "vetoed spectate must not report success"),
                 () -> assertFalse(targetMessages.contains("accepted-target"), "vetoed target command must not report success"),
-                () -> assertTrue(bulkMessages.contains(zero), "bulk count must include only accepted transitions"));
+                () -> assertTrue(ChatColor.stripColor(bulkMessages).contains(zero), "bulk count must include only accepted transitions: " + bulkMessages));
     }
 
     @Test
@@ -727,8 +727,9 @@ class HardeningTest {
                 () -> assertFalse(plugin.spectateFollowTargets.containsKey(follower.getUniqueId())));
     }
 
-    @Test
-    void mobCleanupIsBoundedAndEventuallyDrainsRepeatedRequests() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void mobCleanupIsBoundedAndEventuallyDrainsRepeatedRequests(boolean stalledRegion) {
         MobAiManager manager = new MobAiManager(plugin); manager.register();
         var cleared = new java.util.concurrent.atomic.AtomicInteger();
         List<Mob> mobs = new ArrayList<>();
@@ -742,12 +743,20 @@ class HardeningTest {
             manager.onTarget(new EntityTargetEvent(mob, player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER));
         }
         state().add(player.getUniqueId());
+        scheduler.queueRegions = stalledRegion;
         for (int i = 0; i < 20; i++) manager.clearTargets(player);
         int immediate = cleared.get();
         for (int i = 0; i < 30; i++) {
             int before = cleared.get(); int regions = scheduler.regionDispatches; scheduler.fireTimers();
             assertTrue(cleared.get() - before <= 64, "mob cleanup must process at most its 64-entity tick budget");
             assertTrue(scheduler.regionDispatches - regions <= 1, "mobs in one chunk must share one scheduled region batch");
+        }
+        if (stalledRegion) {
+            assertTrue(scheduler.regions.size() <= 1, "a stalled region must retain one resumable worker instead of accumulating batches");
+            for (int i = 0; i < 30; i++) {
+                int before = cleared.get(); scheduler.drainRegionsPass();
+                assertTrue(cleared.get() - before <= 64, "a resumed region must not execute many queued tick budgets at once");
+            }
         }
         assertAll(
                 () -> assertTrue(immediate <= 64, "transition requests must not synchronously scan all 300 mobs"),
@@ -912,12 +921,18 @@ class HardeningTest {
         Entity owner;
         boolean queueOffOwner;
         int regionDispatches;
+        boolean queueRegions;
+        final List<Runnable> regions = new ArrayList<>();
         final List<Runnable> entities = new ArrayList<>();
         final List<Runnable> async = new ArrayList<>(), later = new ArrayList<>(), timers = new ArrayList<>();
         final List<Long> periods = new ArrayList<>();
         void run(String owner, Runnable task) { String old = context; context = owner; try { task.run(); } finally { context = old; } }
         public void runGlobal(Runnable task) { run("global", task); }
-        public void runRegion(World world, int x, int z, Runnable task) { regionDispatches++; runGlobal(task); }
+        public void runRegion(World world, int x, int z, Runnable task) {
+            regionDispatches++;
+            if (queueRegions) regions.add(task); else runGlobal(task);
+        }
+        void drainRegionsPass() { List<Runnable> due = List.copyOf(regions); regions.clear(); due.forEach(this::runGlobal); }
         public void runLaterGlobal(Runnable task, long ticks) { later.add(task); }
         public void runTimerGlobal(Runnable task, long delay, long period) { timers.add(task); periods.add(period); }
         public void runEntity(Entity entity, Runnable task, Runnable retired) {
