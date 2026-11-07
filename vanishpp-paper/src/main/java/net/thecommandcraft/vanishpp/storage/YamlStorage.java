@@ -17,12 +17,10 @@ public class YamlStorage implements StorageProvider {
     private File file;
     private FileConfiguration config;
 
-    // Separate file for history so data.yml stays small
+    // Existing stores keep history separate; migrated stores contain one complete data.yml snapshot.
     private File historyFile;
     private FileConfiguration historyConfig;
-    private File migrationFile;
     private boolean migrating;
-    private record Checkpoint(FileConfiguration data, FileConfiguration history) {}
 
     public YamlStorage(Vanishpp plugin) {
         this.plugin = plugin;
@@ -42,101 +40,64 @@ public class YamlStorage implements StorageProvider {
         this.config = YamlConfiguration.loadConfiguration(this.file);
 
         this.historyFile = new File(plugin.getDataFolder(), "history.yml");
-        if (!this.historyFile.exists()) {
-            try { this.historyFile.createNewFile(); }
-            catch (IOException e) { plugin.getLogger().severe("Could not create history.yml!"); }
-        }
-        this.historyConfig = YamlConfiguration.loadConfiguration(this.historyFile);
-        this.migrationFile = new File(plugin.getDataFolder(), "migration.yml");
-        if (migrationFile.exists()) {
-            Checkpoint checkpoint = readCheckpoint();
-            this.config = checkpoint.data();
-            this.historyConfig = checkpoint.history();
-            installCommittedCheckpoint(checkpoint);
+        if (config.isList("history")) {
+            this.historyConfig = config;
+        } else {
+            if (!this.historyFile.exists()) {
+                try { this.historyFile.createNewFile(); }
+                catch (IOException e) { plugin.getLogger().severe("Could not create history.yml!"); }
+            }
+            this.historyConfig = YamlConfiguration.loadConfiguration(this.historyFile);
         }
     }
 
     @Override
     public synchronized void shutdown() {
         save();
-        saveHistory();
+        if (historyConfig != config) saveHistory();
     }
 
     private synchronized void save() {
         if (migrating) return;
-        finishCheckpointBeforeWrite();
         saveFile(config, file);
     }
 
     private synchronized void saveHistory() {
         if (migrating) return;
-        finishCheckpointBeforeWrite();
-        saveFile(historyConfig, historyFile);
+        saveFile(historyConfig, historyConfig == config ? file : historyFile);
     }
 
-    /** A full snapshot is durable before either legacy file is replaced. */
+    /** Copy in memory, then publish every category with one atomic destination replacement. */
     public synchronized void migrateAtomically(Runnable copy) {
         if (migrating) { copy.run(); return; }
-        finishCheckpointBeforeWrite();
         FileConfiguration previousData = config, previousHistory = historyConfig;
         config = parseYaml(previousData.saveToString());
         historyConfig = parseYaml(previousHistory.saveToString());
         migrating = true;
         try {
             copy.run();
-            YamlConfiguration journal = new YamlConfiguration();
-            journal.set("version", 1);
-            journal.set("data", config.saveToString());
-            journal.set("history", historyConfig.saveToString());
-            saveFile(journal, migrationFile);
+            config.set("history", historyConfig.getMapList("history"));
+            saveFile(config, file, true);
+            historyConfig = config;
         } catch (RuntimeException | Error failure) {
             config = previousData;
             historyConfig = previousHistory;
             throw failure;
         } finally { migrating = false; }
-        // The checkpoint is now the complete authoritative copy, even if installation is interrupted.
-        installCommittedCheckpoint(new Checkpoint(config, historyConfig));
     }
 
     private YamlConfiguration parseYaml(String serialized) {
         YamlConfiguration parsed = new YamlConfiguration();
         try { parsed.loadFromString(serialized); }
         catch (org.bukkit.configuration.InvalidConfigurationException e) {
-            throw new IllegalStateException("Invalid migration checkpoint", e);
+            throw new IllegalStateException("Invalid migration snapshot", e);
         }
         return parsed;
     }
 
-    private Checkpoint readCheckpoint() {
-        YamlConfiguration journal = new YamlConfiguration();
-        try { journal.load(migrationFile); }
-        catch (IOException | org.bukkit.configuration.InvalidConfigurationException e) {
-            throw new IllegalStateException("Could not read migration checkpoint", e);
-        }
-        if (journal.getInt("version") != 1 || !journal.isString("data") || !journal.isString("history"))
-            throw new IllegalStateException("Incomplete migration checkpoint");
-        return new Checkpoint(parseYaml(journal.getString("data")), parseYaml(journal.getString("history")));
-    }
+    private void saveFile(FileConfiguration content, File target) { saveFile(content, target, false); }
 
-    private void finishCheckpointBeforeWrite() {
-        if (migrationFile != null && migrationFile.exists()) finishCheckpoint(readCheckpoint());
-    }
-
-    private void installCommittedCheckpoint(Checkpoint checkpoint) {
-        try { finishCheckpoint(checkpoint); }
-        catch (RuntimeException e) {
-            plugin.getLogger().warning("Complete migration checkpoint retained for replay: " + e.getMessage());
-        }
-    }
-
-    private void finishCheckpoint(Checkpoint checkpoint) {
-        saveFile(checkpoint.history(), historyFile);
-        saveFile(checkpoint.data(), file);
-        try { java.nio.file.Files.deleteIfExists(migrationFile.toPath()); }
-        catch (IOException e) { throw new IllegalStateException("Could not retire migration checkpoint", e); }
-    }
-
-    private void saveFile(FileConfiguration content, File target) {
+    private void saveFile(FileConfiguration content, File target, boolean requireAtomicMove) {
         java.nio.file.Path path = target.toPath();
         java.nio.file.Path temporary = path.resolveSibling(target.getName() + ".tmp");
         try {
@@ -145,6 +106,7 @@ public class YamlStorage implements StorageProvider {
                 java.nio.file.Files.move(temporary, path, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                if (requireAtomicMove) throw e;
                 java.nio.file.Files.move(temporary, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) { throw new IllegalStateException("Could not save " + target.getName(), e); }
