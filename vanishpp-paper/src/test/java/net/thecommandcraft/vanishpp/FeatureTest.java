@@ -36,6 +36,14 @@ class FeatureTest {
         MockBukkit.unmock();
     }
 
+    /** A real rejoin reads the player's state at pre-login before the join event fires. */
+    private void preLogin() throws InterruptedException {
+        java.util.concurrent.CountDownLatch read = new java.util.concurrent.CountDownLatch(1);
+        server.getPluginManager().callEventAsynchronously(new org.bukkit.event.player.AsyncPlayerPreLoginEvent(
+                player.getName(), java.net.InetAddress.getLoopbackAddress(), player.getUniqueId()), event -> read.countDown());
+        read.await();
+    }
+
     // -------------------------------------------------------------------------
     // Core vanish toggle
     // -------------------------------------------------------------------------
@@ -105,10 +113,11 @@ class FeatureTest {
     }
 
     @Test
-    void testSilentJoin_keepsMsgWhenNotVanished() {
+    void testSilentJoin_keepsMsgWhenNotVanished() throws InterruptedException {
         plugin.getConfigManager().hideRealJoin = true;
         // Player is NOT vanished
 
+        preLogin();
         PlayerJoinEvent joinEvent = new PlayerJoinEvent(player, Component.text("joined the game"));
         server.getPluginManager().callEvent(joinEvent);
 
@@ -340,11 +349,13 @@ class FeatureTest {
     }
 
     @Test
-    void testSilentJoin_msgPreserved_whenConfigFalse() {
+    void testSilentJoin_msgPreserved_whenConfigFalse() throws InterruptedException {
         plugin.getConfigManager().hideRealJoin = false;
         player.setOp(true);
         plugin.vanishPlayer(player, player);
+        server.getScheduler().waitAsyncTasksFinished();
 
+        preLogin();
         PlayerJoinEvent event = new PlayerJoinEvent(player, Component.text("joined the game"));
         server.getPluginManager().callEvent(event);
 

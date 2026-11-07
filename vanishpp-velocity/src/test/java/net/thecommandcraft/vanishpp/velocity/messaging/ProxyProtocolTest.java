@@ -74,6 +74,53 @@ class ProxyProtocolTest {
         states.init();
         dispatcher = new PaperChannelDispatcher(proxy);
         channel = new PaperChannelListener(plugin, states, dispatcher, config);
+        joinQuery(source);
+    }
+
+    /** A backend only asks for a joining player's state once its Vanish++ handshake has finished. */
+    private void joinQuery(ServerConnection from) {
+        JsonObject query = new JsonObject();
+        query.addProperty("joiningUuid", id.toString()); query.addProperty("requestId", "join");
+        event(from, VppMessage.STATE_QUERY, query);
+    }
+
+    @Test
+    void transferFromABackendWithoutAFinishedHandshakeIsNotHeld() throws Exception {
+        current = connection(server("plain"));
+        AtomicBoolean resumed = new AtomicBoolean();
+        var transfer = beginTransfer(resumed);
+        assertTrue(resumed.get(), "a backend that never finished the handshake must not hold the switch");
+        assertTrue(transfer.getResult().isAllowed(), "a backend that never finished the handshake must not deny the switch");
+        current = connection(source.getServer());
+        resumed.set(false);
+        transfer = beginTransfer(resumed);
+        assertTrue(resumed.get() && transfer.getResult().isAllowed(),
+                "a new connection to a restarted backend must finish the handshake again before it holds switches");
+        assertTrue(sent.stream().noneMatch(packet -> packet.type() == VppMessage.TRANSFER_PREPARE),
+                "only connected backends receive a transfer barrier request");
+    }
+
+    @Test
+    void handshakeReportedBeforeTheSwitchCompletesHoldsLaterSwitches() throws Exception {
+        ServerConnection joined = connection(server("joined"));
+        joinQuery(joined);
+        current = joined;
+        states.getTransfers().established(player);
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(resumed);
+        assertFalse(resumed.get(), "a backend that asked for the player's state before the switch completed must hold later switches");
+    }
+
+    @Test
+    void fallbackFromABackendWithoutAFinishedHandshakeIsAllowed() throws Exception {
+        RegisteredServer plain = server("plain");
+        current = connection(plain);
+        var transfer = new ServerPreConnectEvent(player, destination.getServer(), plain);
+        current = null;
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(transfer, resumed);
+        assertTrue(resumed.get());
+        assertTrue(transfer.getResult().isAllowed(), "a kick from a backend without Vanish++ must still reach the fallback server");
     }
 
     @AfterEach

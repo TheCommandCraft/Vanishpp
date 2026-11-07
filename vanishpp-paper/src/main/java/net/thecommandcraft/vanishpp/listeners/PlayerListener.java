@@ -75,17 +75,44 @@ public class PlayerListener implements Listener {
         this.rules = plugin.getRuleManager();
     }
 
+    // The newest login of each player that has not joined yet. A join goes straight through only when its attempt
+    // is still recorded with a successful read in preFetchedVanishState; a failed, expired or missing read joins
+    // hidden until a retried read answers. An attempt's read result and its retirement apply only while it is
+    // still the newest, so a replacement login never loses its state to an older one.
+    private record LoginAttempt(long startedAt) {}
+    private final Map<UUID, LoginAttempt> loginAttempts = new ConcurrentHashMap<>();
+    // Covers the configuration phase (resource packs) between pre-login and join; denied or abandoned logins expire.
+    private static final long ABANDONED_LOGIN_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
+        long now = System.nanoTime();
+        loginAttempts.forEach((player, attempt) -> {
+            if (now - attempt.startedAt() > ABANDONED_LOGIN_NANOS) loginAttempts.computeIfPresent(player, (key, newest) -> {
+                if (newest != attempt) return newest;
+                preFetchedVanishState.remove(key);
+                return null;
+            });
+        });
+        if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) return;
         UUID uuid = event.getUniqueId();
+        LoginAttempt attempt = new LoginAttempt(now);
+        loginAttempts.put(uuid, attempt);
+        JoinState read;
         try {
-            preFetchedVanishState.put(uuid, readJoinState(uuid));
-        } catch (Exception ignored) {
-            preFetchedVanishState.remove(uuid);
-            if (!plugin.isVanished(uuid)) event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                    Component.text("Vanish state is temporarily unavailable. Please reconnect shortly."));
-            // Known hidden players retain their state and retry after joining.
+            read = readJoinState(uuid);
+        } catch (Exception e) {
+            read = null;
+            plugin.getLogger().warning("Vanish state for " + event.getName()
+                    + " is unavailable; they join hidden until it can be read: " + e.getMessage());
         }
+        JoinState state = read;
+        loginAttempts.computeIfPresent(uuid, (key, newest) -> {
+            if (newest != attempt) return newest;
+            if (state != null) preFetchedVanishState.put(key, state);
+            else preFetchedVanishState.remove(key);
+            return newest;
+        });
     }
 
     private JoinState readJoinState(UUID uuid) {
@@ -99,57 +126,95 @@ public class PlayerListener implements Listener {
 
     private void retryJoinState(Player player) {
         UUID uuid = player.getUniqueId();
+        awaitJoinState(player, state -> {
+            if (state.warningIgnored()) plugin.getIgnoredWarningPlayers().add(uuid);
+            else plugin.getIgnoredWarningPlayers().remove(uuid);
+            if (state.version() == plugin.stateVersion(uuid))
+                applyJoinState(player, state);
+        });
+    }
+
+    /** Reads the player's join state off the main thread, retrying every five seconds until storage answers. */
+    private void awaitJoinState(Player player, java.util.function.Consumer<JoinState> ready) {
+        UUID uuid = player.getUniqueId();
         plugin.getVanishScheduler().runAsync(() -> {
             JoinState state;
             try { state = readJoinState(uuid); }
             catch (RuntimeException e) {
-                plugin.getLogger().warning("Keeping cached vanish state; login read will retry: " + e.getMessage());
+                plugin.getLogger().warning("Vanish state read for " + player.getName() + " will retry: " + e.getMessage());
                 plugin.getVanishScheduler().runLaterEntity(player, () -> {
-                    if (player.isOnline() && plugin.isEnabled()) retryJoinState(player);
+                    if (player.isOnline() && plugin.isEnabled()) awaitJoinState(player, ready);
                 }, 100L);
                 return;
             }
             plugin.getVanishScheduler().runEntityNow(player, () -> {
-                if (!player.isOnline()) return;
-                if (state.warningIgnored()) plugin.getIgnoredWarningPlayers().add(uuid);
-                else plugin.getIgnoredWarningPlayers().remove(uuid);
-                if (state.version() == plugin.stateVersion(uuid))
-                    applyJoinState(player, state);
+                if (player.isOnline()) ready.accept(state);
             });
         });
     }
 
+    private boolean autoVanishes(Player player, JoinState state) {
+        return state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");
+    }
+
     private void applyJoinState(Player player, JoinState state) {
         if (plugin.isProxyJoinPending(player.getUniqueId())) return;
-        boolean auto = state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");
-        if (auto && !state.vanished() && !plugin.isVanished(player)) plugin.applyVanishEffects(player);
+        if (autoVanishes(player, state) && !state.vanished() && !plugin.isVanished(player)) plugin.applyVanishEffects(player);
         else plugin.reconcileVanishState(player, state.vanished());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (plugin.getProxyBridge() != null && plugin.getProxyBridge().isConfigured()) {
-            Component originalMessage = event.joinMessage();
-            event.joinMessage(null);
-            plugin.resumeVisibility(player);
-            plugin.holdProxyJoin(player);
-            plugin.getProxyBridge().requestJoinState(player, hidden -> plugin.getVanishScheduler().runEntity(player, () -> {
-                if (!player.isOnline() || !plugin.isEnabled()) return;
-                plugin.completeProxyJoin(player, hidden);
-                UUID uuid = player.getUniqueId();
-                JoinState prefetched = preFetchedVanishState.get(uuid);
-                if (prefetched != null) preFetchedVanishState.put(uuid, new JoinState(plugin.isVanished(player),
-                        prefetched.autoVanish(), prefetched.warningIgnored(), plugin.stateVersion(uuid)));
-                finishJoin(new PlayerJoinEvent(player, (Component) null));
-                if (originalMessage != null && (!plugin.isVanished(player) || !config.hideRealJoin)) {
-                    for (Player observer : Bukkit.getOnlinePlayers()) observer.sendMessage(originalMessage);
-                    Bukkit.getConsoleSender().sendMessage(originalMessage);
-                }
-            }, () -> plugin.abortProxyJoin(player.getUniqueId())));
+        UUID uuid = player.getUniqueId();
+        boolean[] confirmed = new boolean[1];
+        loginAttempts.compute(uuid, (key, newest) -> {
+            confirmed[0] = newest != null && preFetchedVanishState.containsKey(key);
+            return null;
+        });
+        boolean unread = !confirmed[0];
+        boolean proxy = plugin.getProxyBridge() != null && plugin.getProxyBridge().isConfigured();
+        if (!proxy && !unread) {
+            finishJoin(event);
             return;
         }
-        finishJoin(event);
+        Component originalMessage = event.joinMessage();
+        event.joinMessage(null);
+        plugin.resumeVisibility(player);
+        plugin.holdProxyJoin(player);
+        Runnable abort = () -> plugin.abortProxyJoin(uuid);
+        if (!proxy) {
+            awaitJoinState(player, state -> plugin.getVanishScheduler().runEntity(player,
+                    () -> releaseJoin(player, state.vanished(), false, state, originalMessage), abort));
+            return;
+        }
+        plugin.getProxyBridge().requestJoinState(player, hidden -> {
+            // Recorded with the reply itself, so a snapshot handled before the release cannot lift the hold.
+            plugin.answerProxyJoin(uuid, hidden);
+            plugin.getVanishScheduler().runEntity(player, () -> {
+                if (!unread) releaseJoin(player, hidden, true, preFetchedVanishState.get(uuid), originalMessage);
+                else awaitJoinState(player, state -> plugin.getVanishScheduler().runEntity(player,
+                        () -> releaseJoin(player, hidden, true, state, originalMessage), abort));
+            }, abort);
+        });
+    }
+
+    /** Lifts a join hold once both the proxy (if any) and storage have answered, then finishes the join. */
+    private void releaseJoin(Player player, boolean hidden, boolean persist, JoinState read, Component originalMessage) {
+        if (!player.isOnline() || !plugin.isEnabled()) return;
+        UUID uuid = player.getUniqueId();
+        // Auto-vanish supersedes a still-current hold before it lifts, so the player is never shown in between.
+        // A choice made during the hold has already superseded it and outranks the preference.
+        if (Boolean.FALSE.equals(plugin.heldJoinDecision(uuid, hidden)) && read != null && autoVanishes(player, read))
+            plugin.applyVanishEffects(player);
+        plugin.completeProxyJoin(player, hidden, persist);
+        if (read != null) preFetchedVanishState.put(uuid, new JoinState(plugin.isVanished(player),
+                false, read.warningIgnored(), plugin.stateVersion(uuid)));
+        finishJoin(new PlayerJoinEvent(player, (Component) null));
+        if (originalMessage != null && (!plugin.isVanished(player) || !config.hideRealJoin)) {
+            for (Player observer : Bukkit.getOnlinePlayers()) observer.sendMessage(originalMessage);
+            Bukkit.getConsoleSender().sendMessage(originalMessage);
+        }
     }
 
     private void finishJoin(PlayerJoinEvent event) {
