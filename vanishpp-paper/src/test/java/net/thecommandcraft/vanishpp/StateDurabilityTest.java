@@ -218,6 +218,33 @@ class StateDurabilityTest {
     }
 
     @Test
+    void repeatedTogglesDuringTheHoldBroadcastNoFakeJoinOrQuit() throws Exception {
+        PlayerMock observer = server.addPlayer();
+        observer.setOp(false);
+        plugin.getConfigManager().broadcastFakeJoin = true;
+        plugin.getConfigManager().broadcastFakeQuit = true;
+        plugin.getConfigManager().fakeJoinMessage = "fake-join %player%";
+        plugin.getConfigManager().fakeQuitMessage = "fake-quit %player%";
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        field(plugin, "storageProvider", storage);
+        login();
+        while (observer.nextMessage() != null) {}
+        plugin.unvanishPlayer(player, player);
+        plugin.vanishPlayer(player, player);
+        plugin.unvanishPlayer(player, player);
+        assertFalse(plugin.isVanished(player));
+        assertNull(observer.nextMessage(), "no join or quit may be announced while the real join is still withheld");
+        scheduler.drainAsync();
+        StringBuilder received = new StringBuilder();
+        for (String next; (next = observer.nextMessage()) != null; ) received.append(next).append('\n');
+        assertFalse(received.toString().contains("fake-"), "the released join must not be preceded by fake announcements: " + received);
+        assertTrue(received.toString().contains("joined"), "the withheld join announcement must be sent once the join completes: " + received);
+    }
+
+    @Test
     void proxySnapshotsDoNotLiftTheHoldWhileTheLoginReadFails() throws Exception {
         PlayerMock observer = server.addPlayer();
         observer.setOp(false);
