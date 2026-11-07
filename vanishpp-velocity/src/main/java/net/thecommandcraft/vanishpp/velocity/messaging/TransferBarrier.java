@@ -63,21 +63,17 @@ public final class TransferBarrier implements AutoCloseable {
                 .ifPresent(connection -> connectedSources.put(player.getUniqueId(), connection));
     }
 
-    public synchronized void disconnected(UUID uuid) {
+    public void disconnected(UUID uuid) {
+        synchronized (this) { joiningSources.remove(uuid); }
         connected(uuid);
-        joiningSources.remove(uuid);
     }
 
     public synchronized void begin(ServerPreConnectEvent event, Continuation continuation) {
         UUID uuid = event.getPlayer().getUniqueId();
+        // A kicked player has no current server: the source is gone, so nothing is left to wait for,
+        // and the destination reads the proxy's last accepted state.
         ServerConnection source = event.getPlayer().getCurrentServer().orElse(null);
-        ServerConnection connected = connectedSources.get(uuid);
-        if (source == null && event.getPreviousServer() != null && connected != null
-                && connected.getServer().equals(event.getPreviousServer())) {
-            event.setResult(ServerPreConnectEvent.ServerResult.denied());
-            continuation.resume(); return;
-        }
-        if (closed || !event.getResult().isAllowed() || source == null || !source.equals(connected)
+        if (closed || !event.getResult().isAllowed() || source == null || !source.equals(connectedSources.get(uuid))
                 || event.getResult().getServer().filter(source.getServer()::equals).isPresent()) {
             continuation.resume(); return;
         }
@@ -141,10 +137,17 @@ public final class TransferBarrier implements AutoCloseable {
         }
     }
 
-    public synchronized void connected(UUID uuid) {
-        connectedSources.remove(uuid); // The new connection proves its own handshake with its join query.
-        Pending transfer = pending.remove(uuid);
-        if (transfer != null) transfer.cancelTasks(); // Source detach/quit releases the Paper fence.
+    public void connected(UUID uuid) {
+        Pending stranded;
+        synchronized (this) {
+            connectedSources.remove(uuid); // The new connection proves its own handshake with its join query.
+            Pending transfer = pending.remove(uuid);
+            if (transfer == null) return;
+            if (transfer.accepted) { transfer.cancelTasks(); return; } // Source detach/quit releases the Paper fence.
+            stranded = transfer;
+        }
+        // The player left the source before it answered, so this switch can no longer happen.
+        deny(uuid, stranded);
     }
 
     public synchronized void failed(UUID uuid, RegisteredServer destination) {

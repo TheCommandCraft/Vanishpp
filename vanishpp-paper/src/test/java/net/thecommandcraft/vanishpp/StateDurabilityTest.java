@@ -46,8 +46,17 @@ class StateDurabilityTest {
         player = new RecordingPlayer(server);
         server.addPlayer(player);
         server.getScheduler().cancelTasks(plugin);
+        awaitStorageWork();
         scheduler = new ControlledScheduler();
         field(plugin, "vanishScheduler", scheduler);
+        plugin.flushStorageWork();
+    }
+
+    /** Waits for the storage work startup queued on the server's async pool, so later work runs on the test scheduler. */
+    private void awaitStorageWork() throws InterruptedException {
+        var completed = new java.util.concurrent.CountDownLatch(1);
+        plugin.submitStorageWork(completed::countDown);
+        assertTrue(completed.await(5, java.util.concurrent.TimeUnit.SECONDS), "storage work queued during startup must finish");
     }
 
     @AfterEach

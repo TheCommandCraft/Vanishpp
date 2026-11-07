@@ -353,7 +353,7 @@ class FeatureTest {
         plugin.getConfigManager().hideRealJoin = false;
         player.setOp(true);
         plugin.vanishPlayer(player, player);
-        server.getScheduler().waitAsyncTasksFinished();
+        awaitStorageWrites();
 
         preLogin();
         PlayerJoinEvent event = new PlayerJoinEvent(player, Component.text("joined the game"));
