@@ -128,6 +128,22 @@ class StateDurabilityTest {
     }
 
     @Test
+    void missingProxyJoinReplyRequiresReconnectInsteadOfReveal() throws Exception {
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        for (String name : List.of("active", "helloSent", "handshakeComplete", "proxyDetected")) {
+            var field = ProxyBridge.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(bridge, true);
+        }
+        field(plugin, "proxyBridge", bridge);
+        login();
+        scheduler.runDelayedPass();
+        assertFalse(player.isOnline(), "missing proxy state must require reconnect instead of revealing an unknown player");
+        assertFalse(plugin.getStorageProvider().isVanished(player.getUniqueId()), "provisional hide must not become persisted vanish");
+    }
+
+    @Test
     void freshEmptyProxySnapshotDoesNotErasePersistedVanish() {
         plugin.getStorageProvider().setVanished(player.getUniqueId(), true);
         plugin.handleNetworkVanishSync(player.getUniqueId(), true);
