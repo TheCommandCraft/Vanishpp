@@ -103,18 +103,8 @@ class ProxyProtocolTest {
 
     @Test
     void transferWaitsForAcceptedSourceDecisionAndRejectsLateSourceUpdates() throws Exception {
-        var listener = new VelocityPlayerListener(plugin, states, dispatcher);
-        var transfer = new ServerPreConnectEvent(player, destination.getServer());
         AtomicBoolean resumed = new AtomicBoolean();
-        Continuation continuation = stub(Continuation.class, (method, args) -> { resumed.set(true); return null; });
-        boolean found = false;
-        for (Method method : listener.getClass().getMethods()) {
-            if (method.isAnnotationPresent(Subscribe.class) && Arrays.equals(method.getParameterTypes(),
-                    new Class<?>[]{ServerPreConnectEvent.class, Continuation.class})) {
-                method.invoke(listener, transfer, continuation); found = true;
-            }
-        }
-        if (!found) resumed.set(true); // With no listener, Velocity proceeds immediately.
+        var transfer = beginTransfer(resumed);
         assertFalse(resumed.get(), "transfer must wait while the source's accepted toggle is still queued");
         var prepare = sent.stream().filter(packet -> packet.type().name().equals("TRANSFER_PREPARE")).findFirst();
         assertTrue(prepare.isPresent(), "source must receive a transfer barrier request while its carrier is attached");
@@ -129,6 +119,51 @@ class ProxyProtocolTest {
         assertFalse(states.isVanished(id), "destination may accept a newer decision");
         event(source, VppMessage.VANISH_EVENT, decision("a-session", 2, true));
         assertFalse(states.isVanished(id), "late old-server updates must not overwrite the destination's decision");
+    }
+
+    @Test
+    void unconfirmedTransferIsDeniedOnTimeout() throws Exception {
+        AtomicBoolean resumed = new AtomicBoolean();
+        var transfer = beginTransfer(resumed);
+        assertFalse(resumed.get(), "unconfirmed transfer must remain paused");
+        List.copyOf(timeouts).forEach(Runnable::run);
+        assertTrue(resumed.get(), "timeout must finish the waiting event");
+        assertFalse(transfer.getResult().isAllowed(), "timeout must deny the switch instead of revealing stale state at the destination");
+        assertTrue(sent.stream().anyMatch(packet -> packet.type().name().equals("TRANSFER_CANCEL")), "timeout must release the source hold");
+    }
+
+    @Test
+    void transferCompletionRequiresTheMatchingSourceAndRequest() throws Exception {
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(resumed);
+        assertFalse(resumed.get(), "transfer must wait for an authenticated completion");
+        JsonObject ready = decision("a-session", 1, true);
+        ready.addProperty("requestId", "wrong-request");
+        event(source, VppMessage.valueOf("TRANSFER_READY"), ready);
+        assertFalse(resumed.get(), "wrong request must not release the transfer");
+        var prepare = sent.stream().filter(packet -> packet.type().name().equals("TRANSFER_PREPARE")).findFirst().orElseThrow();
+        ready.addProperty("requestId", JsonParser.parseString(prepare.jsonPayload()).getAsJsonObject().get("requestId").getAsString());
+        event(destination, VppMessage.valueOf("TRANSFER_READY"), ready);
+        assertFalse(resumed.get(), "destination must not impersonate the source");
+        assertFalse(states.isVanished(id), "rejected completions must not mutate proxy state");
+        event(source, VppMessage.valueOf("TRANSFER_READY"), ready);
+        assertTrue(resumed.get(), "matching source completion is the positive control");
+        assertTrue(states.isVanished(id));
+    }
+
+    private ServerPreConnectEvent beginTransfer(AtomicBoolean resumed) throws Exception {
+        var listener = new VelocityPlayerListener(plugin, states, dispatcher);
+        var transfer = new ServerPreConnectEvent(player, destination.getServer());
+        Continuation continuation = stub(Continuation.class, (method, args) -> { resumed.set(true); return null; });
+        boolean found = false;
+        for (Method method : listener.getClass().getMethods()) {
+            if (method.isAnnotationPresent(Subscribe.class) && Arrays.equals(method.getParameterTypes(),
+                    new Class<?>[]{ServerPreConnectEvent.class, Continuation.class})) {
+                method.invoke(listener, transfer, continuation); found = true;
+            }
+        }
+        if (!found) resumed.set(true);
+        return transfer;
     }
 
     private JsonObject decision(String session, long sequence, boolean hidden) {
