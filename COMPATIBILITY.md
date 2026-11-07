@@ -20,3 +20,6 @@ Vanishpp is built and tested against the **1.21** API, and supports the **1.20.6
 
 ## Java Requirement
 - **Java 21** is required for this version.
+
+## Velocity Companion
+Upgrade the Paper and Velocity Vanish++ jars together. Native proxy messaging is disabled by default; enable `proxy.enabled` and restart Paper only on secured backends with the companion installed. Use Velocity modern forwarding and prevent direct client connections. Standalone servers need no proxy configuration. See the [proxy integration guide](PROXY_INTEGRATION_GUIDE.md).

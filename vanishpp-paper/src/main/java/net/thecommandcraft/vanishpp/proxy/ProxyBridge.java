@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 /**
  * Manages the connection between this Paper server and the VanishPP Velocity proxy.
  *
- * <p>On enable, sends a HELLO message via the first online player.
+ * <p>When proxy.enabled is set, sends a HELLO message via the first online player.
  * If a PONG is received within 5 seconds the server is in <em>proxy mode</em>
  * and all cross-server state operations route through the proxy.
  * If no PONG arrives within 5 seconds the server stays in standalone mode
@@ -32,6 +32,8 @@ import java.util.function.Consumer;
 public class ProxyBridge implements PluginMessageListener {
 
     private final Vanishpp plugin;
+    private volatile boolean active = false;
+    private volatile boolean helloSent = false;
     private volatile boolean proxyDetected = false;
     private volatile boolean handshakeComplete = false;
     private volatile String serverName;
@@ -62,12 +64,19 @@ public class ProxyBridge implements PluginMessageListener {
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public void init() {
+        if (active || !plugin.getConfigManager().getConfig().getBoolean("proxy.enabled", false)) return;
+        active = true;
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, VppChannel.CHANNEL);
         plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, VppChannel.CHANNEL, this);
         scheduleHello(0L);
     }
 
     public void shutdown() {
+        active = false;
+        helloSent = false;
+        proxyDetected = false;
+        handshakeComplete = false;
+        pendingPackets.clear();
         plugin.getServer().getMessenger().unregisterOutgoingPluginChannel(plugin, VppChannel.CHANNEL);
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, VppChannel.CHANNEL);
     }
@@ -76,7 +85,7 @@ public class ProxyBridge implements PluginMessageListener {
 
     private void scheduleHello(long delayTicks) {
         plugin.getVanishScheduler().runLaterGlobal(() -> {
-            if (handshakeComplete) return;
+            if (!active || handshakeComplete) return;
             Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
             if (carrier == null) {
                 // No players yet — retry
@@ -93,14 +102,15 @@ public class ProxyBridge implements PluginMessageListener {
         JsonObject payload = new JsonObject();
         payload.addProperty("serverName", name);
         payload.addProperty("pluginVersion", plugin.getDescription().getVersion());
+        helloSent = true;
         carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, VppPacket.encode(VppMessage.HELLO, payload.toString()));
     }
 
     private void scheduleHandshakeTimeout() {
         plugin.getVanishScheduler().runLaterGlobal(() -> {
-            if (!handshakeComplete) {
+            if (active && !handshakeComplete) {
                 plugin.getLogger().info("[Proxy] No VanishPP proxy detected within timeout — running in standalone mode.");
-                proxyDetected = false;
+                shutdown();
             }
         }, HANDSHAKE_TIMEOUT_TICKS);
     }
@@ -109,7 +119,7 @@ public class ProxyBridge implements PluginMessageListener {
 
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (!VppChannel.CHANNEL.equals(channel)) return;
+        if (!active || !VppChannel.CHANNEL.equals(channel)) return;
         DecodedPacket packet;
         try {
             packet = VppPacket.decode(message);
@@ -118,6 +128,7 @@ public class ProxyBridge implements PluginMessageListener {
             return;
         }
 
+        if (packet.type() != VppMessage.PONG && !handshakeComplete) return;
         JsonObject json = JsonParser.parseString(packet.jsonPayload()).getAsJsonObject();
 
         switch (packet.type()) {
@@ -132,7 +143,7 @@ public class ProxyBridge implements PluginMessageListener {
     }
 
     private void handlePong(JsonObject json) {
-        if (handshakeComplete) return;
+        if (!helloSent || handshakeComplete) return;
         handshakeComplete = true;
         proxyDetected = true;
         String proxyVersion = json.has("proxyVersion") ? json.get("proxyVersion").getAsString() : "?";
@@ -255,6 +266,7 @@ public class ProxyBridge implements PluginMessageListener {
 
     /** Sends a raw packet via the first available online player, or queues it for later. */
     public void sendPacket(byte[] data) {
+        if (!active) return;
         Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
         if (carrier != null) {
             carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data);
@@ -265,6 +277,7 @@ public class ProxyBridge implements PluginMessageListener {
 
     /** Flushes any queued packets now that a carrier player is available. Call on PlayerJoinEvent. */
     public void flushPendingPackets(Player carrier) {
+        if (!active) return;
         byte[] data;
         while ((data = pendingPackets.pollFirst()) != null) {
             carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data);
