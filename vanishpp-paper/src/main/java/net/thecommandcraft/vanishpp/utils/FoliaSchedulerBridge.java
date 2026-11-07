@@ -29,6 +29,11 @@ public class FoliaSchedulerBridge implements VanishScheduler {
     }
 
     @Override
+    public Runnable startLater(Runnable runnable, long ticks) {
+        return Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> runnable.run(), Math.max(1L, ticks))::cancel;
+    }
+
+    @Override
     public Runnable startTimer(Runnable runnable, long delay, long period) {
         return Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> runnable.run(), delay, period)::cancel;
     }

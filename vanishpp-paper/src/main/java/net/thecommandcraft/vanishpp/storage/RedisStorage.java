@@ -53,18 +53,7 @@ public class RedisStorage {
                             plugin.getLogger().fine("Redis subscribed to channel: " + channel);
                             // Reconcile missed messages only from shared SQL, never unrelated local YAML.
                             if (plugin.getStorageProvider() instanceof SqlStorage && !plugin.isProxyAuthoritative()) {
-                                try {
-                                    java.util.Map<UUID, Long> versions = plugin.stateVersionsSnapshot();
-                                    java.util.Set<UUID> hidden = plugin.getStorageProvider().getVanishedPlayers();
-                                    plugin.getVanishScheduler().runGlobal(() -> {
-                                        if (!running) return;
-                                        for (UUID uuid : hidden)
-                                            if (plugin.stateVersion(uuid) == versions.getOrDefault(uuid, 0L)) plugin.handleNetworkVanishSync(uuid, true);
-                                        for (UUID uuid : versions.keySet())
-                                            if (!hidden.contains(uuid) && plugin.stateVersion(uuid) == versions.get(uuid))
-                                                plugin.handleNetworkVanishSync(uuid, false);
-                                    });
-                                } catch (RuntimeException e) { plugin.getLogger().warning("Redis resubscribe reconciliation failed: " + e.getMessage()); }
+                                plugin.reconcileSharedState(plugin.getStorageProvider(), () -> running);
                             }
                         }
                     };

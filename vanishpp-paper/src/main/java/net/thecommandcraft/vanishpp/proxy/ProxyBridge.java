@@ -295,6 +295,7 @@ public class ProxyBridge implements PluginMessageListener {
         pendingJoins.entrySet().removeIf(entry -> entry.getValue().uuid().equals(player.getUniqueId()));
         pendingJoins.put(requestId, request);
         if (handshakeComplete) sendJoinQuery(requestId, request);
+        else if (!helloSent) scheduleHello(0L);
         plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (!pendingJoins.remove(requestId, request)) return;
             if (!plugin.isEnabled()) { plugin.abortProxyJoin(player.getUniqueId()); return; }

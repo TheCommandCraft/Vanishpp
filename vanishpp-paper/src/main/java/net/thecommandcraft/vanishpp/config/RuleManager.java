@@ -54,6 +54,8 @@ public class RuleManager {
     }
 
     public boolean getRule(UUID uuid, String rule) {
+        Boolean pending = plugin.pendingRule(uuid, rule);
+        if (pending != null) return pending;
         // 1. Check Storage Provider for Player Specific Override
         Map<String, Object> playerRules = plugin.getStorageProvider().getRules(uuid);
         if (playerRules.containsKey(rule)) {
@@ -74,14 +76,14 @@ public class RuleManager {
     }
 
     public void setRule(Player player, String rule, boolean value) {
-        plugin.getStorageProvider().setRule(player.getUniqueId(), rule, value);
+        plugin.setRule(player, rule, value);
     }
 
     public void setAllRules(Player player, boolean value) {
         for (String key : hardDefaults.keySet()) {
             if (key.equals(SHOW_NOTIFICATIONS))
                 continue;
-            plugin.getStorageProvider().setRule(player.getUniqueId(), key, value);
+            plugin.setRule(player, key, value);
         }
     }
 

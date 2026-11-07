@@ -25,6 +25,8 @@ public interface StorageProvider {
 
     Map<String, Object> getRules(UUID uuid);
 
+    default Map<String, Object> getRecoveryRules(UUID uuid) { return getRules(uuid); }
+
     // Metadata / Acknowledgements
     boolean hasAcknowledged(UUID uuid, String notificationId);
 
@@ -51,6 +53,11 @@ public interface StorageProvider {
 
     // Cleanup
     void removePlayerData(UUID uuid);
+
+    /** Copy a stable history snapshot; implementations with paged storage override this. */
+    default void copyHistoryTo(StorageProvider target) {
+        for (VanishHistoryEntry entry : getAllHistory(1, Integer.MAX_VALUE)) target.addHistoryEntry(entry);
+    }
 
     // Migration support
     /** Returns all UUIDs with any stored data (vanish state, rules, levels, or acknowledgements). */

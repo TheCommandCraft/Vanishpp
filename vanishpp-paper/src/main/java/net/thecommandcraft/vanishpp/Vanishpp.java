@@ -53,10 +53,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
             new net.thecommandcraft.vanishpp.common.state.OrderedWrites(
                     task -> getVanishScheduler().runAsync(task), e -> getLogger().log(Level.SEVERE, "State write failed", e));
     private final Map<UUID, Long> stateVersions = new ConcurrentHashMap<>();
-    private static final String SAVED_GAMEMODE = "__gamemode_restore";
-    private int expiryEpoch;
+    private final Map<UUID, Long> pendingStateWrites = new ConcurrentHashMap<>();
+    private final Object stateDecisionLock = new Object();
+    private final org.bukkit.NamespacedKey savedGamemodeKey = new org.bukkit.NamespacedKey(this, "saved_gamemode");
+    private final RuleExpiries ruleExpiries = new RuleExpiries(this);
+    private record RuleKey(UUID uuid, String rule) {}
+    private record RuleDecision(boolean value, UUID token) {}
+    private final Map<RuleKey, RuleDecision> pendingRules = new ConcurrentHashMap<>();
     private volatile boolean stopping;
-    private record ProxyJoin(boolean previouslyHidden, long version) {}
+    private record ProxyJoin(boolean previouslyHidden, long version, boolean invisible, boolean collidable) {}
     private final Map<UUID, ProxyJoin> proxyJoins = new ConcurrentHashMap<>();
     private RedisStorage redisStorage;
     private PermissionManager permissionManager;
@@ -489,7 +494,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         configManager.load();
 
         // Keep accepted writes on their original provider until migration is ready.
-        if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
         if (luckPermsHook != null) { luckPermsHook.unload(); luckPermsHook = null; }
         if (Bukkit.getPluginManager().getPlugin("LuckPerms") != null) {
             try {
@@ -497,10 +501,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 this.luckPermsHook.load();
             } catch (Throwable ignored) { this.luckPermsHook = null; }
         }
-        synchronized (stateWrites) {
-            stateWrites.drain();
+        stateWrites.submit(() -> {
+            if (stopping) return;
+            if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
             initStorage();
-        }
+            restoreRuleExpiries();
+        });
 
         // Reload scoreboard config
         java.io.File sbFile = new java.io.File(getDataFolder(), "scoreboards.yml");
@@ -508,8 +514,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
             scoreboardConfig = YamlConfiguration.loadConfiguration(sbFile);
         if (vanishScoreboard != null)
             vanishScoreboard.reload();
-
-        restoreRuleExpiries();
 
         // Refresh team prefix and resync all online vanished players
         refreshTeamPrefix();
@@ -528,44 +532,38 @@ public class Vanishpp extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         stopping = true;
-        expiryEpoch++;
-        stateWrites.close();
+        ruleExpiries.close();
+        shutdownStep("pending state writes", stateWrites::close);
         for (UUID uuid : new HashSet<>(vanishStartTimes.keySet())) {
-            Long start = vanishStartTimes.remove(uuid);
+            Long start = vanishStartTimes.get(uuid);
             if (start != null && storageProvider != null) {
-                long duration = System.currentTimeMillis() - start;
-                if (duration > 0) storageProvider.recordVanishSession(uuid, duration);
+                shutdownStep("final session for " + uuid, () -> {
+                    long duration = System.currentTimeMillis() - start;
+                    if (duration > 0) storageProvider.recordVanishSession(uuid, duration);
+                    vanishStartTimes.remove(uuid, start);
+                });
             }
         }
-        if (proxyBridge != null) {
-            proxyBridge.shutdown();
-        }
-        if (storageProvider != null) {
-            storageProvider.shutdown();
-        }
-        if (redisStorage != null) {
-            redisStorage.shutdown();
-        }
-        if (vanishScheduler != null) {
-            vanishScheduler.cancelAllTasks();
-        }
+        if (proxyBridge != null) shutdownStep("proxy bridge", proxyBridge::shutdown);
+        if (redisStorage != null) shutdownStep("Redis subscriber", redisStorage::shutdown);
+        if (storageProvider != null) shutdownStep("storage", storageProvider::shutdown);
+        if (vanishScheduler != null) shutdownStep("scheduler", vanishScheduler::cancelAllTasks);
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (isIncognito(player)) setIncognitoName(player, null);
+            shutdownStep("identity for " + player.getUniqueId(), () -> {
+                if (isIncognito(player)) setIncognitoName(player, null);
+            });
         }
-        viewerTeams.close();
-        voiceAudience.close();
-        if (vanishTeam != null) {
-            vanishTeam.unregister();
-        }
-        if (integrationManager != null) {
-            integrationManager.unregister();
-        }
-        if (luckPermsHook != null) {
-            luckPermsHook.unload();
-        }
-        if (vanishScoreboard != null) {
-            vanishScoreboard.shutdown();
-        }
+        shutdownStep("viewer teams", viewerTeams::close);
+        shutdownStep("voice audience", voiceAudience::close);
+        if (vanishTeam != null) shutdownStep("vanish team", vanishTeam::unregister);
+        if (integrationManager != null) shutdownStep("integrations", integrationManager::unregister);
+        if (luckPermsHook != null) shutdownStep("LuckPerms", luckPermsHook::unload);
+        if (vanishScoreboard != null) shutdownStep("scoreboards", vanishScoreboard::shutdown);
+    }
+
+    private void shutdownStep(String name, Runnable action) {
+        try { action.run(); }
+        catch (RuntimeException e) { getLogger().log(java.util.logging.Level.SEVERE, "Failed to shut down " + name, e); }
     }
 
     private void initStorage() {
@@ -629,14 +627,20 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void storageRecovered(StorageProvider provider) {
         if (provider != storageProvider || stopping) return;
-        migrateIfNeeded(provider, "SQL");
-        vanishScheduler.runGlobal(() -> {
+        restoreRuleExpiries();
+        submitStorageWork(() -> {
             if (provider != storageProvider || stopping) return;
-            restoreRuleExpiries();
-            for (UUID uuid : provider.getAllKnownPlayers())
-                if (provider.hasAcknowledged(uuid, "protocol-lib-warning")) ignoredWarningPlayers.add(uuid);
+            try {
+                migrateIfNeeded(provider, "SQL");
+                Set<UUID> acknowledged = new HashSet<>();
+                for (UUID uuid : provider.getAllKnownPlayers())
+                    if (provider.hasAcknowledged(uuid, "protocol-lib-warning")) acknowledged.add(uuid);
+                if (provider == storageProvider && !stopping) ignoredWarningPlayers.addAll(acknowledged);
+            } catch (RuntimeException e) { getLogger().warning("Storage recovery remains pending: " + e.getMessage()); }
         });
     }
+
+    public void submitStorageWork(Runnable work) { if (!stopping) stateWrites.submit(work); }
 
     private void migrateIfNeeded(StorageProvider target, String targetType) {
         if (!target.getAllKnownPlayers().isEmpty()) return; // target already has data, nothing to migrate
@@ -672,19 +676,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
             target.setStats(uuid, source.getStats(uuid));
             count++;
         }
-        for (int page = 1; ; page++) {
-            List<VanishHistoryEntry> entries = source.getAllHistory(page, 500);
-            for (VanishHistoryEntry entry : entries) target.addHistoryEntry(entry);
-            if (entries.size() < 500) break;
-        }
+        source.copyHistoryTo(target);
         getLogger().info("Storage migration complete: " + count + " player(s) migrated.");
         if (sourceOwned) source.shutdown();
     }
 
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {
         if (stopping) return;
-        stateVersions.merge(uuid, 1L, Long::sum);
-        stateWrites.submit(() -> storageProvider.setVanished(uuid, vanish));
+        long decisionVersion = beginStateDecision(uuid);
+        stateWrites.submit(() -> persistState(uuid, vanish, decisionVersion));
         // Idempotency check: skip if state already matches network message
         boolean isCurrentlyVanished = vanishedPlayers.contains(uuid);
         if (isCurrentlyVanished == vanish) {
@@ -714,6 +714,49 @@ public class Vanishpp extends JavaPlugin implements Listener {
     /** Reconciliation restores effects without publishing a new user decision. */
     public long stateVersion(UUID uuid) { return stateVersions.getOrDefault(uuid, 0L); }
 
+    private long beginStateDecision(UUID uuid) {
+        synchronized (stateDecisionLock) {
+            long version = stateVersions.merge(uuid, 1L, Long::sum);
+            pendingStateWrites.put(uuid, version);
+            return version;
+        }
+    }
+
+    private void persistState(UUID uuid, boolean hidden, long version) {
+        storageProvider.setVanished(uuid, hidden);
+        pendingStateWrites.remove(uuid, version);
+    }
+
+    public void reconcileSharedState(StorageProvider provider, java.util.function.BooleanSupplier active) {
+        Map<UUID, Long> versions;
+        Set<UUID> unsettled;
+        synchronized (stateDecisionLock) {
+            versions = stateVersionsSnapshot();
+            unsettled = Set.copyOf(pendingStateWrites.keySet());
+        }
+        submitStorageWork(() -> {
+            if (provider != storageProvider || !active.getAsBoolean() || isProxyAuthoritative()) return;
+            try {
+                Set<UUID> hidden = provider.getVanishedPlayers();
+                Set<UUID> candidates = new HashSet<>(versions.keySet());
+                candidates.addAll(hidden);
+                candidates.removeAll(unsettled);
+                vanishScheduler.runGlobal(() -> {
+                    for (UUID uuid : candidates) {
+                        Runnable apply = () -> {
+                            if (stopping || provider != storageProvider || !active.getAsBoolean() || isProxyAuthoritative()
+                                    || pendingStateWrites.containsKey(uuid) || stateVersion(uuid) != versions.getOrDefault(uuid, 0L)) return;
+                            handleNetworkVanishSync(uuid, hidden.contains(uuid));
+                        };
+                        Player player = Bukkit.getPlayer(uuid);
+                        if (player == null) apply.run();
+                        else vanishScheduler.runEntity(player, apply, null);
+                    }
+                });
+            } catch (RuntimeException e) { getLogger().warning("Shared state recovery will retry: " + e.getMessage()); }
+        });
+    }
+
     public Map<UUID, Long> stateVersionsSnapshot() {
         Map<UUID, Long> versions = new HashMap<>(stateVersions);
         for (UUID uuid : vanishedPlayers) versions.putIfAbsent(uuid, 0L);
@@ -724,7 +767,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void holdProxyJoin(Player player) {
         UUID uuid = player.getUniqueId();
-        proxyJoins.computeIfAbsent(uuid, key -> new ProxyJoin(isVanished(uuid), stateVersions.merge(uuid, 1L, Long::sum)));
+        proxyJoins.computeIfAbsent(uuid, key -> new ProxyJoin(isVanished(uuid), stateVersions.merge(uuid, 1L, Long::sum), player.isInvisible(), player.isCollidable()));
         vanishedPlayers.add(uuid);
         voiceAudience.invalidate(uuid);
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
@@ -741,10 +784,18 @@ public class Vanishpp extends JavaPlugin implements Listener {
         UUID uuid = player.getUniqueId();
         ProxyJoin pending = proxyJoins.remove(uuid);
         if (pending == null || pending.version() != stateVersion(uuid)) return;
-        stateVersions.merge(uuid, 1L, Long::sum);
-        stateWrites.submit(() -> storageProvider.setVanished(uuid, hidden));
+        long decisionVersion = beginStateDecision(uuid);
+        stateWrites.submit(() -> persistState(uuid, hidden, decisionVersion));
         if (hidden) applyVanishEffects(player, false);
-        else removeVanishEffects(player, false);
+        else if (pending.previouslyHidden()) removeVanishEffects(player, false);
+        else {
+            vanishedPlayers.remove(uuid);
+            voiceAudience.invalidate(uuid);
+            player.removeMetadata("vanished", this);
+            player.setInvisible(pending.invisible());
+            player.setCollidable(pending.collidable());
+            updateVanishVisibility(player);
+        }
     }
 
     public void abortProxyJoin(UUID uuid) {
@@ -993,6 +1044,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void cleanupPlayerCache(UUID uuid) {
+        stateVersions.merge(uuid, 1L, Long::sum);
         abortProxyJoin(uuid);
         if (proxyBridge != null) proxyBridge.forgetPlayer(uuid);
         viewerTeams.forget(uuid);
@@ -1025,7 +1077,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public GameMode getPreVanishGamemodePublic(Player player) {
-        GameMode saved = savedGamemode(player.getUniqueId());
+        GameMode saved = savedGamemode(player);
         return saved == null ? GameMode.SURVIVAL : saved;
     }
 
@@ -1038,8 +1090,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
      */
     public void saveGamemodeForRestore(Player player) {
         UUID uuid = player.getUniqueId();
-        if (savedGamemode(uuid) == null) {
-            storageProvider.setRule(uuid, SAVED_GAMEMODE, player.getGameMode().name());
+        if (savedGamemode(player) == null) {
+            player.getPersistentDataContainer().set(savedGamemodeKey, org.bukkit.persistence.PersistentDataType.STRING, player.getGameMode().name());
             pendingGamemodeRestore.putIfAbsent(uuid, player.getGameMode());
         }
     }
@@ -1051,16 +1103,17 @@ public class Vanishpp extends JavaPlugin implements Listener {
      */
     public void restoreSavedGamemode(Player player) {
         UUID uuid = player.getUniqueId();
-        GameMode gm = savedGamemode(uuid);
+        GameMode gm = savedGamemode(player);
         player.setGameMode(gm != null ? gm : GameMode.SURVIVAL);
-        storageProvider.setRule(uuid, SAVED_GAMEMODE, null);
+        player.getPersistentDataContainer().remove(savedGamemodeKey);
         pendingGamemodeRestore.remove(uuid);
     }
 
-    private GameMode savedGamemode(UUID uuid) {
+    private GameMode savedGamemode(Player player) {
+        UUID uuid = player.getUniqueId();
         GameMode cached = pendingGamemodeRestore.get(uuid);
         if (cached != null) return cached;
-        Object stored = storageProvider.getRules(uuid).get(SAVED_GAMEMODE);
+        String stored = player.getPersistentDataContainer().get(savedGamemodeKey, org.bukkit.persistence.PersistentDataType.STRING);
         if (stored == null) return null;
         GameMode saved = GameMode.valueOf(stored.toString());
         pendingGamemodeRestore.putIfAbsent(uuid, saved);
@@ -1256,7 +1309,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     private void applyVanishEffects(Player player, boolean persist) {
         if (stopping) return;
-        if (persist) stateVersions.merge(player.getUniqueId(), 1L, Long::sum);
+        long decisionVersion = persist ? beginStateDecision(player.getUniqueId()) : stateVersion(player.getUniqueId());
         vanishedPlayers.add(player.getUniqueId());
         if (hasProtocolLib && vanishTeam != null) vanishTeam.addEntry(player.getName());
         else viewerTeams.update(player, true);
@@ -1348,7 +1401,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         byte[] proxyPacket = persist && proxyBridge != null
                 ? proxyBridge.prepareVanishEvent(persistUuid, persistName, true, persistLevel) : null;
         if (persist) stateWrites.submit(() -> {
-            storageProvider.setVanished(persistUuid, true);
+            persistState(persistUuid, true, decisionVersion);
             // Add history entry
             try {
                 String serverName = Bukkit.getServer().getName();
@@ -1384,7 +1437,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     private void removeVanishEffects(Player player, boolean persist) {
         if (stopping) return;
-        if (persist) stateVersions.merge(player.getUniqueId(), 1L, Long::sum);
+        long decisionVersion = persist ? beginStateDecision(player.getUniqueId()) : stateVersion(player.getUniqueId());
         vanishedPlayers.remove(player.getUniqueId());
         messageRecipients.forget(player.getUniqueId());
         publishedVisibilityLevels.remove(player.getUniqueId());
@@ -1463,7 +1516,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 ? proxyBridge.prepareVanishEvent(persistUuid, persistNameUv, false, 1) : null;
         if (!persist && sessionDuration > 0) stateWrites.submit(() -> storageProvider.recordVanishSession(persistUuid, sessionDuration));
         if (persist) stateWrites.submit(() -> {
-            storageProvider.setVanished(persistUuid, false);
+            persistState(persistUuid, false, decisionVersion);
             // Add history entry
             try {
                 String serverName = Bukkit.getServer().getName();
@@ -1706,10 +1759,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
         // ALWAYS clear mob targets (regardless of mob_targeting rule)
         // The rule only controls whether new targets can be acquired AFTER vanishing
         for (Entity entity : player.getWorld().getEntities()) {
-            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                mob.setTarget(null);
-                mob.getPathfinder().stopPathfinding();
-            }
+            if (entity instanceof Mob mob) vanishScheduler.runEntity(mob, () -> {
+                if (isVanished(player) && player.equals(mob.getTarget())) {
+                    mob.setTarget(null);
+                    mob.getPathfinder().stopPathfinding();
+                }
+            }, null);
         }
 
         // Hooks
@@ -1725,48 +1780,58 @@ public class Vanishpp extends JavaPlugin implements Listener {
         setTemporaryRule(player, rule, ruleManager.getRule(player, rule), originalValue, seconds);
     }
 
+    public Boolean pendingRule(UUID uuid, String rule) {
+        RuleDecision decision = pendingRules.get(new RuleKey(uuid, rule));
+        return decision == null ? null : decision.value();
+    }
+
+    public void setRule(Player player, String rule, boolean value) {
+        RuleKey key = new RuleKey(player.getUniqueId(), rule);
+        RuleDecision decision = new RuleDecision(value, UUID.randomUUID());
+        pendingRules.put(key, decision);
+        submitStorageWork(() -> {
+            try {
+                storageProvider.setRule(key.uuid(), rule, value);
+                ruleExpiries.cancel(key.uuid(), rule);
+            } finally { pendingRules.remove(key, decision); }
+        });
+    }
+
     public void setTemporaryRule(Player player, String rule, boolean value, boolean originalValue, int seconds) {
         long deadline = System.currentTimeMillis() + Math.max(0L, (long) seconds) * 1000L;
         String token = deadline + ":" + originalValue + ":" + UUID.randomUUID();
-        storageProvider.setTemporaryRule(player.getUniqueId(), rule, value, token);
-        scheduleExpiry(player.getUniqueId(), rule, token, expiryEpoch);
-    }
-
-    private void restoreRuleExpiries() {
-        int epoch = ++expiryEpoch;
-        for (UUID uuid : storageProvider.getAllKnownPlayers()) {
-            for (Map.Entry<String, Object> entry : storageProvider.getRules(uuid).entrySet()) {
-                if (entry.getKey().startsWith(StorageProvider.EXPIRY_PREFIX))
-                    scheduleExpiry(uuid, entry.getKey().substring(StorageProvider.EXPIRY_PREFIX.length()), entry.getValue().toString(), epoch);
-            }
-        }
-    }
-
-    private void scheduleExpiry(UUID uuid, String rule, String token, int epoch) {
-        long deadline;
-        try { deadline = Long.parseLong(token.split(":", 3)[0]); }
-        catch (IllegalArgumentException e) { getLogger().warning("Invalid saved rule expiry for " + uuid); return; }
-        vanishScheduler.runLaterGlobal(() -> {
-            if (epoch != expiryEpoch) return;
-            if (deadline > System.currentTimeMillis()) { scheduleExpiry(uuid, rule, token, epoch); return; }
+        RuleKey key = new RuleKey(player.getUniqueId(), rule);
+        RuleDecision decision = new RuleDecision(value, UUID.randomUUID());
+        pendingRules.put(key, decision);
+        submitStorageWork(() -> {
             try {
-                if (!storageProvider.expireRule(uuid, rule, token)) return;
-            } catch (RuntimeException e) {
-                getLogger().warning("Rule expiry will retry: " + e.getMessage());
-                vanishScheduler.runLaterGlobal(() -> scheduleExpiry(uuid, rule, token, epoch), 100L);
-                return;
-            }
+                StorageProvider provider = storageProvider;
+                provider.setTemporaryRule(key.uuid(), rule, value, token);
+                ruleExpiries.replace(key.uuid(), rule, token, provider);
+            } finally { pendingRules.remove(key, decision); }
+        });
+    }
+
+    private void restoreRuleExpiries() { ruleExpiries.reload(); }
+
+    /** Called on the storage worker after a successful compare-and-expire transaction. */
+    public void ruleExpired(UUID uuid, String rule, StorageProvider provider) {
+        long version = stateVersion(uuid);
+        vanishScheduler.runGlobal(() -> {
+            if (stopping || provider != storageProvider) return;
             Player player = Bukkit.getPlayer(uuid);
-            String name = player == null ? uuid.toString() : player.getName();
-            String message = configManager.getLanguageManager().getMessage("rules.expired")
-                    .replace("%rule%", rule).replace("%player%", name);
-            if (player != null && player.isOnline()) {
-                messageManager.sendMessage(player, message);
-                if (isVanished(player)) resyncVanishEffects(player);
-            } else if (proxyBridge != null && proxyBridge.isProxyDetected() && !Bukkit.getOnlinePlayers().isEmpty()) {
-                proxyBridge.sendPlayerMessage(uuid, message);
-            } else storageProvider.setRule(uuid, PENDING_NOTIFY_PREFIX + rule, true);
-        }, Math.max(1L, (deadline - System.currentTimeMillis() + 49L) / 50L));
+            if (player != null) {
+                vanishScheduler.runEntity(player, () -> {
+                    if (!player.isOnline() || stopping || provider != storageProvider || stateVersion(uuid) != version) return;
+                    String message = configManager.getLanguageManager().getMessage("rules.expired")
+                            .replace("%rule%", rule).replace("%player%", player.getName());
+                    messageManager.sendMessage(player, message);
+                    if (isVanished(player)) resyncVanishEffects(player);
+                }, null);
+            } else {
+                submitStorageWork(() -> provider.setRule(uuid, PENDING_NOTIFY_PREFIX + rule, true));
+            }
+        });
     }
 
     @EventHandler

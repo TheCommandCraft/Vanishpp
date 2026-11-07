@@ -370,6 +370,7 @@ public class SqlStorage implements StorageProvider {
             ps.executeUpdate();
         } catch (SQLException e) {
             handleDatabaseError(e);
+            throw new IllegalStateException("Could not persist vanish state", e);
         }
     }
 
@@ -488,6 +489,12 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Map<String, Object> getRules(UUID uuid) {
+        try { return getRecoveryRules(uuid); }
+        catch (IllegalStateException e) { plugin.getLogger().warning(e.getMessage()); return new HashMap<>(); }
+    }
+
+    @Override
+    public Map<String, Object> getRecoveryRules(UUID uuid) {
         ensureInitialized();
         Map<String, Object> rules = new HashMap<>();
         try (Connection conn = connection();
@@ -505,7 +512,7 @@ public class SqlStorage implements StorageProvider {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            throw new IllegalStateException("Could not read recovery rules", e);
         }
         return rules;
     }
@@ -711,15 +718,40 @@ public class SqlStorage implements StorageProvider {
     @Override
     public List<VanishHistoryEntry> getPlayerHistory(UUID uuid, int page, int perPage) {
         ensureInitialized();
-        String q = "SELECT * FROM vpp_history WHERE uuid = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?";
+        String q = "SELECT * FROM vpp_history WHERE uuid = ? ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?";
         return queryHistory(q, uuid.toString(), perPage, (page - 1) * perPage);
     }
 
     @Override
     public List<VanishHistoryEntry> getAllHistory(int page, int perPage) {
         ensureInitialized();
-        String q = "SELECT * FROM vpp_history ORDER BY timestamp DESC LIMIT ? OFFSET ?";
+        String q = "SELECT * FROM vpp_history ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?";
         return queryHistory(q, null, perPage, (page - 1) * perPage);
+    }
+
+    @Override
+    public void copyHistoryTo(StorageProvider target) {
+        ensureInitialized();
+        try (Connection conn = connection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement("SELECT * FROM vpp_history ORDER BY timestamp DESC, id DESC",
+                    ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) {
+                // PostgreSQL uses a cursor with autocommit disabled. MySQL uses streaming rows.
+                boolean mysql = conn.getMetaData().getDatabaseProductName().equalsIgnoreCase("MySQL");
+                ps.setFetchSize(mysql ? Integer.MIN_VALUE : 500);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) target.addHistoryEntry(readHistoryEntry(rs));
+                }
+            }
+            conn.commit();
+        } catch (SQLException e) { throw new IllegalStateException("Could not migrate history snapshot", e); }
+    }
+
+    private VanishHistoryEntry readHistoryEntry(ResultSet rs) throws SQLException {
+        return new VanishHistoryEntry(UUID.fromString(rs.getString("uuid")), rs.getString("player_name"),
+                VanishHistoryEntry.Action.valueOf(rs.getString("action")),
+                java.time.Instant.ofEpochMilli(rs.getLong("timestamp")), rs.getString("server"),
+                rs.getString("reason"), rs.getLong("duration_ms"));
     }
 
     private List<VanishHistoryEntry> queryHistory(String query, String uuidFilter, int limit, int offset) {
@@ -732,14 +764,7 @@ public class SqlStorage implements StorageProvider {
             ps.setInt(idx, offset);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    list.add(new VanishHistoryEntry(
-                            UUID.fromString(rs.getString("uuid")),
-                            rs.getString("player_name"),
-                            VanishHistoryEntry.Action.valueOf(rs.getString("action")),
-                            java.time.Instant.ofEpochMilli(rs.getLong("timestamp")),
-                            rs.getString("server"),
-                            rs.getString("reason"),
-                            rs.getLong("duration_ms")));
+                    list.add(readHistoryEntry(rs));
                 }
             }
         } catch (SQLException e) { handleDatabaseError(e); }
@@ -837,7 +862,7 @@ public class SqlStorage implements StorageProvider {
                     catch (IllegalArgumentException ignored) {}
                 }
             } catch (SQLException e) {
-                plugin.getLogger().warning("Migration check failed on " + table + ": " + e.getMessage());
+                throw new IllegalStateException("Could not enumerate stored players in " + table, e);
             }
         }
         return uuids;

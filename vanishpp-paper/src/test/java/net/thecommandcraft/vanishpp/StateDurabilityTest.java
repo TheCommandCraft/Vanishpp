@@ -267,7 +267,9 @@ class StateDurabilityTest {
         plugin.getRuleManager().setRule(player, "can_chat", true);
         plugin.scheduleRuleRevert(player, "can_chat", false, 0);
         plugin.getRuleManager().setRule(player, "can_chat", true);
+        scheduler.drainAsync();
         scheduler.runDelayedPass();
+        scheduler.drainAsync();
         assertTrue(plugin.getRuleManager().getRule(player, "can_chat"),
                 "old expiry must not overwrite a newer decision, even when the value is unchanged");
     }
@@ -292,8 +294,10 @@ class StateDurabilityTest {
     void expiredTemporaryRuleSurvivesReload() {
         plugin.getRuleManager().setRule(player, "can_chat", true);
         plugin.scheduleRuleRevert(player, "can_chat", false, 0);
+        scheduler.drainAsync();
         scheduler.later.clear();
         plugin.reloadPluginConfig();
+        scheduler.drainAsync();
         scheduler.runDelayedPass();
         scheduler.fireTimers();
         scheduler.drainAsync();
@@ -400,9 +404,11 @@ class StateDurabilityTest {
         field(plugin, "storageProvider", source);
         plugin.getRuleManager().setRule(player, "can_chat", true);
         plugin.scheduleRuleRevert(player, "can_chat", false, 0);
+        scheduler.drainAsync();
         SqlStorage otherServer = sqlStorage(dataSource);
         otherServer.setRule(player.getUniqueId(), "can_chat", true);
         scheduler.runDelayedPass();
+        scheduler.drainAsync();
         assertTrue(otherServer.getRule(player.getUniqueId(), "can_chat", false),
                 "SQL expiry must not undo a newer decision from another provider");
     }
