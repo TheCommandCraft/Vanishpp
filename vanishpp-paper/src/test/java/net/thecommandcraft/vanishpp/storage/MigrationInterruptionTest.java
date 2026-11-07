@@ -180,6 +180,35 @@ class MigrationInterruptionTest {
         assertFalse(Files.exists(directory.resolve("migration.yml")));
     }
 
+    @Test
+    void failedSqlSourceReadCannotPublishMissingCategoriesInYaml(@TempDir Path directory) throws Exception {
+        JdbcDataSource database = database();
+        SqlStorage sql = new SqlStorage(plugin, database); sql.init();
+        migrate(sql, "MYSQL");
+        field("storageProvider", sql);
+        AtomicBoolean fail = new AtomicBoolean(true), attempted = new AtomicBoolean();
+        javax.sql.DataSource intercepted = mock(javax.sql.DataSource.class);
+        when(intercepted.getConnection()).thenAnswer(call -> {
+            Connection real = database.getConnection();
+            return Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class}, (self, method, args) -> {
+                if (fail.get() && method.getName().equals("prepareStatement") && ((String) args[0]).startsWith("SELECT total_ms")) {
+                    attempted.set(true); throw new SQLException("source statistics unavailable");
+                }
+                return invoke(method, real, args);
+            });
+        });
+        var dataSource = SqlStorage.class.getDeclaredField("dataSource"); dataSource.setAccessible(true); dataSource.set(sql, intercepted);
+        YamlStorage target = yaml(directory);
+        assertAll(
+                () -> assertThrows(IllegalStateException.class, () -> migrate(target, "YAML"),
+                        "unavailable source categories must fail the copy instead of becoming empty data"),
+                () -> assertTrue(attempted.get(), "source read failure must actually occur"),
+                () -> assertTrue(target.getAllKnownPlayers().isEmpty(), "failed source read must leave no partial YAML destination"));
+        fail.set(false);
+        migrate(target, "YAML");
+        assertComplete(yaml(directory));
+    }
+
     private void assertComplete(StorageProvider target) {
         assertAll(
                 () -> assertEquals(Set.of(first, second), target.getVanishedPlayers(), "retry must copy every vanished player"),
