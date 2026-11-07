@@ -277,7 +277,7 @@ class HardeningTest {
     @Test
     void foliaDoesNotUseTheUnsupportedScoreboardApi() throws Exception {
         field(plugin, "vanishScheduler", new FoliaSchedulerBridge(plugin) {
-            @Override public boolean owns(Entity entity) { return true; }
+            public boolean owns(Entity entity) { return true; }
             @Override public void runEntityNow(Entity entity, Runnable task) { task.run(); }
             @Override public void runEntity(Entity entity, Runnable task, Runnable retired) { task.run(); }
             @Override public void runGlobal(Runnable task) { task.run(); }
