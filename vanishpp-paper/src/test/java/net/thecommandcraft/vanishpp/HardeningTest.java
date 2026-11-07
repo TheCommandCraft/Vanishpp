@@ -675,6 +675,7 @@ class HardeningTest {
     @Test
     void cancelledCommandsDoNotEnterSpectatorOrReportAcceptedTargets() {
         player.setOp(true);
+        scheduler.queueOffOwner = true;
         PlayerMock target = server.addPlayer("CommandTarget");
         TransitionListener listener = new TransitionListener(); listener.cancelVanish = true;
         server.getPluginManager().registerEvents(listener, plugin);
@@ -685,8 +686,10 @@ class HardeningTest {
         String specMessages = messages();
         plugin.getConfigManager().vanishedOtherMessage = "accepted-target";
         player.performCommand("vanish " + target.getName());
+        scheduler.drainEntities();
         String targetMessages = messages();
         player.performCommand("vanish all");
+        scheduler.drainEntities();
         String bulkMessages = messages();
         String zero = PlainTextComponentSerializer.plainText().serialize(plugin.getMessageManager().parse(
                 plugin.getLanguageManager().getMessage("bulk.vanished-all").replace("%count%", "0"), player));
@@ -936,13 +939,16 @@ class HardeningTest {
         public void runLaterGlobal(Runnable task, long ticks) { later.add(task); }
         public void runTimerGlobal(Runnable task, long delay, long period) { timers.add(task); periods.add(period); }
         public void runEntity(Entity entity, Runnable task, Runnable retired) {
+            if (queueOffOwner && !owns(entity)) entities.add(() -> executeEntity(entity, task));
+            else executeEntity(entity, task);
+        }
+        private void executeEntity(Entity entity, Runnable task) {
             Entity previous = owner; owner = entity;
             try { run("entity", task); } finally { owner = previous; }
         }
         public boolean owns(Entity entity) { return context.equals("entity") && owner == entity; }
         public void runEntityNow(Entity entity, Runnable task) {
-            if (queueOffOwner && !owns(entity)) entities.add(() -> runEntity(entity, task, null));
-            else runEntity(entity, task, null);
+            runEntity(entity, task, null);
         }
         void drainEntities() { while (!entities.isEmpty()) entities.removeFirst().run(); }
         public void runAsync(Runnable task) { async.add(task); }

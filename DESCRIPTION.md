@@ -26,7 +26,7 @@ It works perfectly out of the box with zero configuration required, but offers g
 Most plugins just hide you visually. **Vanish++ removes you physically.**
 
 *   **Titan God Mode:** While vanished, you are strictly invincible. You take no damage, are immune to all potion effects, and cannot burn. You are a spectator in survival mode.
-*   **Smart Mob AI (True Sight):** Mobs completely ignore vanished players — no attacking, no pathing, and no head-turning. Combat targeting is cancelled via `EntityTargetEvent` before the mob ever commits to an attack path (mobs that had already locked on before you vanished are force-detargeted immediately), while a separate Paper Mob Goal replaces the vanilla look-at-player behavior so mobs don't visually stare at "empty air" either. (Paper/Purpur/Folia; requires Paper's Mob Goal API.)
+*   **Smart Mob AI (True Sight):** New targeting of vanished players is cancelled via `EntityTargetEvent`. Mobs already targeting you are detached through a bounded queue over subsequent ticks. A separate Paper Mob Goal replaces vanilla look-at-player behavior so mobs do not stare at vanished players. (Paper/Purpur/Folia; requires Paper's Mob Goal API.)
 *   **Projectile Pass-Through:** We don't use "teleport hacks." Using native Paper events, arrows, tridents, and snowballs fly **physically through** your body. It is impossible to hit a vanished player.
 *   **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you. You are a ghost.
 *   **No Physical Triggers:** You can walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration or block update.

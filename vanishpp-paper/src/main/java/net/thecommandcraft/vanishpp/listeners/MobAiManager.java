@@ -50,6 +50,7 @@ public class MobAiManager implements Listener {
     private final java.util.Queue<java.util.UUID> requests = new java.util.concurrent.ConcurrentLinkedQueue<>();
     private final java.util.Set<java.util.UUID> requested = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.Set<java.util.UUID> inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Map<ChunkWork, java.util.Queue<MobWork>> regionWork = new java.util.concurrent.ConcurrentHashMap<>();
     private java.util.Iterator<java.util.UUID> currentTargets = java.util.Collections.emptyIterator();
     private java.util.UUID currentPlayer;
 
@@ -98,8 +99,26 @@ public class MobAiManager implements Listener {
                 }
             }
         }
-        batches.forEach((region, batch) -> plugin.getVanishScheduler().runRegion(region.world(), region.x(), region.z(), () -> {
-            for (MobWork work : batch) {
+        batches.forEach(this::enqueueBatch);
+    }
+
+    private void enqueueBatch(ChunkWork region, List<MobWork> batch) {
+        var start = new java.util.concurrent.atomic.AtomicBoolean();
+        regionWork.compute(region, (key, queue) -> {
+            if (queue == null) { queue = new java.util.concurrent.ConcurrentLinkedQueue<>(); start.set(true); }
+            queue.addAll(batch);
+            return queue;
+        });
+        if (start.get()) scheduleRegion(region);
+    }
+
+    private void scheduleRegion(ChunkWork region) {
+        plugin.getVanishScheduler().runRegion(region.world(), region.x(), region.z(), () -> {
+            java.util.Queue<MobWork> queue = regionWork.get(region);
+            if (queue == null) return;
+            for (int count = 0; count < ENTITY_WORK_PER_TICK; count++) {
+                MobWork work = queue.poll();
+                if (work == null) break;
                 Mob mob = work.handle().mob().get();
                 if (mob == null) { forget(work.handle().id()); continue; }
                 Runnable apply = () -> {
@@ -111,7 +130,14 @@ public class MobAiManager implements Listener {
                 if (!plugin.getVanishScheduler().regionThreaded() || plugin.getVanishScheduler().owns(mob)) apply.run();
                 else plugin.getVanishScheduler().runEntity(mob, apply, () -> forget(work.handle().id()));
             }
-        }));
+            var again = new java.util.concurrent.atomic.AtomicBoolean();
+            regionWork.computeIfPresent(region, (key, pending) -> {
+                if (pending.isEmpty()) return null;
+                again.set(true);
+                return pending;
+            });
+            if (again.get()) scheduleRegion(region);
+        });
     }
 
     private MobHandle handle(Mob mob) {
@@ -202,6 +228,15 @@ public class MobAiManager implements Listener {
     @EventHandler
     public void onRemove(com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent event) {
         forget(event.getEntity().getUniqueId());
+    }
+
+    @EventHandler
+    public void onWorldUnload(org.bukkit.event.world.WorldUnloadEvent event) {
+        World world = event.getWorld();
+        chunks.removeIf(chunk -> chunk.world().equals(world));
+        initializing.removeIf(handle -> handle.region().world().equals(world));
+        regionWork.entrySet().removeIf(entry -> entry.getKey().world().equals(world));
+        handles.forEach((uuid, handle) -> { if (handle.region().world().equals(world)) forget(uuid); });
     }
     /**
      * Replaces each vanilla LOOK_AT_PLAYER goal that looks at players with a vanish-aware copy

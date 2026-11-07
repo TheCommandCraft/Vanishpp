@@ -29,7 +29,7 @@ Works out of the box with zero configuration required.
 Most plugins just hide you visually. Vanish++ removes you physically.
 
 - **Invincibility:** No damage, immune to all potion effects, cannot burn.
-- **Smart Mob AI:** Mobs completely ignore vanished players. Targeting is cancelled via `EntityTargetEvent` before the mob ever commits to an attack path. Mobs that had already locked on before you vanished are force-detargeted immediately.
+- **Smart Mob AI:** Mobs ignore vanished players. New targeting is cancelled via `EntityTargetEvent`; mobs already targeting you are detached through a bounded queue over subsequent ticks.
 - **Projectile Pass-Through:** Arrows, tridents, and snowballs fly physically through your body via native Paper events — impossible to hit a vanished player.
 - **Zero Collision:** You cannot push players, mobs, or boats, and they cannot push you.
 - **No Physical Triggers:** Walk over Turtle Eggs, Crops, Pressure Plates, Tripwires, and Sculk Sensors without triggering a single vibration.
