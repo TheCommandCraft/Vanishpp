@@ -710,6 +710,28 @@ class StateDurabilityTest {
         catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }
     }
 
+    @Test
+    void reloadAndRecoveryPerformStorageWorkOnlyOnAsyncWorkers() throws Exception {
+        StorageProvider storage = spy(plugin.getStorageProvider());
+        List<String> contexts = new ArrayList<>();
+        doAnswer(call -> { contexts.add(scheduler.context); return call.callRealMethod(); })
+                .when(storage).getAllKnownPlayers();
+        doAnswer(call -> { contexts.add(scheduler.context); return call.callRealMethod(); })
+                .when(storage).setVanished(any(), anyBoolean());
+        field(plugin, "storageProvider", storage);
+        plugin.storageRecovered(storage);
+        scheduler.drainAsync();
+        plugin.applyVanishEffects(player);
+        try (var constructed = mockConstruction(YamlStorage.class, (created, context) -> {
+            doAnswer(call -> { contexts.add(scheduler.context); return null; }).when(created).init();
+        })) {
+            plugin.reloadPluginConfig();
+            scheduler.drainAsync();
+        }
+        assertFalse(contexts.isEmpty(), "storage work must actually run");
+        assertTrue(contexts.stream().allMatch("async"::equals), "reload and recovery must not drain or scan storage on event/global threads: " + contexts);
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
