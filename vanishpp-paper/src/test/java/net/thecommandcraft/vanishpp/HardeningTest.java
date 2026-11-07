@@ -731,15 +731,16 @@ class HardeningTest {
     }
 
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
-    void mobCleanupIsBoundedAndEventuallyDrainsRepeatedRequests(boolean stalledRegion) {
+    @org.junit.jupiter.params.provider.CsvSource({"false,1", "true,1", "true,2"})
+    void mobCleanupIsBoundedAndEventuallyDrainsRepeatedRequests(boolean stalledRegion, int chunks) {
         MobAiManager manager = new MobAiManager(plugin); manager.register();
         var cleared = new java.util.concurrent.atomic.AtomicInteger();
         List<Mob> mobs = new ArrayList<>();
         for (int i = 0; i < 300; i++) {
             Mob mob = mock(Mob.class, RETURNS_DEEP_STUBS); mobs.add(mob);
             when(mob.getUniqueId()).thenReturn(UUID.randomUUID()); when(mob.isValid()).thenReturn(true);
-            when(mob.getWorld()).thenReturn(player.getWorld()); when(mob.getLocation()).thenReturn(player.getLocation());
+            when(mob.getWorld()).thenReturn(player.getWorld());
+            when(mob.getLocation()).thenReturn(new Location(player.getWorld(), (i % chunks) * 16, 64, 0));
             var target = new AtomicReference<org.bukkit.entity.LivingEntity>(player);
             when(mob.getTarget()).thenAnswer(call -> target.get());
             doAnswer(call -> { if (target.getAndSet(null) != null) cleared.incrementAndGet(); return null; }).when(mob).setTarget(null);
@@ -752,12 +753,12 @@ class HardeningTest {
         for (int i = 0; i < 30; i++) {
             int before = cleared.get(); int regions = scheduler.regionDispatches; scheduler.fireTimers();
             assertTrue(cleared.get() - before <= 64, "mob cleanup must process at most its 64-entity tick budget");
-            assertTrue(scheduler.regionDispatches - regions <= 1, "mobs in one chunk must share one scheduled region batch");
+            assertTrue(scheduler.regionDispatches - regions <= chunks, "mobs must share one scheduled batch per chunk");
         }
         if (stalledRegion) {
-            assertTrue(scheduler.regions.size() <= 1, "a stalled region must retain one resumable worker instead of accumulating batches");
+            assertTrue(scheduler.regions.size() <= chunks, "a stalled region must retain one resumable worker per chunk instead of accumulating batches");
             for (int i = 0; i < 30; i++) {
-                int before = cleared.get(); scheduler.drainRegionsPass();
+                int before = cleared.get(); scheduler.fireTimers(); scheduler.drainRegionsPass();
                 assertTrue(cleared.get() - before <= 64, "a resumed region must not execute many queued tick budgets at once");
             }
         }
@@ -841,6 +842,128 @@ class HardeningTest {
                     () -> { if (permanent) assertEquals(1, attempts.get(), "permanent failure must not retry forever");
                         else assertEquals(List.of("first", "second"), delivered, "transient recovery must preserve packet order"); });
         } finally { plugin.getLogger().removeHandler(handler); }
+    }
+
+    @Test
+    void foliaRejectionAndRetirementSettleOnceAndBulkCommandsFinish() {
+        var runs = new java.util.concurrent.atomic.AtomicInteger();
+        var retirements = new java.util.concurrent.atomic.AtomicInteger();
+        Entity entity = mock(Entity.class);
+        var entityScheduler = mock(io.papermc.paper.threadedregions.scheduler.EntityScheduler.class);
+        when(entity.getScheduler()).thenReturn(entityScheduler);
+        var task = new AtomicReference<java.util.function.Consumer<io.papermc.paper.threadedregions.scheduler.ScheduledTask>>();
+        var retired = new AtomicReference<Runnable>();
+        var accepted = new java.util.concurrent.atomic.AtomicBoolean();
+        when(entityScheduler.run(eq(plugin), any(), any())).thenAnswer(call -> {
+            task.set(call.getArgument(1)); retired.set(call.getArgument(2));
+            return accepted.get() ? mock(io.papermc.paper.threadedregions.scheduler.ScheduledTask.class) : null;
+        });
+        FoliaSchedulerBridge bridge = new FoliaSchedulerBridge(plugin);
+        bridge.runEntity(entity, runs::incrementAndGet, retirements::incrementAndGet);
+        int rejected = retirements.get();
+        accepted.set(true);
+        bridge.runEntity(entity, runs::incrementAndGet, retirements::incrementAndGet);
+        retired.get().run(); retired.get().run(); task.get().accept(null);
+        int laterRetired = retirements.get(); int retiredRuns = runs.get();
+        bridge.runEntity(entity, runs::incrementAndGet, retirements::incrementAndGet);
+        task.get().accept(null); retired.get().run();
+
+        player.setOp(true); state().add(player.getUniqueId());
+        PlayerMock target = server.addPlayer("RetiringTarget");
+        scheduler.queueOffOwner = true;
+        scheduler.retiredBefore.add(target.getUniqueId());
+        clearMessages(); player.performCommand("vanish all");
+        String rejectedBulk = ChatColor.stripColor(messages());
+        scheduler.retiredBefore.clear();
+        scheduler.retiredAfter.add(target.getUniqueId());
+        player.performCommand("vanish all"); scheduler.drainEntities();
+        String retiredBulk = ChatColor.stripColor(messages());
+        assertAll(
+                () -> assertEquals(1, rejected, "already-retired scheduling rejection must complete the retirement callback"),
+                () -> assertEquals(2, laterRetired, "later retirement must settle only once"),
+                () -> assertEquals(0, retiredRuns, "retired work must never execute"),
+                () -> assertEquals(1, runs.get(), "accepted live work must execute exactly once"),
+                () -> assertEquals(2, retirements.get(), "completed live work must not also retire"),
+                () -> assertTrue(rejectedBulk.contains("0"), "bulk reporting must finish after target scheduling rejection"),
+                () -> assertTrue(retiredBulk.contains("0"), "bulk reporting must finish after queued target retirement"));
+    }
+
+    @Test
+    void proxyDrainReselectsACarrierAfterRetirementBetweenBatches() throws Exception {
+        player.disconnect();
+        List<String> first = new ArrayList<>(), second = new ArrayList<>();
+        PlayerMock a = recordingCarrier("CarrierA", first), b = recordingCarrier("CarrierB", second);
+        server.addPlayer(a); server.addPlayer(b);
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        var bridge = new net.thecommandcraft.vanishpp.proxy.ProxyBridge(plugin); bridge.init(); scheduler.later.clear();
+        var pending = bridge.getClass().getDeclaredField("pendingPackets"); pending.setAccessible(true);
+        var packets = (java.util.Deque<byte[]>) pending.get(bridge);
+        for (int i = 0; i < 70; i++) packets.add(net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_QUERY, "packet-" + i));
+        bridge.flushPendingPackets(a);
+        assertEquals(64, first.size(), "first carrier must send the first bounded batch");
+        a.disconnect(); scheduler.retiredBefore.add(a.getUniqueId());
+        scheduler.delayedPass(); scheduler.drainEntities();
+        assertEquals(java.util.stream.IntStream.range(64, 70).mapToObj(i -> "packet-" + i).toList(), second,
+                "remaining control packets must continue through a live carrier without a new send or join");
+    }
+
+    private PlayerMock recordingCarrier(String name, List<String> delivered) {
+        return new PlayerMock(server, name) {
+            @Override public void sendPluginMessage(org.bukkit.plugin.Plugin source, String channel, byte[] message) {
+                delivered.add(net.thecommandcraft.vanishpp.common.protocol.VppPacket.decode(message).jsonPayload());
+            }
+        };
+    }
+
+    @Test
+    void failedMobDoesNotStrandHealthyWorkOrLaterRequestsInItsChunk() throws Exception {
+        field(plugin, "hasPaperApi", false);
+        MobAiManager manager = new MobAiManager(plugin); manager.register();
+        var cleared = new java.util.concurrent.atomic.AtomicInteger();
+        Mob broken = cleanupMob(cleared), healthy = cleanupMob(cleared);
+        when(broken.getTarget()).thenThrow(new IllegalStateException("broken-mob-probe"));
+        state().add(player.getUniqueId());
+        manager.onEntitiesLoad(new org.bukkit.event.world.EntitiesLoadEvent(player.getWorld().getChunkAt(0, 0), List.of(broken, healthy)));
+        assertDoesNotThrow(scheduler::fireTimers, "one mob failure must not escape and strand its chunk worker");
+        assertEquals(1, cleared.get(), "healthy work behind a failed mob must still complete");
+        Mob later = cleanupMob(cleared);
+        manager.onTarget(new EntityTargetEvent(later, player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER));
+        manager.clearTargets(player); scheduler.fireTimers();
+        assertEquals(2, cleared.get(), "a later request for the same chunk must still start a worker");
+    }
+
+    private Mob cleanupMob(java.util.concurrent.atomic.AtomicInteger cleared) {
+        Mob mob = mock(Mob.class, RETURNS_DEEP_STUBS);
+        when(mob.getUniqueId()).thenReturn(UUID.randomUUID()); when(mob.isValid()).thenReturn(true);
+        when(mob.getWorld()).thenReturn(player.getWorld()); when(mob.getLocation()).thenReturn(new Location(player.getWorld(), 0, 64, 0));
+        var target = new AtomicReference<org.bukkit.entity.LivingEntity>(player);
+        when(mob.getTarget()).thenAnswer(call -> target.get());
+        doAnswer(call -> { if (target.getAndSet(null) != null) cleared.incrementAndGet(); return null; }).when(mob).setTarget(null);
+        return mob;
+    }
+
+    @Test
+    void worldGuardForceNoticeRequiresAnAcceptedTransition() throws Exception {
+        player.setOp(true);
+        WorldGuardHook hook = mock(WorldGuardHook.class); field(plugin, "worldGuardHook", hook);
+        when(hook.isForceVanish(player)).thenReturn(true);
+        TransitionListener veto = new TransitionListener(); veto.cancelVanish = true;
+        server.getPluginManager().registerEvents(veto, plugin);
+        var listener = new WorldGuardVanishListener(plugin);
+        var move = new PlayerMoveEvent(player, player.getLocation(), player.getLocation().add(1, 0, 0));
+        String notice = PlainTextComponentSerializer.plainText().serialize(plugin.getMessageManager().parse(
+                plugin.getLanguageManager().getMessage("worldguard.force-vanished"), player));
+        clearMessages(); listener.onMove(move);
+        String cancelled = ChatColor.stripColor(messages()); boolean afterVeto = plugin.isVanished(player);
+        veto.cancelVanish = false; when(hook.isDenyVanish(player)).thenReturn(true);
+        listener.onMove(move); String denied = ChatColor.stripColor(messages());
+        when(hook.isDenyVanish(player)).thenReturn(false);
+        listener.onMove(move); String allowed = ChatColor.stripColor(messages());
+        assertAll(
+                () -> assertFalse(afterVeto || cancelled.contains(notice), "cancelled force-vanish must not announce success"),
+                () -> assertFalse(denied.contains(notice), "deny-vanish must also suppress the force notice"),
+                () -> assertTrue(plugin.isVanished(player) && allowed.contains(notice), "accepted force-vanish must still announce success"));
     }
 
     private InventoryClickEvent click(int slot) {
@@ -927,6 +1050,7 @@ class HardeningTest {
         boolean queueRegions;
         final List<Runnable> regions = new ArrayList<>();
         final List<Runnable> entities = new ArrayList<>();
+        final Set<UUID> retiredBefore = new HashSet<>(), retiredAfter = new HashSet<>();
         final List<Runnable> async = new ArrayList<>(), later = new ArrayList<>(), timers = new ArrayList<>();
         final List<Long> periods = new ArrayList<>();
         void run(String owner, Runnable task) { String old = context; context = owner; try { task.run(); } finally { context = old; } }
@@ -939,7 +1063,11 @@ class HardeningTest {
         public void runLaterGlobal(Runnable task, long ticks) { later.add(task); }
         public void runTimerGlobal(Runnable task, long delay, long period) { timers.add(task); periods.add(period); }
         public void runEntity(Entity entity, Runnable task, Runnable retired) {
-            if (queueOffOwner && !owns(entity)) entities.add(() -> executeEntity(entity, task));
+            if (retiredBefore.contains(entity.getUniqueId())) { if (retired != null) retired.run(); return; }
+            if (queueOffOwner && !owns(entity)) entities.add(() -> {
+                if (retiredAfter.contains(entity.getUniqueId())) { if (retired != null) retired.run(); }
+                else executeEntity(entity, task);
+            });
             else executeEntity(entity, task);
         }
         private void executeEntity(Entity entity, Runnable task) {
