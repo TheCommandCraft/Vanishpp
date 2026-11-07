@@ -253,6 +253,49 @@ class StateDurabilityTest {
     }
 
     @Test
+    void migrationBackToYamlReadsTheStillOpenPreviousSqlProvider(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:reverse_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage source = sqlStorage(dataSource);
+        source.init();
+        UUID id = player.getUniqueId();
+        source.setAutoVanishOnJoin(id, true);
+        source.saveRulePreset(id, "quiet", Map.of("can_chat", false));
+        source.addHistoryEntry(VanishHistoryEntry.vanish(id, player.getName(), "lobby", "test"));
+        source.setStats(id, new VanishStats(42000, 3, 21000));
+        field(plugin, "storageProvider", source);
+        Vanishpp destination = mock(Vanishpp.class);
+        when(destination.getDataFolder()).thenReturn(directory.toFile());
+        when(destination.getLogger()).thenReturn(plugin.getLogger());
+        YamlStorage target = new YamlStorage(destination);
+        target.init();
+        var method = Vanishpp.class.getDeclaredMethod("migrateIfNeeded", StorageProvider.class, String.class);
+        method.setAccessible(true);
+        method.invoke(plugin, target, "YAML");
+        assertAll(
+                () -> assertTrue(target.getAutoVanishOnJoin(id), "SQL to YAML migration must copy preference-only players"),
+                () -> assertEquals(Map.of("can_chat", false), target.loadRulePreset(id, "quiet")),
+                () -> assertEquals(1, target.getAllHistory(1, 20).size()),
+                () -> assertEquals(42000, target.getStats(id).getTotalVanishTimeMs()));
+    }
+
+    @Test
+    void sqlTemporaryRuleDoesNotOverwriteAnotherProvidersNewerDecision() throws Exception {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:expiry_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage source = sqlStorage(dataSource);
+        source.init();
+        field(plugin, "storageProvider", source);
+        plugin.getRuleManager().setRule(player, "can_chat", true);
+        plugin.scheduleRuleRevert(player, "can_chat", false, 0);
+        SqlStorage otherServer = sqlStorage(dataSource);
+        otherServer.setRule(player.getUniqueId(), "can_chat", true);
+        scheduler.runDelayedPass();
+        assertTrue(otherServer.getRule(player.getUniqueId(), "can_chat", false),
+                "SQL expiry must not undo a newer decision from another provider");
+    }
+
+    @Test
     void shutdownRecordsFinalSessionBeforeClosingStorage() throws Exception {
         StorageProvider storage = mock(StorageProvider.class);
         AtomicBoolean closed = new AtomicBoolean();
