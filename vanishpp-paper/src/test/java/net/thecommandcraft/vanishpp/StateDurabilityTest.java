@@ -1044,6 +1044,34 @@ class StateDurabilityTest {
         }
     }
 
+    @Test
+    void transferReadyPreservesEffectiveLevelAndRejectsLaterRefreshes() throws Exception {
+        player.setOp(false);
+        plugin.getConfigManager().maxLevel = 10;
+        plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.vanish.level.9");
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin); field(plugin, "proxyBridge", bridge);
+        bridge.init(); scheduler.runImmediate();
+        bridge.onPluginMessageReceived("vanishpp:proxy", player,
+                net.thecommandcraft.vanishpp.common.protocol.VppPacket.encode(
+                        net.thecommandcraft.vanishpp.common.protocol.VppMessage.PONG, "{\"session\":\"level-transfer\"}"));
+        plugin.applyVanishEffects(player);
+        String payload = "{\"uuid\":\"" + player.getUniqueId() + "\",\"requestId\":\"level-1\"}";
+        bridge.onPluginMessageReceived("vanishpp:proxy", player, rawPacket(14, payload));
+        scheduler.drainAsync();
+        var ready = player.packets.stream().filter(packet -> packet.type().name().equals("TRANSFER_READY")).findFirst().orElseThrow();
+        int level = com.google.gson.JsonParser.parseString(ready.jsonPayload()).getAsJsonObject().get("vanishLevel").getAsInt();
+        player.packets.clear();
+        bridge.sendVanishEvent(player.getUniqueId(), player.getName(), true, 10);
+        boolean sentWhileFenced = !player.packets.isEmpty();
+        bridge.onPluginMessageReceived("vanishpp:proxy", player, rawPacket(16, payload));
+        bridge.sendVanishEvent(player.getUniqueId(), player.getName(), true, 10);
+        assertAll(
+                () -> assertEquals(9, level, "READY must retain effective permission visibility level instead of downgrading it to stored default"),
+                () -> assertFalse(sentWhileFenced, "level refreshes must not create a newer source decision after READY"),
+                () -> assertFalse(player.packets.isEmpty(), "authenticated cancellation must allow later level publication"));
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
