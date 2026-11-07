@@ -910,6 +910,12 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Set<String> getAcknowledgements(UUID uuid) {
+        try { return getRecoveryAcknowledgements(uuid); }
+        catch (IllegalStateException e) { plugin.getLogger().warning(e.getMessage()); return new HashSet<>(); }
+    }
+
+    @Override
+    public Set<String> getRecoveryAcknowledgements(UUID uuid) {
         ensureInitialized();
         Set<String> ids = new HashSet<>();
         try (Connection conn = connection();
@@ -920,7 +926,7 @@ public class SqlStorage implements StorageProvider {
                 while (rs.next()) ids.add(rs.getString("notification_id"));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            throw new IllegalStateException("Could not restore acknowledgements", e);
         }
         return ids;
     }

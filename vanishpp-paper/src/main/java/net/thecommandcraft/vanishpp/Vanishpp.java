@@ -666,7 +666,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         ruleExpiries.restoreNow(provider);
         Set<UUID> acknowledged = new HashSet<>();
         for (UUID uuid : provider.getAllKnownPlayers())
-            if (provider.hasAcknowledged(uuid, "protocol-lib-warning")) acknowledged.add(uuid);
+            if (provider.getRecoveryAcknowledgements(uuid).contains("protocol-lib-warning")) acknowledged.add(uuid);
         if (provider == storageProvider && !stopping) ignoredWarningPlayers.addAll(acknowledged);
     }
 
@@ -699,7 +699,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             int level = source.getVanishLevel(uuid);
             if (level != 1) target.setVanishLevel(uuid, level);
             // Acknowledgements
-            source.getAcknowledgements(uuid).forEach(id -> target.addAcknowledgement(uuid, id));
+            source.getRecoveryAcknowledgements(uuid).forEach(id -> target.addAcknowledgement(uuid, id));
             target.setAutoVanishOnJoin(uuid, source.getAutoVanishOnJoin(uuid));
             for (String preset : source.listRulePresets(uuid))
                 target.saveRulePreset(uuid, preset, source.loadRulePreset(uuid, preset));
@@ -1269,7 +1269,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 Player vanished = Bukkit.getPlayer(uuid);
                 if (vanished == null || !vanished.isOnline()) continue;
                 if (isProxyJoinPending(uuid)) { updateVanishVisibility(vanished); continue; }
-                if (proxyBridge != null && proxyBridge.isProxyDetected()) {
+                if (proxyBridge != null && proxyBridge.isProxyDetected() && !proxyBridge.isTransferPending(uuid)) {
                     int level = permissionManager.vanishLevel(vanished);
                     Integer previous = publishedVisibilityLevels.put(uuid, level);
                     if (!java.util.Objects.equals(previous, level))

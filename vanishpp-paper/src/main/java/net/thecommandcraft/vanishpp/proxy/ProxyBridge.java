@@ -279,6 +279,11 @@ public class ProxyBridge implements PluginMessageListener {
     }
 
     public byte[] prepareVanishEvent(UUID uuid, String playerName, boolean vanished, int vanishLevel) {
+        if (isTransferPending(uuid)) return null;
+        return createVanishEvent(uuid, playerName, vanished, vanishLevel);
+    }
+
+    private byte[] createVanishEvent(UUID uuid, String playerName, boolean vanished, int vanishLevel) {
         if (!active) return null;
         long sequence = outboundSequence.incrementAndGet();
         JsonObject payload = new JsonObject();
@@ -351,13 +356,13 @@ public class ProxyBridge implements PluginMessageListener {
                 return;
             }
             var provider = plugin.getStorageProvider();
-            int level = provider.getVanishLevel(uuid);
             plugin.getVanishScheduler().runEntity(player, () -> {
                 if (!active || !player.isOnline() || transfers.get(uuid) != transfer) return;
                 if (version != plugin.stateVersion(uuid) || provider != plugin.getStorageProvider()) {
                     settleTransfer(player, transfer); return;
                 }
-                byte[] event = prepareVanishEvent(uuid, player.getName(), plugin.isVanished(uuid), level);
+                int level = plugin.getPermissionManager().vanishLevel(player);
+                byte[] event = createVanishEvent(uuid, player.getName(), plugin.isVanished(uuid), level);
                 JsonObject payload = JsonParser.parseString(VppPacket.decode(event).jsonPayload()).getAsJsonObject();
                 payload.addProperty("requestId", transfer.id);
                 player.sendPluginMessage(plugin, VppChannel.CHANNEL, VppPacket.encode(VppMessage.TRANSFER_READY, payload.toString()));

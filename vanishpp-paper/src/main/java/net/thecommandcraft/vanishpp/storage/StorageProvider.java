@@ -66,6 +66,8 @@ public interface StorageProvider {
     /** Returns all notification IDs acknowledged by this player. */
     Set<String> getAcknowledgements(UUID uuid);
 
+    default Set<String> getRecoveryAcknowledgements(UUID uuid) { return getAcknowledgements(uuid); }
+
     // ── Rule Presets ──────────────────────────────────────────────────────────
 
     void saveRulePreset(UUID uuid, String presetName, Map<String, Boolean> rules);
