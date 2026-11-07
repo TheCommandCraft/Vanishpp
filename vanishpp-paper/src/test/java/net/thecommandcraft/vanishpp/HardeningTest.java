@@ -338,6 +338,18 @@ class HardeningTest {
     }
 
     @Test
+    void repeatedRefreshTicksDoNotQueueOverlappingSqlScans() throws Exception {
+        SqlStorage storage = mock(SqlStorage.class);
+        when(storage.getRecoveryRules(player.getUniqueId())).thenReturn(Map.of());
+        field(plugin, "storageProvider", storage);
+        invoke(plugin, "startSyncTask");
+        scheduler.fireTimers(); scheduler.fireTimers(); scheduler.drainAsync();
+        long reads = mockingDetails(storage).getInvocations().stream()
+                .filter(call -> call.getMethod().getName().equals("getRecoveryRules")).count();
+        assertEquals(1, reads, "slow SQL refreshes must coalesce subsequent timer ticks instead of accumulating scans");
+    }
+
+    @Test
     void mobSafetyDoesNotScheduleAPollForEveryMobEveryTick() throws Exception {
         field(plugin, "hasPaperApi", false);
         new MobAiManager(plugin).register();
@@ -558,6 +570,24 @@ class HardeningTest {
         assertAll(
                 () -> assertEquals(Material.RED_CONCRETE, general.getItem(18).getType(), "boolean color must reflect the current setting"),
                 () -> assertTrue(lore.contains("7"), "numeric lore must show the current value rather than its default"));
+    }
+
+    @Test
+    void configGuiDisplaysAndEditsTheEffectiveProxyValue() {
+        player.setOp(true);
+        plugin.getConfigManager().getConfig().set("permissions.default-see-level", 5);
+        var snapshot = new net.thecommandcraft.vanishpp.common.config.ProxyConfigSnapshot();
+        snapshot.defaultSeeLevel = 9;
+        plugin.getProxyConfigCache().update(snapshot.toJson(), "backend");
+        ConfigGUI gui = new ConfigGUI(plugin); gui.open(player); gui.onClick(click(4));
+        String current = PlainTextComponentSerializer.plainText().serialize(player.getOpenInventory().getTopInventory()
+                .getItem(19).getItemMeta().lore().get(2));
+        gui.onClick(new InventoryClickEvent(player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
+                19, ClickType.RIGHT, InventoryAction.PICKUP_HALF));
+        assertAll(
+                () -> assertTrue(current.endsWith("9"), "GUI must display the effective proxy value, not the local fallback"),
+                () -> assertEquals(10, plugin.getConfigManager().getConfig().getInt("permissions.default-see-level"),
+                        "GUI edits must start from the value actually displayed"));
     }
 
     @Test
