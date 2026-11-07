@@ -205,7 +205,7 @@ class StateDurabilityTest {
     @Test
     void deniedAndAbandonedLoginsForgetTheirFailedRead() throws Exception {
         StorageProvider storage = mock(StorageProvider.class);
-        when(storage.isVanished(player.getUniqueId())).thenThrow(new IllegalStateException("unavailable"));
+        when(storage.isVanished(any())).thenThrow(new IllegalStateException("unavailable"));
         field(plugin, "storageProvider", storage);
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));

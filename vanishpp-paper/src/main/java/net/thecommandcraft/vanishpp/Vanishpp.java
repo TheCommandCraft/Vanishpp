@@ -65,6 +65,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private volatile boolean stopping;
     private record ProxyJoin(boolean previouslyHidden, long version, boolean invisible, boolean collidable) {}
     private final Map<UUID, ProxyJoin> proxyJoins = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> proxyJoinAnswers = new ConcurrentHashMap<>();
     private RedisStorage redisStorage;
     private PermissionManager permissionManager;
     private RuleManager ruleManager;
@@ -726,6 +727,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {
         if (stopping) return;
+        // An answered join still waiting on storage keeps its provisional hide; the newest decision applies when it lifts.
+        if (proxyJoins.containsKey(uuid) && proxyJoinAnswers.computeIfPresent(uuid, (key, old) -> vanish) != null) return;
         long decisionVersion = beginStateDecision(uuid);
         stateWrites.submit(() -> persistState(uuid, vanish, decisionVersion));
         // Idempotency check: skip if state already matches network message
@@ -850,18 +853,33 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
+    /** Records the proxy's answer for a held join; network decisions arriving later replace it until the hold lifts. */
+    public void answerProxyJoin(UUID uuid, boolean hidden) {
+        if (proxyJoins.containsKey(uuid)) proxyJoinAnswers.put(uuid, hidden);
+    }
+
+    /** The decision a held join resolves to, or null once a local decision has superseded the hold. */
+    public Boolean heldJoinDecision(UUID uuid, boolean answer) {
+        ProxyJoin pending = proxyJoins.get(uuid);
+        if (pending == null || pending.version() != stateVersion(uuid)) return null;
+        return proxyJoinAnswers.getOrDefault(uuid, answer);
+    }
+
     public void completeProxyJoin(Player player, boolean hidden) { completeProxyJoin(player, hidden, true); }
 
     /** Lifts a join hold; {@code persist} is false when {@code hidden} was just read from storage. */
     public void completeProxyJoin(Player player, boolean hidden, boolean persist) {
         UUID uuid = player.getUniqueId();
+        Boolean answered = proxyJoinAnswers.remove(uuid);
+        if (answered != null) { hidden = answered; persist = true; }
         ProxyJoin pending = proxyJoins.remove(uuid);
         if (pending == null || pending.version() != stateVersion(uuid)) return;
+        boolean decision = hidden;
         if (persist) {
             long decisionVersion = beginStateDecision(uuid);
-            stateWrites.submit(() -> persistState(uuid, hidden, decisionVersion));
+            stateWrites.submit(() -> persistState(uuid, decision, decisionVersion));
         }
-        if (hidden) applyVanishEffects(player, false);
+        if (decision) applyVanishEffects(player, false);
         else if (pending.previouslyHidden()) removeVanishEffects(player, false);
         else {
             vanishedPlayers.remove(uuid);
@@ -874,6 +892,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void abortProxyJoin(UUID uuid) {
+        proxyJoinAnswers.remove(uuid);
         ProxyJoin pending = proxyJoins.remove(uuid);
         if (pending != null && !pending.previouslyHidden() && pending.version() == stateVersion(uuid)) vanishedPlayers.remove(uuid);
     }
