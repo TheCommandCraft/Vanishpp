@@ -795,6 +795,46 @@ class StateDurabilityTest {
                 "SQL must report a failed final save instead of letting shutdown mark it successful");
     }
 
+    @Test
+    void failedPostInitializationRuleScanKeepsTheLiveDeadline() throws Exception {
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:rule_scan_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        AtomicBoolean failRules = new AtomicBoolean();
+        DataSource intercepted = mock(DataSource.class);
+        when(intercepted.getConnection()).thenAnswer(call -> {
+            java.sql.Connection real = database.getConnection();
+            return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{java.sql.Connection.class},
+                    (self, method, args) -> {
+                        if (failRules.get() && method.getName().equals("prepareStatement")
+                                && ((String) args[0]).startsWith("SELECT rule_key, rule_value"))
+                            throw new java.sql.SQLException("temporary rule scan failure");
+                        return invokeJdbc(method, real, args);
+                    });
+        });
+        SqlStorage sql = sqlStorage(intercepted);
+        sql.init();
+        field(plugin, "storageProvider", sql);
+        plugin.setTemporaryRule(player, "can_chat", true, false, 0);
+        scheduler.drainAsync();
+        failRules.set(true);
+        plugin.storageRecovered(sql);
+        scheduler.drainAsync();
+        failRules.set(false);
+        scheduler.runDelayedPass();
+        scheduler.drainAsync();
+        assertFalse(sql.getRule(player.getUniqueId(), "can_chat", true),
+                "a failed rules scan must not replace a live expiry with successful absence");
+    }
+
+    @Test
+    void repeatedReloadCancelsReplacedLongDeadlineTasks() {
+        plugin.setTemporaryRule(player, "can_chat", true, false, 86400);
+        scheduler.drainAsync();
+        for (int i = 0; i < 5; i++) { plugin.reloadPluginConfig(); scheduler.drainAsync(); }
+        long longTasks = scheduler.later.stream().filter(task -> scheduler.delays.getOrDefault(task, 0L) > 1000000L).count();
+        assertEquals(1L, longTasks, "repeated reload must retain exactly one live long-deadline task");
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
