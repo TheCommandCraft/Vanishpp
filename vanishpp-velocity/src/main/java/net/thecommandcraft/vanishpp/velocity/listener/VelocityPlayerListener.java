@@ -40,8 +40,11 @@ public class VelocityPlayerListener {
     /** After the player is fully connected, flush again (post-connect is safer for message delivery). */
     @Subscribe
     public void onServerPostConnect(ServerPostConnectEvent event) {
-        event.getPlayer().getCurrentServer().ifPresent(conn ->
-                dispatcher.flushQueue(conn.getServerInfo().getName()));
+        event.getPlayer().getCurrentServer().ifPresent(conn -> {
+            dispatcher.sendPong(conn.getServer(), plugin.getProxy().getVersion().getVersion(), stateManager.getSession());
+            dispatcher.flushQueue(conn.getServerInfo().getName());
+            dispatcher.sendStateResponse(conn.getServer(), stateManager);
+        });
     }
 
     @Subscribe

@@ -28,6 +28,7 @@ public class PaperChannelListener {
     private final ProxyStateManager stateManager;
     private final PaperChannelDispatcher dispatcher;
     private final VelocityConfigManager configManager;
+    private final Map<String, Long> clientRevisions = new java.util.concurrent.ConcurrentHashMap<>();
 
     public PaperChannelListener(VanishppVelocity plugin, ProxyStateManager stateManager,
                                 PaperChannelDispatcher dispatcher, VelocityConfigManager configManager) {
@@ -90,15 +91,29 @@ public class PaperChannelListener {
         String version = json.has("pluginVersion") ? json.get("pluginVersion").getAsString() : "?";
         plugin.getLogger().info("VanishPP Paper plugin connected: {} (plugin v{})", serverName, version);
 
+        if (json.has("vanished")) {
+            java.util.List<net.thecommandcraft.vanishpp.common.state.NetworkVanishState> restored = new java.util.ArrayList<>();
+            for (var entry : json.getAsJsonArray("vanished")) {
+                var state = entry.getAsJsonObject();
+                restored.add(new net.thecommandcraft.vanishpp.common.state.NetworkVanishState(
+                        UUID.fromString(state.get("uuid").getAsString()), "", serverName,
+                        state.has("vanishLevel") ? state.get("vanishLevel").getAsInt() : 1));
+            }
+            if (stateManager.bootstrap(restored)) {
+                for (RegisteredServer backend : plugin.getProxy().getAllServers())
+                    if (!backend.equals(server)) dispatcher.sendStateResponse(backend, stateManager);
+            }
+        }
+
         // PONG
-        dispatcher.sendPong(server, plugin.getProxy().getVersion().getVersion());
+        dispatcher.sendPong(server, plugin.getProxy().getVersion().getVersion(), stateManager.getSession());
 
         // Config push with server-specific overrides applied
         ProxyConfigSnapshot snapshot = configManager.getSnapshot().applyOverride(serverName);
         dispatcher.pushConfigTo(server, snapshot);
 
         // Full state sync
-        dispatcher.sendStateResponse(server, stateManager.getAllVanishedPlayers());
+        dispatcher.sendStateResponse(server, stateManager);
 
         // If a proxy update is already known, push it immediately to the newly connected server
         plugin.getUpdateChecker().notifyServer(server);
@@ -111,17 +126,25 @@ public class PaperChannelListener {
         boolean vanished  = json.get("vanished").getAsBoolean();
         int     level     = json.has("vanishLevel") ? json.get("vanishLevel").getAsInt() : 1;
 
-        stateManager.setVanished(uuid, playerName, serverName, vanished, level);
-
-        // Broadcast to all other connected Paper servers
-        dispatcher.broadcastVanishSync(uuid, vanished, serverName);
+        if (plugin.getProxy().getPlayer(uuid).flatMap(player -> player.getCurrentServer())
+                .map(connection -> !connection.getServerInfo().getName().equals(serverName)).orElse(false)) return;
+        synchronized (stateManager) {
+            if (json.has("clientSession") && json.has("sequence")) {
+                String key = serverName + ":" + uuid + ":" + json.get("clientSession").getAsString();
+                long sequence = json.get("sequence").getAsLong();
+                if (sequence <= clientRevisions.getOrDefault(key, -1L)) return;
+                clientRevisions.put(key, sequence);
+            }
+            stateManager.setVanished(uuid, playerName, serverName, vanished, level);
+            dispatcher.broadcastVanishSync(uuid, vanished, serverName, stateManager.getSession(), stateManager.getRevision());
+        }
 
         plugin.getLogger().debug("VanishEvent: {} {} on {}", playerName, vanished ? "vanished" : "unvanished", serverName);
     }
 
     /** Paper wants the full vanished player set. */
     private void handleStateQuery(RegisteredServer server) {
-        dispatcher.sendStateResponse(server, stateManager.getAllVanishedPlayers());
+        dispatcher.sendStateResponse(server, stateManager);
     }
 
     /** Paper explicitly requests an up-to-date config push. */

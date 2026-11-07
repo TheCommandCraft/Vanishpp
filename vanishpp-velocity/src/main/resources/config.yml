@@ -97,6 +97,8 @@ hooks:
 # --- [ STORAGE ] ---
 # The proxy manages the database. Paper servers in proxy mode do NOT need their
 # own DB configured — they receive all state from the proxy.
+# YAML state is persisted in state.yml; SQL mode also keeps this recovery snapshot.
+# Accepted network config edits are saved to this config.yml.
 storage:
   type: "YAML"
   mysql:
@@ -140,7 +142,8 @@ proxy:
 # Server names must match those in velocity.toml [servers].
 # Use "all" to apply to every server (lowest priority).
 # Multiple servers can share an override with comma-separated names: "lobby, hub"
-# Per-server overrides take priority over "all" overrides.
+# Order: global defaults, all, matching groups in alphabetical key order, exact server.
+# Overrides are resolved once on Velocity, independently of YAML entry order.
 #
 # Supported override keys mirror config.yml paths, e.g.:
 #   invisibility-features.god-mode

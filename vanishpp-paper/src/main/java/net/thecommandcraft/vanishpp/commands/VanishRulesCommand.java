@@ -160,13 +160,12 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             boolean newValue = Boolean.parseBoolean(valStr);
             boolean oldValue = rules.getRule(target, rule);
 
-            rules.setRule(target, rule, newValue);
-
             // Temporary Logic
             if (args.length > argOffset + 2) {
                 try {
                     int seconds = Integer.parseInt(args[argOffset + 2]);
-                    plugin.scheduleRuleRevert(target, rule, oldValue, seconds);
+                    if (seconds < 0) throw new NumberFormatException("negative duration");
+                    plugin.setTemporaryRule(target, rule, newValue, oldValue, seconds);
                     String statusKey = newValue ? "rules.status-on" : "rules.status-off";
                     String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
                     plugin.getMessageManager().sendMessage(sender,
@@ -178,6 +177,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                             plugin.getConfigManager().getLanguageManager().getMessage("rules.invalid-seconds"));
                 }
             } else {
+                rules.setRule(target, rule, newValue);
                 String statusKey = newValue ? "rules.status-on" : "rules.status-off";
                 String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
                 plugin.getMessageManager().sendMessage(sender,

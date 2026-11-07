@@ -12,7 +12,7 @@ The Velocity companion consumes this channel before checking the sender, so clie
 
 ### Database integrations
 
-Vanish++ stores all vanish state in a **persistent, always-up-to-date database**. Proxy plugins (Velocity, BungeeCord) can reliably sync vanish status across multiple backend servers without any plugin-to-plugin integration.
+Vanish++ stores all vanish state in a **persistent storage**. Proxy plugins (Velocity, BungeeCord) can reliably sync vanish status across multiple backend servers without any plugin-to-plugin integration.
 
 ## Database Schema
 
@@ -56,7 +56,7 @@ public void applyVanishEffects(Player player) {
     
     UUID persistUuid = player.getUniqueId();
     vanishScheduler.runAsync(() -> {
-        storageProvider.setVanished(persistUuid, true);  // DB write (async, <1ms)
+        storageProvider.setVanished(persistUuid, true);  // ordered asynchronous storage write
         if (redisStorage != null) 
             redisStorage.broadcastVanish(persistUuid, true);  // Notify other servers
     });
@@ -486,7 +486,7 @@ public class VanishppBungeeAdapter extends Plugin {
 
 ✅ **Vanish++ v1.1.6 provides a production-grade database for proxy plugins:**
 
-- **Always up-to-date**: Async writes persist within 10ms
+- **Always up-to-date**: Accepted writes persist in submission order; storage latency determines completion time
 - **Reliable**: Transactions ensure consistency even on crashes
 - **Scalable**: Handles 1000+ vanished players per database
 - **Flexible**: Works with polling, Redis, or hybrid approaches
@@ -500,3 +500,5 @@ public class VanishppBungeeAdapter extends Plugin {
 **Last Updated**: 2026-04-04  
 **Version**: 1.1.6  
 **Status**: Production-Ready ✅
+
+The native Velocity companion now persists decisions in `state.yml`, imports unknown backend state during bootstrap, and sends revisioned state updates. Explicit proxy decisions win over backend YAML on login; an empty fresh snapshot does not erase persisted backend state. Reload preserves feature tasks and drains accepted writes before switching storage. Shared SQL and native proxy messaging remain distinct authority modes; use the companion on every secured backend and upgrade both jars together.

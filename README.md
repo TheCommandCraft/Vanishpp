@@ -164,6 +164,13 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 
 **Storage options:** YAML (default), MySQL 5.7+, PostgreSQL 12+, Redis (cross-server sync)
 
+Vanish state writes are ordered and drained before storage closes. A failed database read retains known hidden state and retries; a login with no safe cached state must reconnect after storage recovers. Reload keeps following, mob checks, bridge retries, and other feature timers running. Equipped armour is never removed when unvanishing.
+
+Original gamemodes, temporary-rule deadlines, and warning acknowledgements survive reconnects and restarts. A newer rule decision cancels an older expiry, including shared SQL changes. Automatic migration to an empty backend copies preferences, presets, history, statistics, rules, levels, acknowledgements, and vanish state in either direction. The previous provider stays open until migration completes.
+
+The Velocity companion persists vanish and explicit unvanish decisions in `state.yml`, including with default YAML storage. During bootstrap it imports unknown vanished players from backends without overriding known proxy decisions. Proxy state takes precedence over backend YAML on login. Network configuration patches are saved to proxy `config.yml`. Override order is global defaults, `all`, matching comma-separated groups (alphabetical key order), then an exact server name; Velocity resolves these once. Redis subscriptions reconnect with backoff from 250 ms to 30 seconds and close their connection on shutdown. Shared SQL state is reconciled when a subscription recovers.
+
+
 ---
 
 ## Installation

@@ -30,6 +30,20 @@ public interface StorageProvider {
 
     void addAcknowledgement(UUID uuid, String notificationId);
 
+    void removeAcknowledgement(UUID uuid, String notificationId);
+
+    String EXPIRY_PREFIX = "__expiry__";
+
+    void setTemporaryRule(UUID uuid, String rule, boolean value, String token);
+
+    default boolean expireRule(UUID uuid, String rule, String token) {
+        synchronized (this) {
+            if (!token.equals(getRules(uuid).get(EXPIRY_PREFIX + rule))) return false;
+            setRule(uuid, rule, Boolean.parseBoolean(token.split(":", 3)[1]));
+            return true;
+        }
+    }
+
     // Permission Levels (Advanced Tracking)
     int getVanishLevel(UUID uuid);
 

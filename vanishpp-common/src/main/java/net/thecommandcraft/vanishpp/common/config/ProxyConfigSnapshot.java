@@ -129,33 +129,17 @@ public class ProxyConfigSnapshot {
         // Deep-copy via JSON round-trip to avoid mutating the original
         ProxyConfigSnapshot merged = fromJson(toJson());
 
-        // Apply "all" first, then specific server
-        List<String> keys = new ArrayList<>();
-        keys.add("all");
-        keys.add(serverName == null ? "" : serverName.trim().toLowerCase());
-
-        for (String overrideKey : serverOverrides.keySet()) {
-            boolean matches = false;
-            // Split the key by comma (e.g. "lobby, hub") and check if serverName is in the list
-            for (String part : overrideKey.split(",")) {
-                String trimmed = part.trim().toLowerCase();
-                if (trimmed.equals("all") || (serverName != null && trimmed.equals(serverName.trim().toLowerCase()))) {
-                    matches = true;
-                    break;
-                }
-            }
-            if (!matches) continue;
-
-            Map<String, Object> overrides = serverOverrides.get(overrideKey);
-            if (overrides == null) continue;
-
-            // Priority: "all" before specific; specific server overrides "all"
-            // We process in the order: all entries first, then non-all entries second
-            // This loop runs twice — once collecting "all" keys, once collecting specific keys
-            // Simply applying them in iteration order is fine because serverOverrides is a LinkedHashMap
-            // and the proxy inserts "all" before specific server keys.
-            applyFlatOverrides(merged, overrides);
-        }
+        String name = serverName == null ? "" : serverName.trim().toLowerCase(Locale.ROOT);
+        serverOverrides.entrySet().stream()
+                .filter(e -> Arrays.stream(e.getKey().split(",")).map(String::trim)
+                        .anyMatch(part -> part.equalsIgnoreCase("all") || part.equalsIgnoreCase(name)))
+                .sorted(Comparator.<Map.Entry<String, Map<String, Object>>>comparingInt(e -> {
+                    String key = e.getKey().trim().toLowerCase(Locale.ROOT);
+                    if (key.equals("all")) return 0;
+                    return key.equals(name) ? 2 : 1;
+                }).thenComparing(e -> e.getKey().toLowerCase(Locale.ROOT)))
+                .forEach(e -> { if (e.getValue() != null) applyFlatOverrides(merged, e.getValue()); });
+        merged.serverOverrides.clear();
 
         return merged;
     }

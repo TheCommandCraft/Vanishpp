@@ -35,3 +35,5 @@ EssentialsX private messages, including replies, nicknames and wildcard recipien
 Incognito changes display and tab text, including TAB's name override; it does not replace the authenticated profile, UUID or skin. Simple Voice Chat isolation filters outgoing sound events instead of changing the disabled icon.
 
 Voice callbacks use immutable audience facts published on player-owned server tasks. Built-in permission changes and LuckPerms recalculation invalidate facts immediately; unknown facts deny hidden-player audio until refreshed. Other permission providers are sampled by the regular visibility synchronization task.
+
+State synchronization includes proxy session/revision fields and explicit visible-player decisions. Upgrade both jars together. Back up Velocity `state.yml` alongside `config.yml`; it preserves decisions when SQL writes are still queued or the proxy uses YAML. Older peers do not provide the revision and bootstrap guarantees.

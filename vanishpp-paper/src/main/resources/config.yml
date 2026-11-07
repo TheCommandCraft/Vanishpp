@@ -195,6 +195,8 @@ hooks:
 
 # --- [ STORAGE ] ---
 # How player data (vanish status, rules, levels) is stored.
+# State writes are ordered. Reload migrates every stored category to an empty backend.
+# Failed reads retain hidden state and retry; unknown-state logins must reconnect.
 storage:
   # Options: YAML, MYSQL, POSTGRESQL
   type: "YAML"

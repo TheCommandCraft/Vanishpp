@@ -37,6 +37,10 @@ public class ProxyBridge implements PluginMessageListener {
     private volatile boolean proxyDetected = false;
     private volatile boolean handshakeComplete = false;
     private volatile String serverName;
+    private final String clientSession = UUID.randomUUID().toString();
+    private final java.util.concurrent.atomic.AtomicLong outboundSequence = new java.util.concurrent.atomic.AtomicLong();
+    private String networkSession;
+    private final Map<UUID, Long> networkRevisions = new HashMap<>();
 
     /** Pending player-list request callbacks, keyed by request ID. */
     private final ConcurrentHashMap<String, CompletableFuture<List<NetworkVanishState>>> pendingListRequests
@@ -76,6 +80,8 @@ public class ProxyBridge implements PluginMessageListener {
         helloSent = false;
         proxyDetected = false;
         handshakeComplete = false;
+        networkSession = null;
+        networkRevisions.clear();
         pendingPackets.clear();
         plugin.getServer().getMessenger().unregisterOutgoingPluginChannel(plugin, VppChannel.CHANNEL);
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, VppChannel.CHANNEL);
@@ -102,6 +108,14 @@ public class ProxyBridge implements PluginMessageListener {
         JsonObject payload = new JsonObject();
         payload.addProperty("serverName", name);
         payload.addProperty("pluginVersion", plugin.getDescription().getVersion());
+        JsonArray restored = new JsonArray();
+        for (UUID uuid : plugin.getRawVanishedPlayers()) {
+            JsonObject state = new JsonObject();
+            state.addProperty("uuid", uuid.toString());
+            state.addProperty("vanishLevel", plugin.getStorageProvider().getVanishLevel(uuid));
+            restored.add(state);
+        }
+        payload.add("vanished", restored);
         helloSent = true;
         carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, VppPacket.encode(VppMessage.HELLO, payload.toString()));
     }
@@ -143,7 +157,13 @@ public class ProxyBridge implements PluginMessageListener {
     }
 
     private void handlePong(JsonObject json) {
-        if (!helloSent || handshakeComplete) return;
+        if (!helloSent) return;
+        String session = json.has("session") ? json.get("session").getAsString() : null;
+        if (handshakeComplete && Objects.equals(networkSession, session)) return;
+        if (session != null && !session.equals(networkSession)) {
+            networkSession = session;
+            networkRevisions.clear();
+        }
         handshakeComplete = true;
         proxyDetected = true;
         String proxyVersion = json.has("proxyVersion") ? json.get("proxyVersion").getAsString() : "?";
@@ -160,14 +180,40 @@ public class ProxyBridge implements PluginMessageListener {
     private void handleVanishSync(JsonObject json) {
         UUID uuid = UUID.fromString(json.get("uuid").getAsString());
         boolean vanished = json.get("vanished").getAsBoolean();
-        plugin.getVanishScheduler().runGlobal(() -> plugin.handleNetworkVanishSync(uuid, vanished));
+        plugin.getVanishScheduler().runGlobal(() -> {
+            if (acceptRevision(uuid, json)) plugin.handleNetworkVanishSync(uuid, vanished);
+        });
     }
 
     private void handleStateResponse(JsonObject json) {
         if (!json.has("vanished")) return;
         JsonArray arr = json.getAsJsonArray("vanished");
         List<NetworkVanishState> states = parseStates(arr);
-        plugin.getVanishScheduler().runGlobal(() -> plugin.applyNetworkVanishState(states));
+        plugin.getVanishScheduler().runGlobal(() -> {
+            Set<UUID> hidden = new HashSet<>();
+            for (NetworkVanishState state : states) {
+                hidden.add(state.uuid());
+                if (acceptRevision(state.uuid(), json)) plugin.handleNetworkVanishSync(state.uuid(), true);
+            }
+            Set<UUID> visible = new HashSet<>();
+            if (json.has("visible")) for (JsonElement entry : json.getAsJsonArray("visible")) visible.add(UUID.fromString(entry.getAsString()));
+            if (json.has("authoritative") && json.get("authoritative").getAsBoolean()) {
+                visible.addAll(plugin.getRawVanishedPlayers());
+                visible.removeAll(hidden);
+            }
+            for (UUID uuid : visible) if (acceptRevision(uuid, json)) plugin.handleNetworkVanishSync(uuid, false);
+        });
+    }
+
+    private boolean acceptRevision(UUID uuid, JsonObject json) {
+        if (!json.has("session") || !json.has("revision")) return true;
+        String session = json.get("session").getAsString();
+        if (networkSession == null) networkSession = session;
+        if (!networkSession.equals(session)) return false;
+        long revision = json.get("revision").getAsLong();
+        if (revision < networkRevisions.getOrDefault(uuid, -1L)) return false;
+        networkRevisions.put(uuid, revision);
+        return true;
     }
 
     private void handleProxyUpdateNotify(JsonObject json) {
@@ -199,6 +245,8 @@ public class ProxyBridge implements PluginMessageListener {
         payload.addProperty("playerName", playerName);
         payload.addProperty("vanished", vanished);
         payload.addProperty("vanishLevel", vanishLevel);
+        payload.addProperty("clientSession", clientSession);
+        payload.addProperty("sequence", outboundSequence.incrementAndGet());
         sendPacket(VppPacket.encode(VppMessage.VANISH_EVENT, payload.toString()));
     }
 

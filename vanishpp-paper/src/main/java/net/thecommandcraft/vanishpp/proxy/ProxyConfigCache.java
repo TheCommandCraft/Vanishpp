@@ -29,7 +29,7 @@ public class ProxyConfigCache {
      */
     public void update(String json, String serverName) {
         ProxyConfigSnapshot global = ProxyConfigSnapshot.fromJson(json);
-        this.snapshot = global.applyOverride(serverName);
+        this.snapshot = global;
 
         plugin.getLogger().info("[Proxy] Config cache updated from proxy (server: " + serverName + ").");
 

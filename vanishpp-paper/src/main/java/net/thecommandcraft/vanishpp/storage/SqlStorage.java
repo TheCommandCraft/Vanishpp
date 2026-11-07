@@ -322,7 +322,7 @@ public class SqlStorage implements StorageProvider {
             }
         } catch (SQLException e) {
             handleDatabaseError(e);
-            return false;
+            throw new IllegalStateException("Could not read vanish state", e);
         }
     }
 
@@ -359,6 +359,7 @@ public class SqlStorage implements StorageProvider {
             }
         } catch (SQLException e) {
             handleDatabaseError(e);
+            throw new IllegalStateException("Could not read vanished players", e);
         }
         return players;
     }
@@ -384,19 +385,70 @@ public class SqlStorage implements StorageProvider {
     @Override
     public void setRule(UUID uuid, String rule, Object value) {
         if (writeSuspended) return;
-        String query = "REPLACE INTO vpp_rules (uuid, rule_key, rule_value) VALUES (?, ?, ?)";
-        if (type.equals("postgresql")) {
-            query = "INSERT INTO vpp_rules (uuid, rule_key, rule_value) VALUES (?, ?, ?) ON CONFLICT (uuid, rule_key) DO UPDATE SET rule_value = EXCLUDED.rule_value";
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                if (!rule.startsWith(EXPIRY_PREFIX)) writeRule(conn, uuid, EXPIRY_PREFIX + rule, null);
+                writeRule(conn, uuid, rule, value);
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not save rule", e);
         }
+    }
 
-        try (Connection conn = dataSource.getConnection();
-                PreparedStatement ps = conn.prepareStatement(query)) {
+    @Override
+    public void setTemporaryRule(UUID uuid, String rule, boolean value, String token) {
+        if (writeSuspended) return;
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                writeRule(conn, uuid, EXPIRY_PREFIX + rule, token);
+                writeRule(conn, uuid, rule, value);
+                conn.commit();
+            } catch (SQLException e) { conn.rollback(); throw e; }
+        } catch (SQLException e) { throw new IllegalStateException("Could not save temporary rule", e); }
+    }
+
+    private void writeRule(Connection conn, UUID uuid, String rule, Object value) throws SQLException {
+        String query = value == null ? "DELETE FROM vpp_rules WHERE uuid = ? AND rule_key = ?"
+                : type.equals("postgresql")
+                ? "INSERT INTO vpp_rules (uuid, rule_key, rule_value) VALUES (?, ?, ?) ON CONFLICT (uuid, rule_key) DO UPDATE SET rule_value = EXCLUDED.rule_value"
+                : "REPLACE INTO vpp_rules (uuid, rule_key, rule_value) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, uuid.toString());
             ps.setString(2, rule);
-            ps.setString(3, value.toString());
+            if (value != null) ps.setString(3, value.toString());
             ps.executeUpdate();
+        }
+    }
+
+    @Override
+    public boolean expireRule(UUID uuid, String rule, String token) {
+        if (writeSuspended) return false;
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT rule_value FROM vpp_rules WHERE uuid = ? AND rule_key = ? FOR UPDATE")) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, EXPIRY_PREFIX + rule);
+                boolean matches;
+                try (ResultSet rs = ps.executeQuery()) { matches = rs.next() && token.equals(rs.getString(1)); }
+                if (matches) {
+                    writeRule(conn, uuid, rule, Boolean.parseBoolean(token.split(":", 3)[1]));
+                    writeRule(conn, uuid, EXPIRY_PREFIX + rule, null);
+                }
+                conn.commit();
+                return matches;
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Database error: " + e.getMessage());
+            throw new IllegalStateException("Could not expire rule", e);
         }
     }
 
@@ -721,7 +773,8 @@ public class SqlStorage implements StorageProvider {
     @Override
     public Set<UUID> getAllKnownPlayers() {
         Set<UUID> uuids = new HashSet<>();
-        String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements"};
+        String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements",
+                "vpp_rule_presets", "vpp_preferences", "vpp_history", "vpp_stats"};
         for (String table : tables) {
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement ps = conn.prepareStatement("SELECT DISTINCT uuid FROM " + table);
@@ -751,6 +804,17 @@ public class SqlStorage implements StorageProvider {
             plugin.getLogger().severe("Database error: " + e.getMessage());
         }
         return ids;
+    }
+
+    @Override
+    public void removeAcknowledgement(UUID uuid, String notificationId) {
+        if (writeSuspended) return;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, notificationId);
+            ps.executeUpdate();
+        } catch (SQLException e) { throw new IllegalStateException("Could not remove acknowledgement", e); }
     }
 
     @Override

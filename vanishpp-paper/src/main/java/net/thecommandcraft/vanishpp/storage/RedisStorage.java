@@ -14,6 +14,9 @@ public class RedisStorage {
     private JedisPool jedisPool;
     private String channel = "vanishpp:sync";
     private Thread pubSubThread;
+    private volatile boolean running;
+    private volatile Jedis subscriber;
+    private volatile JedisPubSub subscription;
 
     public RedisStorage(Vanishpp plugin) {
         this.plugin = plugin;
@@ -33,29 +36,50 @@ public class RedisStorage {
             this.jedisPool = new JedisPool(poolConfig, host, port, 2000, password);
         }
 
-        // Start Subscriber Thread with proper exception handling and unsubscribe on shutdown
+        running = true;
         this.pubSubThread = new Thread(() -> {
-            Jedis jedis = null;
-            try {
-                jedis = jedisPool.getResource();
-                jedis.subscribe(new JedisPubSub() {
-                    @Override
-                    public void onMessage(String channel, String message) {
-                        handleSyncMessage(message);
-                    }
-                    @Override
-                    public void onSubscribe(String channel, int subscribedChannels) {
-                        plugin.getLogger().fine("Redis subscribed to channel: " + channel);
-                    }
-                }, channel);
-            } catch (Exception e) {
-                if (!Thread.currentThread().isInterrupted()) {
-                    plugin.getLogger().warning("Redis Subscriber disconnected: " + e.getMessage());
+            long backoff = 250L;
+            while (running && !Thread.currentThread().isInterrupted()) {
+                boolean[] connected = {false};
+                try (Jedis jedis = jedisPool.getResource()) {
+                    subscriber = jedis;
+                    if (!running) break;
+                    subscription = new JedisPubSub() {
+                        @Override public void onMessage(String channel, String message) {
+                            if (running) handleSyncMessage(message);
+                        }
+                        @Override public void onSubscribe(String channel, int count) {
+                            connected[0] = true;
+                            plugin.getLogger().fine("Redis subscribed to channel: " + channel);
+                            // Reconcile missed messages only from shared SQL, never unrelated local YAML.
+                            if (plugin.getStorageProvider() instanceof SqlStorage && !plugin.isProxyAuthoritative()) {
+                                try {
+                                    java.util.Map<UUID, Long> versions = plugin.stateVersionsSnapshot();
+                                    java.util.Set<UUID> hidden = plugin.getStorageProvider().getVanishedPlayers();
+                                    plugin.getVanishScheduler().runGlobal(() -> {
+                                        if (!running) return;
+                                        for (UUID uuid : hidden)
+                                            if (plugin.stateVersion(uuid) == versions.getOrDefault(uuid, 0L)) plugin.handleNetworkVanishSync(uuid, true);
+                                        for (UUID uuid : versions.keySet())
+                                            if (!hidden.contains(uuid) && plugin.stateVersion(uuid) == versions.get(uuid))
+                                                plugin.handleNetworkVanishSync(uuid, false);
+                                    });
+                                } catch (RuntimeException e) { plugin.getLogger().warning("Redis resubscribe reconciliation failed: " + e.getMessage()); }
+                            }
+                        }
+                    };
+                    jedis.subscribe(subscription, channel);
+                } catch (Exception e) {
+                    if (running) plugin.getLogger().warning("Redis subscriber disconnected; retrying: " + e.getMessage());
+                } finally {
+                    subscriber = null;
+                    subscription = null;
                 }
-            } finally {
-                if (jedis != null) {
-                    try { jedis.close(); } catch (Exception ignored) {}
-                }
+                if (!running) break;
+                if (connected[0]) backoff = 250L;
+                try { Thread.sleep(backoff); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+                backoff = Math.min(30000L, backoff * 2L);
             }
         }, "Vanishpp-Redis-Subscriber");
         this.pubSubThread.setDaemon(true);
@@ -65,6 +89,11 @@ public class RedisStorage {
     }
 
     public void shutdown() {
+        running = false;
+        Jedis active = subscriber;
+        if (active != null) {
+            try { active.disconnect(); } catch (RuntimeException ignored) {}
+        }
         // Gracefully interrupt the subscriber thread
         if (pubSubThread != null && pubSubThread.isAlive()) {
             pubSubThread.interrupt();
