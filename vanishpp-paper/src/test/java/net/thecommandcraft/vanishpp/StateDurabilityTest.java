@@ -156,6 +156,7 @@ class StateDurabilityTest {
         when(storage.getAutoVanishOnJoin(player.getUniqueId())).thenReturn(true);
         field(plugin, "storageProvider", storage);
         plugin.getPermissionManager().addPermission(player.getUniqueId(), "vanishpp.vanish");
+        plugin.handleNetworkVanishSync(player.getUniqueId(), true);
         login();
         plugin.removeVanishEffects(player);
         scheduler.drainAsync();
