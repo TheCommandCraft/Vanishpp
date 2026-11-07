@@ -42,11 +42,13 @@ public class MobAiManager implements Listener {
     private record ChunkWork(World world, int x, int z) {}
     private record MobHandle(java.util.UUID id, java.lang.ref.WeakReference<Mob> mob, ChunkWork region) {}
     private record MobWork(MobHandle handle, java.util.UUID target) {}
+    private record Initialization(ChunkWork region, java.util.Iterator<Entity> entities) {}
     private final java.util.Map<java.util.UUID, java.util.UUID> mobTargets = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Map<java.util.UUID, java.util.Set<java.util.UUID>> targeting = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Map<java.util.UUID, MobHandle> handles = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Queue<ChunkWork> chunks = new java.util.concurrent.ConcurrentLinkedQueue<>();
-    private final java.util.Queue<MobHandle> initializing = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.Queue<Initialization> initializing = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.Queue<MobHandle> deferredInitialization = new java.util.concurrent.ConcurrentLinkedQueue<>();
     private final java.util.Queue<java.util.UUID> requests = new java.util.concurrent.ConcurrentLinkedQueue<>();
     private final java.util.Set<java.util.UUID> requested = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.Set<java.util.UUID> inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -70,8 +72,8 @@ public class MobAiManager implements Listener {
         ChunkWork chunk = chunks.poll();
         if (chunk != null) plugin.getVanishScheduler().runRegion(chunk.world(), chunk.x(), chunk.z(), () -> {
             if (!chunk.world().isChunkLoaded(chunk.x(), chunk.z())) return;
-            for (Entity entity : chunk.world().getChunkAt(chunk.x(), chunk.z()).getEntities())
-                if (entity instanceof Mob mob) initializing.add(handle(mob));
+            Entity[] entities = chunk.world().getChunkAt(chunk.x(), chunk.z()).getEntities();
+            initializing.add(new Initialization(chunk, java.util.Arrays.asList(entities).iterator()));
         });
         java.util.Map<ChunkWork, List<MobWork>> batches = new java.util.HashMap<>();
         for (int work = 0; work < ENTITY_WORK_PER_TICK; work++) {
@@ -88,14 +90,23 @@ public class MobAiManager implements Listener {
                 if (mob == null) forget(uuid);
                 else if (inFlight.add(uuid)) batches.computeIfAbsent(handle.region(), key -> new ArrayList<>()).add(new MobWork(handle, currentPlayer));
             } else {
-                var handle = initializing.poll();
+                var handle = deferredInitialization.poll();
+                if (handle == null) {
+                    Initialization initial = initializing.peek();
+                    if (initial != null) {
+                        if (!initial.entities().hasNext()) { initializing.poll(); continue; }
+                        Entity entity = initial.entities().next();
+                        if (!(entity instanceof Mob mob)) continue;
+                        handle = new MobHandle(mob.getUniqueId(), new java.lang.ref.WeakReference<>(mob), initial.region());
+                    }
+                }
                 if (handle == null) {
                     if (currentPlayer == null) break;
                     continue;
                 }
                 if (handle.mob().get() != null) {
                     if (inFlight.add(handle.id())) batches.computeIfAbsent(handle.region(), key -> new ArrayList<>()).add(new MobWork(handle, null));
-                    else initializing.add(handle);
+                    else deferredInitialization.add(handle);
                 }
             }
         }
@@ -212,7 +223,9 @@ public class MobAiManager implements Listener {
 
     @EventHandler
     public void onEntitiesLoad(EntitiesLoadEvent event) {
-        for (Entity entity : event.getEntities()) if (entity instanceof Mob mob) initializing.add(handle(mob));
+        org.bukkit.Chunk chunk = event.getChunk();
+        initializing.add(new Initialization(new ChunkWork(chunk.getWorld(), chunk.getX(), chunk.getZ()),
+                new ArrayList<Entity>(event.getEntities()).iterator()));
     }
 
     @EventHandler
@@ -234,7 +247,8 @@ public class MobAiManager implements Listener {
     public void onWorldUnload(org.bukkit.event.world.WorldUnloadEvent event) {
         World world = event.getWorld();
         chunks.removeIf(chunk -> chunk.world().equals(world));
-        initializing.removeIf(handle -> handle.region().world().equals(world));
+        initializing.removeIf(initial -> initial.region().world().equals(world));
+        deferredInitialization.removeIf(handle -> handle.region().world().equals(world));
         regionWork.entrySet().removeIf(entry -> entry.getKey().world().equals(world));
         handles.forEach((uuid, handle) -> { if (handle.region().world().equals(world)) forget(uuid); });
     }
