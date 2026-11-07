@@ -768,6 +768,17 @@ class StateDurabilityTest {
         return java.nio.ByteBuffer.allocate(body.length + 5).put((byte) ordinal).putInt(body.length).put(body).array();
     }
 
+    @Test
+    void unavailableSqlRetryDoesNotConnectOnTheEventThread() throws Exception {
+        DataSource unavailable = mock(DataSource.class);
+        when(unavailable.getConnection()).thenThrow(new java.sql.SQLException("database unavailable"));
+        SqlStorage sql = sqlStorage(unavailable);
+        assertThrows(IllegalStateException.class, () -> sql.isVanished(player.getUniqueId()));
+        verifyNoInteractions(unavailable);
+        scheduler.drainAsync();
+        verify(unavailable, atLeastOnce()).getConnection();
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
