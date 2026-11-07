@@ -219,15 +219,26 @@ class VanishStateTest {
 
     @Test
     void quit_vanishedPlayer_vanishStatePersistedInStorage() {
-        // When a vanished player quits, their vanish state is persisted to storage
-        // so they rejoin as vanished. The in-memory set may still contain them until
-        // the periodic purge runs; this test verifies the storage reflects vanished=true.
+        UUID uuid = player.getUniqueId();
+        assertFalse(plugin.getStorageProvider().isVanished(uuid));
         plugin.applyVanishEffects(player);
         assertTrue(plugin.isVanished(player));
 
-        plugin.getStorageProvider().setVanished(player.getUniqueId(), true);
-        assertTrue(plugin.getStorageProvider().isVanished(player.getUniqueId()),
-                "Vanish state must be persisted in storage so reconnects restore it");
+        server.getPluginManager().callEvent(new PlayerQuitEvent(player,
+                net.kyori.adventure.text.Component.text("left"), PlayerQuitEvent.QuitReason.DISCONNECTED));
+        server.getScheduler().waitAsyncTasksFinished();
+
+        net.thecommandcraft.vanishpp.storage.YamlStorage reopened =
+                new net.thecommandcraft.vanishpp.storage.YamlStorage(plugin);
+        reopened.init();
+        assertTrue(reopened.isVanished(uuid),
+                "Vanish state must survive quit and reopening storage from disk");
+
+        plugin.removeVanishEffects(player);
+        server.getScheduler().waitAsyncTasksFinished();
+        reopened.init();
+        assertFalse(reopened.isVanished(uuid),
+                "Unvanish must remove the durable state from disk");
     }
 
     @Test
