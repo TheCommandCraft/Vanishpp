@@ -280,8 +280,8 @@ class StateDurabilityTest {
         });
         field(plugin, "storageProvider", storage);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
-        Set<?> unread = listenerField(listener, "unreadJoins");
-        assertTrue(unread.contains(player.getUniqueId()), "the replacement login's failed read must survive the older attempt finishing");
+        Map<?, ?> reads = listenerField(listener, "preFetchedVanishState");
+        assertFalse(reads.containsKey(player.getUniqueId()), "the replacement login's failed read must survive the older attempt finishing");
     }
 
     @Test
@@ -290,22 +290,20 @@ class StateDurabilityTest {
         when(storage.isVanished(any())).thenThrow(new IllegalStateException("unavailable"));
         field(plugin, "storageProvider", storage);
         PlayerListener listener = new PlayerListener(plugin);
-        Set<?> unread = listenerField(listener, "unreadJoins");
+        Map<UUID, Object> attempts = listenerField(listener, "loginAttempts");
         var denied = new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId());
         denied.disallow(AsyncPlayerPreLoginEvent.Result.KICK_WHITELIST, Component.text("whitelist"));
         listener.onAsyncPreLogin(denied);
-        assertFalse(unread.contains(player.getUniqueId()), "a login another plugin denied must not record a read");
+        assertFalse(attempts.containsKey(player.getUniqueId()), "a login another plugin denied must not record an attempt");
         UUID abandoned = UUID.randomUUID();
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent("Gone", InetAddress.getLoopbackAddress(), abandoned));
-        assertTrue(unread.contains(abandoned), "a failed read is kept for the join that follows");
-        Map<UUID, Object> attempts = listenerField(listener, "loginAttempts");
+        assertTrue(attempts.containsKey(abandoned), "the attempt is kept for the join that follows");
         var attempt = Class.forName(PlayerListener.class.getName() + "$LoginAttempt").getDeclaredConstructor(long.class);
         attempt.setAccessible(true);
         attempts.put(abandoned, attempt.newInstance(System.nanoTime() - java.util.concurrent.TimeUnit.MINUTES.toNanos(20)));
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
-        assertFalse(unread.contains(abandoned), "an attempt that never joined must be forgotten");
-        assertFalse(attempts.containsKey(abandoned));
-        assertTrue(unread.contains(player.getUniqueId()), "expiry retires only the abandoned attempt");
+        assertFalse(attempts.containsKey(abandoned), "an attempt that never joined must be forgotten");
+        assertTrue(attempts.containsKey(player.getUniqueId()), "expiry retires only the abandoned attempt");
     }
 
     private static void stateResponse(ProxyBridge bridge, com.google.gson.JsonObject json) {

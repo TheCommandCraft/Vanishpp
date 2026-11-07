@@ -75,10 +75,10 @@ public class PlayerListener implements Listener {
         this.rules = plugin.getRuleManager();
     }
 
-    // Players whose login read failed join hidden until a retried read answers.
-    private final Set<UUID> unreadJoins = ConcurrentHashMap.newKeySet();
-    // The newest login of each player that has not joined yet. An attempt's read result and its retirement apply
-    // only while it is still the newest, so a replacement login never loses its state to an older one.
+    // The newest login of each player that has not joined yet. A join goes straight through only when its attempt
+    // is still recorded with a successful read in preFetchedVanishState; a failed, expired or missing read joins
+    // hidden until a retried read answers. An attempt's read result and its retirement apply only while it is
+    // still the newest, so a replacement login never loses its state to an older one.
     private record LoginAttempt(long startedAt) {}
     private final Map<UUID, LoginAttempt> loginAttempts = new ConcurrentHashMap<>();
     // Covers the configuration phase (resource packs) between pre-login and join; denied or abandoned logins expire.
@@ -91,7 +91,6 @@ public class PlayerListener implements Listener {
             if (now - attempt.startedAt() > ABANDONED_LOGIN_NANOS) loginAttempts.computeIfPresent(player, (key, newest) -> {
                 if (newest != attempt) return newest;
                 preFetchedVanishState.remove(key);
-                unreadJoins.remove(key);
                 return null;
             });
         });
@@ -110,13 +109,8 @@ public class PlayerListener implements Listener {
         JoinState state = read;
         loginAttempts.computeIfPresent(uuid, (key, newest) -> {
             if (newest != attempt) return newest;
-            if (state != null) {
-                preFetchedVanishState.put(key, state);
-                unreadJoins.remove(key);
-            } else {
-                preFetchedVanishState.remove(key);
-                unreadJoins.add(key);
-            }
+            if (state != null) preFetchedVanishState.put(key, state);
+            else preFetchedVanishState.remove(key);
             return newest;
         });
     }
@@ -172,12 +166,12 @@ public class PlayerListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        boolean[] consumed = new boolean[1];
+        boolean[] confirmed = new boolean[1];
         loginAttempts.compute(uuid, (key, newest) -> {
-            consumed[0] = unreadJoins.remove(key);
+            confirmed[0] = newest != null && preFetchedVanishState.containsKey(key);
             return null;
         });
-        boolean unread = consumed[0];
+        boolean unread = !confirmed[0];
         boolean proxy = plugin.getProxyBridge() != null && plugin.getProxyBridge().isConfigured();
         if (!proxy && !unread) {
             finishJoin(event);
