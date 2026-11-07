@@ -186,7 +186,7 @@ class StateDurabilityTest {
     @Test
     void temporaryRuleCannotOverwriteANewerPermanentDecision() {
         plugin.getRuleManager().setRule(player, "can_chat", true);
-        plugin.scheduleRuleRevert(player, "can_chat", false, 1);
+        plugin.scheduleRuleRevert(player, "can_chat", false, 0);
         plugin.getRuleManager().setRule(player, "can_chat", true);
         scheduler.runDelayedPass();
         assertTrue(plugin.getRuleManager().getRule(player, "can_chat"),

@@ -55,7 +55,7 @@ class ProxyBridgeLifecycleTest {
         UUID staff = UUID.randomUUID();
         plugin.handleNetworkVanishSync(staff, true);
         receive(VppMessage.PONG, "{}");
-        receive(VppMessage.STATE_RESPONSE, "{\"vanished\":[]}");
+        receive(VppMessage.STATE_RESPONSE, "{\"vanished\":[],\"visible\":[\"" + staff + "\"]}");
         receive(VppMessage.CONFIG_PUSH, "{\"config\":\"{}\"}");
         server.getScheduler().performOneTick();
         boolean latePongRejected = !bridge.isProxyDetected();
