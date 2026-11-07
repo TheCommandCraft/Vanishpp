@@ -979,6 +979,27 @@ class StateDurabilityTest {
         assertFalse(plugin.hasPendingStateWrite(player.getUniqueId()));
     }
 
+    @Test
+    void acknowledgementAcceptedDuringMigrationReachesThePublishedProvider() throws Exception {
+        plugin.getStorageProvider().setVanished(player.getUniqueId(), true);
+        plugin.getConfigManager().getConfig().set("storage.type", "MYSQL");
+        plugin.getConfigManager().getConfig().save(new java.io.File(plugin.getDataFolder(), "config.yml"));
+        Set<String> copied = new HashSet<>();
+        AtomicBoolean admitted = new AtomicBoolean();
+        try (var providers = mockConstruction(SqlStorage.class, (target, context) -> {
+            doAnswer(call -> { copied.add(call.getArgument(1)); return null; }).when(target).addAcknowledgement(any(), anyString());
+            doAnswer(call -> {
+                if (admitted.compareAndSet(false, true)) plugin.setWarningIgnored(player, true);
+                return null;
+            }).when(target).setStats(any(), any()); // This player's acknowledgement snapshot has already been copied.
+        })) {
+            plugin.reloadPluginConfig(); scheduler.drainAsync();
+            assertTrue(admitted.get(), "a new decision must be accepted during the migration copy");
+            assertTrue(copied.contains("protocol-lib-warning"),
+                    "acknowledgements accepted during migration must be ordered onto the new provider");
+        }
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
