@@ -657,6 +657,59 @@ class StateDurabilityTest {
         }
     }
 
+    @Test
+    void historyMigrationUsesOneStableSnapshotBeyondAPageBoundary() throws Exception {
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:history_snapshot_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage writer = sqlStorage(database);
+        writer.init();
+        var stamp = java.time.Instant.parse("2026-01-01T00:00:00Z");
+        for (int i = 0; i < 600; i++) writer.addHistoryEntry(new VanishHistoryEntry(player.getUniqueId(), "Staff",
+                VanishHistoryEntry.Action.VANISH, stamp, "lobby", "entry-" + i, 0));
+        var reads = new java.util.concurrent.atomic.AtomicInteger();
+        DataSource intercepted = mock(DataSource.class);
+        when(intercepted.getConnection()).thenAnswer(call -> {
+            java.sql.Connection real = database.getConnection();
+            return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{java.sql.Connection.class},
+                    (self, method, args) -> {
+                        Object result = invokeJdbc(method, real, args);
+                        if (!method.getName().equals("prepareStatement") || !((String) args[0]).startsWith("SELECT * FROM vpp_history")) return result;
+                        return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{java.sql.PreparedStatement.class},
+                                (statement, operation, values) -> {
+                                    Object rows = invokeJdbc(operation, result, values);
+                                    if (!operation.getName().equals("executeQuery")) return rows;
+                                    return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{java.sql.ResultSet.class},
+                                            (cursor, move, parameters) -> {
+                                                Object value = invokeJdbc(move, rows, parameters);
+                                                if (move.getName().equals("next") && Boolean.TRUE.equals(value) && reads.incrementAndGet() == 500)
+                                                    writer.addHistoryEntry(new VanishHistoryEntry(player.getUniqueId(), "Staff", VanishHistoryEntry.Action.VANISH,
+                                                            stamp.plusSeconds(1), "lobby", "concurrent", 0));
+                                                return value;
+                                            });
+                                });
+                    });
+        });
+        SqlStorage source = sqlStorage(intercepted);
+        source.init();
+        field(plugin, "storageProvider", source);
+        StorageProvider target = mock(StorageProvider.class);
+        List<String> copied = new ArrayList<>();
+        doAnswer(call -> { copied.add(((VanishHistoryEntry) call.getArgument(0)).getReason()); return null; })
+                .when(target).addHistoryEntry(any());
+        var migrate = Vanishpp.class.getDeclaredMethod("migrateIfNeeded", StorageProvider.class, String.class);
+        migrate.setAccessible(true);
+        migrate.invoke(plugin, target, "YAML");
+        assertAll(
+                () -> assertEquals(601, writer.getAllHistory(1, 1000).size(), "concurrent-write stimulus must actually execute"),
+                () -> assertEquals(600, copied.size(), "migration must read a stable history snapshot instead of shifting OFFSET pages"),
+                () -> assertEquals(600, new HashSet<>(copied).size(), "every tied-timestamp history row must be copied exactly once"));
+    }
+
+    private static Object invokeJdbc(java.lang.reflect.Method method, Object target, Object[] args) throws Throwable {
+        try { return method.invoke(target, args); }
+        catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
