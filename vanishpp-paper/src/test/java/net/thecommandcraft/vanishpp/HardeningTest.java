@@ -62,6 +62,14 @@ class HardeningTest {
             @Override public InventoryView openInventory(Inventory inventory) {
                 var view = new be.seeseemelk.mockbukkit.inventory.PlayerInventoryViewMock(this, inventory) {
                     @Override public Component title() { return titles.getOrDefault(inventory, Component.text("Inventory")); }
+                    @Override public ItemStack getItem(int rawSlot) {
+                        Inventory target = getInventory(rawSlot);
+                        return target == null ? null : target.getItem(convertSlot(rawSlot));
+                    }
+                    @Override public void setItem(int rawSlot, ItemStack item) {
+                        Inventory target = getInventory(rawSlot);
+                        if (target != null) target.setItem(convertSlot(rawSlot), item);
+                    }
                 };
                 super.openInventory(view);
                 return getOpenInventory();
@@ -265,6 +273,7 @@ class HardeningTest {
         SqlStorage storage = mock(SqlStorage.class);
         field(plugin, "storageProvider", storage);
         when(storage.getRules(player.getUniqueId())).thenReturn(Map.of(RuleManager.CAN_CHAT, true));
+        when(storage.getRecoveryRules(player.getUniqueId())).thenReturn(Map.of(RuleManager.CAN_CHAT, true));
         var listener = new PlayerListener(plugin);
         scheduler.run("async", () -> listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(
                 player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId())));
@@ -520,7 +529,8 @@ class HardeningTest {
     }
 
     private long ruleListeners() {
-        return HandlerList.getRegisteredListeners(plugin).stream().filter(listener -> listener.getListener() instanceof RulesGUI).count();
+        return HandlerList.getRegisteredListeners(plugin).stream().map(org.bukkit.plugin.RegisteredListener::getListener)
+                .filter(listener -> listener instanceof RulesGUI).distinct().count();
     }
 
     private void clearMessages() { while (player.nextMessage() != null) {} }
