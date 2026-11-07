@@ -179,6 +179,63 @@ class ProxyProtocolTest {
         assertFalse(transfer.getResult().isAllowed(), "lost source must deny an unconfirmed fallback instead of exposing stale state");
     }
 
+    @Test
+    void acceptedTransferReleasesSourceWhenALaterListenerDeniesIt() throws Exception {
+        AtomicBoolean resumed = new AtomicBoolean();
+        var transfer = beginTransfer(resumed);
+        event(source, VppMessage.valueOf("TRANSFER_READY"), readyDecision());
+        assertTrue(resumed.get(), "READY must resume remaining pre-connect listeners");
+        transfer.setResult(ServerPreConnectEvent.ServerResult.denied());
+        List.copyOf(timeouts).forEach(Runnable::run);
+        assertTrue(sent.stream().anyMatch(packet -> packet.type().name().equals("TRANSFER_CANCEL")),
+                "a downstream denied transfer must release its source fence with authenticated cancellation");
+    }
+
+    @Test
+    void failedDestinationConnectionReleasesTheAcceptedSourceFence() throws Exception {
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(resumed);
+        event(source, VppMessage.valueOf("TRANSFER_READY"), readyDecision());
+        assertTrue(resumed.get());
+        var failed = new com.velocitypowered.api.event.player.KickedFromServerEvent(player, destination.getServer(), null, true,
+                com.velocitypowered.api.event.player.KickedFromServerEvent.Notify.create(net.kyori.adventure.text.Component.text("failed")));
+        var listener = new VelocityPlayerListener(plugin, states, dispatcher);
+        for (Method method : listener.getClass().getMethods()) {
+            if (method.isAnnotationPresent(Subscribe.class) && Arrays.equals(method.getParameterTypes(), new Class<?>[]{failed.getClass()}))
+                method.invoke(listener, failed);
+        }
+        assertTrue(sent.stream().anyMatch(packet -> packet.type().name().equals("TRANSFER_CANCEL")),
+                "failed destination connection must cancel the accepted source fence");
+    }
+
+    @Test
+    void denialTimerCanRunWhileTransferPersistenceIsBlocked() throws Exception {
+        AtomicBoolean resumed = new AtomicBoolean();
+        var transfer = beginTransfer(resumed);
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var worker = java.util.concurrent.CompletableFuture.runAsync(() -> states.getTransfers().complete(source, readyDecision(), () -> {
+            entered.countDown();
+            try { release.await(5, java.util.concurrent.TimeUnit.SECONDS); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            return true;
+        }));
+        try {
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS), "blocked persistence stimulus must start");
+            assertTimeoutPreemptively(java.time.Duration.ofSeconds(1), () -> List.copyOf(timeouts).forEach(Runnable::run),
+                    "denial timer must not wait on the persistence monitor");
+            assertTrue(resumed.get(), "blocked persistence must not prevent denial from completing the event");
+            assertFalse(transfer.getResult().isAllowed());
+        } finally { release.countDown(); worker.get(5, java.util.concurrent.TimeUnit.SECONDS); }
+    }
+
+    private JsonObject readyDecision() {
+        var prepare = sent.stream().filter(packet -> packet.type().name().equals("TRANSFER_PREPARE")).reduce((first, second) -> second).orElseThrow();
+        JsonObject ready = decision("a-session", 1, true);
+        ready.addProperty("requestId", JsonParser.parseString(prepare.jsonPayload()).getAsJsonObject().get("requestId").getAsString());
+        return ready;
+    }
+
     private JsonObject decision(String session, long sequence, boolean hidden) {
         JsonObject json = new JsonObject();
         json.addProperty("uuid", id.toString()); json.addProperty("playerName", "Staff");
