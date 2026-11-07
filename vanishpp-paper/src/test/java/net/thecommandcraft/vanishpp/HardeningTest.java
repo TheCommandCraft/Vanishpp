@@ -376,6 +376,21 @@ class HardeningTest {
     }
 
     @Test
+    void authoritativeChangesAreNotVetoedAndDuplicateRestorationHasNoPostEvent() {
+        TransitionListener listener = new TransitionListener();
+        listener.cancelVanish = true; listener.cancelUnvanish = true;
+        server.getPluginManager().registerEvents(listener, plugin);
+        plugin.handleNetworkVanishSync(player.getUniqueId(), true);
+        assertTrue(plugin.isVanished(player), "authoritative vanish must apply even when a local listener would veto it");
+        plugin.handleNetworkVanishSync(player.getUniqueId(), true);
+        plugin.handleNetworkVanishSync(player.getUniqueId(), false);
+        assertAll(
+                () -> assertFalse(plugin.isVanished(player), "authoritative unvanish must apply"),
+                () -> assertEquals(0, listener.vanishCalls + listener.unvanishCalls, "authoritative restoration is not a local cancellable request"),
+                () -> assertEquals(List.of(true, false), listener.posts, "only actual authoritative changes must emit post events"));
+    }
+
+    @Test
     void mobTargetingMasterSwitchActuallyAllowsTargetingWhenDisabled() {
         state().add(player.getUniqueId());
         plugin.getConfigManager().disableMobTarget = false;
