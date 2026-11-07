@@ -103,6 +103,29 @@ class StateDurabilityTest {
     }
 
     @Test
+    void failedLoginReadAdmitsPlayersHiddenUntilTheReadSucceeds() throws Exception {
+        PlayerMock observer = server.addPlayer();
+        observer.setOp(false);
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.isVanished(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        field(plugin, "storageProvider", storage);
+        PlayerListener listener = new PlayerListener(plugin);
+        var prelogin = new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId());
+        listener.onAsyncPreLogin(prelogin);
+        assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, prelogin.getLoginResult(),
+                "a failed vanish state read must not lock out a player");
+        PlayerJoinEvent join = new PlayerJoinEvent(player, Component.text("joined"));
+        listener.onJoin(join);
+        assertFalse(observer.canSee(player), "a player whose stored state is unknown must join hidden");
+        assertNull(join.joinMessage(), "the join announcement must wait for the stored state");
+        scheduler.drainAsync();
+        assertTrue(observer.canSee(player), "a successful read must reveal a player stored as visible");
+        assertFalse(plugin.isVanished(player));
+    }
+
+    @Test
     void proxyLoginDoesNotReplaceNetworkStateWithMissingLocalRecord() throws Exception {
         ProxyBridge proxy = mock(ProxyBridge.class);
         when(proxy.isProxyDetected()).thenReturn(true);
