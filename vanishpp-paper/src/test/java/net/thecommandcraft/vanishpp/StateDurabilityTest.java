@@ -1359,7 +1359,7 @@ class StateDurabilityTest {
         }
     }
 
-    private static class ControlledScheduler implements VanishScheduler {
+    private class ControlledScheduler implements VanishScheduler {
         String context = "event";
         boolean cancelled;
         final List<Runnable> async = new ArrayList<>();
