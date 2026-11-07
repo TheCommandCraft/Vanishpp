@@ -267,16 +267,19 @@ class FeatureTest {
         UUID uuid = player.getUniqueId();
 
         player.performCommand("vanish");
+        awaitStorageWrites();
         assertTrue(plugin.getStorageProvider().isVanished(uuid), "Storage must record vanished state");
 
         plugin.getRuleManager().setRule(player, RuleManager.CAN_PICKUP_ITEMS, true);
         assertTrue(plugin.getRuleManager().getRule(player, RuleManager.CAN_PICKUP_ITEMS),
                 "Pickup rule should be set to true");
 
+        awaitStorageWrites();
         Map<String, Object> rules = plugin.getStorageProvider().getRules(uuid);
         assertEquals(true, rules.get(RuleManager.CAN_PICKUP_ITEMS), "Rule must be persisted in storage");
 
         plugin.setWarningIgnored(player, true);
+        awaitStorageWrites();
         assertTrue(plugin.getStorageProvider().hasAcknowledged(uuid, "protocol-lib-warning"),
                 "Acknowledgement must be persisted");
     }
@@ -396,4 +399,10 @@ class FeatureTest {
         assertEquals(2, plugin.getStorageProvider().getVanishLevel(player.getUniqueId()));
         assertEquals(5, plugin.getStorageProvider().getVanishLevel(p2.getUniqueId()));
     }
+    private void awaitStorageWrites() {
+        var completed = new java.util.concurrent.CountDownLatch(1);
+        plugin.submitStorageWork(completed::countDown);
+        assertDoesNotThrow(() -> assertTrue(completed.await(5, java.util.concurrent.TimeUnit.SECONDS), "accepted storage writes must finish"));
+    }
+
 }

@@ -96,7 +96,7 @@ public class VanishAutoCommand implements CommandExecutor, TabCompleter {
 
         if (newValue == null) {
             // Toggle current
-            plugin.getVanishScheduler().runAsync(() -> {
+            plugin.submitStorageWork(() -> {
                 boolean current = plugin.getStorageProvider().getAutoVanishOnJoin(uuid);
                 plugin.getStorageProvider().setAutoVanishOnJoin(uuid, !current);
                 boolean next = !current;
@@ -109,7 +109,7 @@ public class VanishAutoCommand implements CommandExecutor, TabCompleter {
             });
         } else {
             final boolean finalValue = newValue;
-            plugin.getVanishScheduler().runAsync(() -> {
+            plugin.submitStorageWork(() -> {
                 plugin.getStorageProvider().setAutoVanishOnJoin(uuid, finalValue);
                 plugin.getVanishScheduler().runGlobal(() -> {
                     String key = finalValue ? "auto-vanish.enabled" : "auto-vanish.disabled";

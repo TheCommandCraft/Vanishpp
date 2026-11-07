@@ -56,7 +56,7 @@ class ProxyBridgeSecurityTest {
         server.getScheduler().performOneTick();
         boolean preHandshakeSync = plugin.getRawVanishedPlayers().contains(staff);
         plugin.handleNetworkVanishSync(staff, true);
-        receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[]}");
+        receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[],\"visible\":[\"" + staff + "\"]}");
         receive(bridge, VppMessage.CONFIG_PUSH, "{\"config\":\"{}\"}");
         server.getScheduler().performOneTick();
         boolean preHandshakeState = plugin.getRawVanishedPlayers().contains(staff);
@@ -69,7 +69,7 @@ class ProxyBridgeSecurityTest {
         server.getScheduler().performOneTick();
         assertFalse(plugin.getRawVanishedPlayers().contains(staff), "connected proxy sync must still apply");
         plugin.handleNetworkVanishSync(staff, true);
-        receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[]}");
+        receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[],\"visible\":[\"" + staff + "\"]}");
         receive(bridge, VppMessage.CONFIG_PUSH, "{\"config\":\"{}\"}");
         server.getScheduler().performOneTick();
         assertFalse(plugin.getRawVanishedPlayers().contains(staff), "connected proxy snapshot must still apply");
@@ -77,7 +77,7 @@ class ProxyBridgeSecurityTest {
         bridge.shutdown();
         plugin.handleNetworkVanishSync(staff, true);
         receive(bridge, VppMessage.PONG, "{}");
-        receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[]}");
+        receive(bridge, VppMessage.STATE_RESPONSE, "{\"vanished\":[],\"visible\":[\"" + staff + "\"]}");
         server.getScheduler().performOneTick();
         boolean shutdownPreservedState = plugin.getRawVanishedPlayers().contains(staff);
 

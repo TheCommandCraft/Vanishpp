@@ -160,13 +160,12 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             boolean newValue = Boolean.parseBoolean(valStr);
             boolean oldValue = rules.getRule(target, rule);
 
-            rules.setRule(target, rule, newValue);
-
             // Temporary Logic
             if (args.length > argOffset + 2) {
                 try {
                     int seconds = Integer.parseInt(args[argOffset + 2]);
-                    plugin.scheduleRuleRevert(target, rule, oldValue, seconds);
+                    if (seconds < 0) throw new NumberFormatException("negative duration");
+                    plugin.setTemporaryRule(target, rule, newValue, oldValue, seconds);
                     String statusKey = newValue ? "rules.status-on" : "rules.status-off";
                     String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
                     plugin.getMessageManager().sendMessage(sender,
@@ -178,6 +177,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                             plugin.getConfigManager().getLanguageManager().getMessage("rules.invalid-seconds"));
                 }
             } else {
+                rules.setRule(target, rule, newValue);
                 String statusKey = newValue ? "rules.status-on" : "rules.status-off";
                 String status = plugin.getConfigManager().getLanguageManager().getMessage(statusKey);
                 plugin.getMessageManager().sendMessage(sender,
@@ -321,7 +321,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 for (String rule : rules.getAvailableRules()) {
                     snapshot.put(rule, rules.getRule(player, rule));
                 }
-                plugin.getVanishScheduler().runAsync(() -> {
+                plugin.submitStorageWork(() -> {
                     plugin.getStorageProvider().saveRulePreset(uuid, name, snapshot);
                     plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
                             lm.getMessage("rules-preset.saved").replace("%name%", name)));
@@ -333,7 +333,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 String name = args[2];
-                plugin.getVanishScheduler().runAsync(() -> {
+                plugin.submitStorageWork(() -> {
                     Map<String, Boolean> preset = plugin.getStorageProvider().loadRulePreset(uuid, name);
                     if (preset == null || preset.isEmpty()) {
                         plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
@@ -350,7 +350,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                 });
             }
             case "list" -> {
-                plugin.getVanishScheduler().runAsync(() -> {
+                plugin.submitStorageWork(() -> {
                     Set<String> presets = plugin.getStorageProvider().listRulePresets(uuid);
                     plugin.getVanishScheduler().runGlobal(() -> {
                         if (presets.isEmpty()) {
@@ -372,7 +372,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 String name = args[2];
-                plugin.getVanishScheduler().runAsync(() -> {
+                plugin.submitStorageWork(() -> {
                     plugin.getStorageProvider().deleteRulePreset(uuid, name);
                     plugin.getVanishScheduler().runGlobal(() -> plugin.getMessageManager().sendMessage(player,
                             lm.getMessage("rules-preset.deleted").replace("%name%", name)));

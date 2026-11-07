@@ -25,9 +25,16 @@ public class VelocityPlayerListener {
         this.dispatcher = dispatcher;
     }
 
+    @Subscribe(order = com.velocitypowered.api.event.PostOrder.LAST)
+    public void onServerPreConnect(com.velocitypowered.api.event.player.ServerPreConnectEvent event,
+                                   com.velocitypowered.api.event.Continuation continuation) {
+        stateManager.getTransfers().begin(event, continuation);
+    }
+
     /** When a player switches servers, update their tracked server name and flush any queued messages. */
     @Subscribe
     public void onServerConnected(ServerConnectedEvent event) {
+        stateManager.getTransfers().connected(event.getPlayer().getUniqueId());
         String serverName = event.getServer().getServerInfo().getName();
 
         // Update vanish state server name if this player is vanished
@@ -40,8 +47,22 @@ public class VelocityPlayerListener {
     /** After the player is fully connected, flush again (post-connect is safer for message delivery). */
     @Subscribe
     public void onServerPostConnect(ServerPostConnectEvent event) {
-        event.getPlayer().getCurrentServer().ifPresent(conn ->
-                dispatcher.flushQueue(conn.getServerInfo().getName()));
+        event.getPlayer().getCurrentServer().ifPresent(conn -> {
+            dispatcher.sendPong(conn.getServer(), plugin.getProxy().getVersion().getVersion(), stateManager.getSession());
+            dispatcher.flushQueue(conn.getServerInfo().getName());
+            dispatcher.sendStateResponse(conn.getServer(), stateManager);
+        });
+    }
+
+    @Subscribe
+    public void onServerKick(com.velocitypowered.api.event.player.KickedFromServerEvent event) {
+        if (event.kickedDuringServerConnect())
+            stateManager.getTransfers().failed(event.getPlayer().getUniqueId(), event.getServer());
+    }
+
+    @Subscribe
+    public void onDisconnect(com.velocitypowered.api.event.connection.DisconnectEvent event) {
+        stateManager.getTransfers().connected(event.getPlayer().getUniqueId());
     }
 
     @Subscribe

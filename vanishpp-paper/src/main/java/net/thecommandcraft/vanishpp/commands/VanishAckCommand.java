@@ -31,7 +31,7 @@ public class VanishAckCommand implements TabExecutor {
         // Smart: no args = acknowledge the latest notification
         if (args.length == 0) {
             // Default to acknowledging the most recent notification type
-            plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+            plugin.acknowledge(p.getUniqueId(),
                     "hiding_v" + plugin.getConfigManager().getLatestVersion());
             plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
             return true;
@@ -41,7 +41,7 @@ public class VanishAckCommand implements TabExecutor {
 
         switch (action) {
             case "migration" -> {
-                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                plugin.acknowledge(p.getUniqueId(),
                         "migration_v" + plugin.getConfigManager().getLatestVersion());
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
             }
@@ -54,12 +54,12 @@ public class VanishAckCommand implements TabExecutor {
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.hiding-visible"));
             }
             case "acknowledge_hiding" -> {
-                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                plugin.acknowledge(p.getUniqueId(),
                         "hiding_v" + plugin.getConfigManager().getLatestVersion());
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.hiding-dismissed"));
             }
             case "proxy_config" -> {
-                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                plugin.acknowledge(p.getUniqueId(),
                         "proxy_config_v" + plugin.getConfigManager().getLatestVersion());
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
             }
@@ -80,13 +80,13 @@ public class VanishAckCommand implements TabExecutor {
                 }
                 bridge.sendConfigSync(nonDefaults);
                 // Also dismiss the warning
-                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(),
+                plugin.acknowledge(p.getUniqueId(),
                         "proxy_config_v" + plugin.getConfigManager().getLatestVersion());
                 plugin.getMessageManager().sendMessage(p,
                         lm.getMessage("config.proxy-applied").replace("%count%", String.valueOf(nonDefaults.size())));
             }
             case "invsee_hint" -> {
-                plugin.getStorageProvider().addAcknowledgement(p.getUniqueId(), "invsee-hint");
+                plugin.acknowledge(p.getUniqueId(), "invsee-hint");
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("warnings.invsee-hint-dismissed"));
             }
             default -> plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.acknowledged"));
