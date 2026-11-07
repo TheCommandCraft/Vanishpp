@@ -5,6 +5,7 @@ import be.seeseemelk.mockbukkit.ServerMock;
 import be.seeseemelk.mockbukkit.entity.PlayerMock;
 import net.thecommandcraft.vanishpp.config.PermissionManager;
 import net.thecommandcraft.vanishpp.config.RuleManager;
+import net.thecommandcraft.vanishpp.utils.VanishScheduler;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -12,6 +13,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -219,6 +222,23 @@ class VanishStateTest {
 
     @Test
     void quit_vanishedPlayer_vanishStatePersistedInStorage() {
+        assertQuitAndUnvanishReachDisk();
+    }
+
+    @Test
+    void quit_vanishedPlayer_stateReachesDiskWhenTheWriteStartsLate() throws Exception {
+        List<Runnable> notStarted = new ArrayList<>();
+        VanishScheduler original = plugin.getVanishScheduler();
+        setScheduler(asyncStartingLate(original, notStarted));
+        try {
+            assertQuitAndUnvanishReachDisk();
+        } finally {
+            setScheduler(original);
+            notStarted.forEach(Runnable::run);
+        }
+    }
+
+    private void assertQuitAndUnvanishReachDisk() {
         UUID uuid = player.getUniqueId();
         assertFalse(plugin.getStorageProvider().isVanished(uuid));
         plugin.applyVanishEffects(player);
@@ -226,7 +246,7 @@ class VanishStateTest {
 
         server.getPluginManager().callEvent(new PlayerQuitEvent(player,
                 net.kyori.adventure.text.Component.text("left"), PlayerQuitEvent.QuitReason.DISCONNECTED));
-        server.getScheduler().waitAsyncTasksFinished();
+        awaitStorageWrites();
 
         net.thecommandcraft.vanishpp.storage.YamlStorage reopened =
                 new net.thecommandcraft.vanishpp.storage.YamlStorage(plugin);
@@ -235,10 +255,30 @@ class VanishStateTest {
                 "Vanish state must survive quit and reopening storage from disk");
 
         plugin.removeVanishEffects(player);
-        server.getScheduler().waitAsyncTasksFinished();
+        awaitStorageWrites();
         reopened.init();
         assertFalse(reopened.isVanished(uuid),
                 "Unvanish must remove the durable state from disk");
+    }
+
+    private void awaitStorageWrites() {
+        server.getScheduler().waitAsyncTasksFinished();
+    }
+
+    /** Async work is accepted but does not start until the test releases it, like a pool thread that has not been scheduled yet. */
+    private static VanishScheduler asyncStartingLate(VanishScheduler delegate, List<Runnable> notStarted) {
+        return (VanishScheduler) java.lang.reflect.Proxy.newProxyInstance(VanishScheduler.class.getClassLoader(),
+                new Class<?>[]{VanishScheduler.class}, (self, method, args) -> {
+                    if (method.getName().equals("runAsync")) { notStarted.add((Runnable) args[0]); return null; }
+                    try { return method.invoke(delegate, args); }
+                    catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }
+                });
+    }
+
+    private void setScheduler(VanishScheduler scheduler) throws Exception {
+        var field = Vanishpp.class.getDeclaredField("vanishScheduler");
+        field.setAccessible(true);
+        field.set(plugin, scheduler);
     }
 
     @Test
