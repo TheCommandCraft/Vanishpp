@@ -235,6 +235,38 @@ class StateDurabilityTest {
     }
 
     @Test
+    void aJoinWhoseLoginReadExpiredStaysHiddenUntilARead() throws Exception {
+        PlayerMock observer = server.addPlayer();
+        observer.setOp(false);
+        PlayerListener listener = new PlayerListener(plugin);
+        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
+        Map<UUID, Object> attempts = listenerField(listener, "loginAttempts");
+        var attempt = Class.forName(PlayerListener.class.getName() + "$LoginAttempt").getDeclaredConstructor(long.class);
+        attempt.setAccessible(true);
+        attempts.put(player.getUniqueId(), attempt.newInstance(System.nanoTime() - java.util.concurrent.TimeUnit.MINUTES.toNanos(20)));
+        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent("Other", InetAddress.getLoopbackAddress(), UUID.randomUUID()));
+        PlayerJoinEvent join = new PlayerJoinEvent(player, Component.text("joined"));
+        listener.onJoin(join);
+        assertFalse(observer.canSee(player), "a join whose login read expired must stay hidden until its state is read");
+        assertNull(join.joinMessage(), "the join announcement must wait for the stored state");
+        scheduler.drainAsync();
+        assertTrue(observer.canSee(player), "the read lifts the hold");
+    }
+
+    @Test
+    void aJoinWithoutALoginReadStaysHiddenUntilARead() throws Exception {
+        PlayerMock observer = server.addPlayer();
+        observer.setOp(false);
+        PlayerListener listener = new PlayerListener(plugin);
+        PlayerJoinEvent join = new PlayerJoinEvent(player, Component.text("joined"));
+        listener.onJoin(join);
+        assertFalse(observer.canSee(player), "a join with no login read must stay hidden until its state is read");
+        assertNull(join.joinMessage(), "the join announcement must wait for the stored state");
+        scheduler.drainAsync();
+        assertTrue(observer.canSee(player), "the read lifts the hold");
+    }
+
+    @Test
     void anOlderLoginReadCannotOverwriteAReplacementLogin() throws Exception {
         StorageProvider storage = mock(StorageProvider.class);
         PlayerListener listener = new PlayerListener(plugin);
