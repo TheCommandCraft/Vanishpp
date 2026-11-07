@@ -37,22 +37,8 @@ public final class RuleExpiries implements AutoCloseable {
 
     public void reload() {
         plugin.submitStorageWork(() -> {
-            StorageProvider provider = plugin.getStorageProvider();
-            Map<Key, String> snapshot = new HashMap<>();
             try {
-                for (UUID uuid : provider.getAllKnownPlayers()) {
-                    provider.getRecoveryRules(uuid).forEach((rule, value) -> {
-                        if (rule.startsWith(StorageProvider.EXPIRY_PREFIX))
-                            snapshot.put(new Key(uuid, rule.substring(StorageProvider.EXPIRY_PREFIX.length())), value.toString());
-                    });
-                }
-                synchronized (this) {
-                    if (closed || provider != plugin.getStorageProvider()) return;
-                    cancelRetry.run();
-                    deadlines.values().forEach(deadline -> deadline.cancel.run());
-                    deadlines.clear();
-                    snapshot.forEach((key, token) -> replace(key.uuid(), key.rule(), token, provider));
-                }
+                restoreNow(plugin.getStorageProvider());
             } catch (RuntimeException e) {
                 plugin.getLogger().warning("Rule deadline recovery will retry: " + e.getMessage());
                 synchronized (this) {
@@ -62,6 +48,24 @@ public final class RuleExpiries implements AutoCloseable {
                 }
             }
         });
+    }
+
+    /** Called only by the ordered worker; publication follows a complete successful scan. */
+    public void restoreNow(StorageProvider provider) {
+        Map<Key, String> snapshot = new HashMap<>();
+        for (UUID uuid : provider.getAllKnownPlayers()) {
+            provider.getRecoveryRules(uuid).forEach((rule, value) -> {
+                if (rule.startsWith(StorageProvider.EXPIRY_PREFIX))
+                    snapshot.put(new Key(uuid, rule.substring(StorageProvider.EXPIRY_PREFIX.length())), value.toString());
+            });
+        }
+        synchronized (this) {
+            if (closed || provider != plugin.getStorageProvider()) return;
+            cancelRetry.run();
+            deadlines.values().forEach(deadline -> deadline.cancel.run());
+            deadlines.clear();
+            snapshot.forEach((key, token) -> replace(key.uuid(), key.rule(), token, provider));
+        }
     }
 
     private void schedule(Key key, Deadline deadline, long minimumTicks) {

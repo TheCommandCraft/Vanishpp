@@ -329,8 +329,6 @@ public class ProxyBridge implements PluginMessageListener {
             Transfer transfer = new Transfer(id);
             Transfer old = transfers.put(uuid, transfer);
             if (old != null) old.cancel.run();
-            // The proxy denies an unanswered switch after five seconds. Release a lost cancel safely later.
-            transfer.cancel = plugin.getVanishScheduler().startLater(() -> transfers.remove(uuid, transfer), 200L);
             settleTransfer(player, transfer);
         });
     }
@@ -346,7 +344,12 @@ public class ProxyBridge implements PluginMessageListener {
         UUID uuid = player.getUniqueId();
         long version = plugin.stateVersion(uuid);
         plugin.submitStorageWork(() -> {
-            if (transfers.get(uuid) != transfer || plugin.hasPendingStateWrite(uuid)) return;
+            if (transfers.get(uuid) != transfer) return;
+            if (plugin.hasPendingStateWrite(uuid)) {
+                transfer.cancel = plugin.getVanishScheduler().startLater(() ->
+                        plugin.getVanishScheduler().runEntity(player, () -> settleTransfer(player, transfer), null), 5L);
+                return;
+            }
             var provider = plugin.getStorageProvider();
             int level = provider.getVanishLevel(uuid);
             plugin.getVanishScheduler().runEntity(player, () -> {

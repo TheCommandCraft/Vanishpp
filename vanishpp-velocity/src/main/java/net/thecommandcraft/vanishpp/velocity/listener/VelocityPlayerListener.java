@@ -34,6 +34,7 @@ public class VelocityPlayerListener {
     /** When a player switches servers, update their tracked server name and flush any queued messages. */
     @Subscribe
     public void onServerConnected(ServerConnectedEvent event) {
+        stateManager.getTransfers().connected(event.getPlayer().getUniqueId());
         String serverName = event.getServer().getServerInfo().getName();
 
         // Update vanish state server name if this player is vanished
@@ -51,6 +52,17 @@ public class VelocityPlayerListener {
             dispatcher.flushQueue(conn.getServerInfo().getName());
             dispatcher.sendStateResponse(conn.getServer(), stateManager);
         });
+    }
+
+    @Subscribe
+    public void onServerKick(com.velocitypowered.api.event.player.KickedFromServerEvent event) {
+        if (event.kickedDuringServerConnect())
+            stateManager.getTransfers().failed(event.getPlayer().getUniqueId(), event.getServer());
+    }
+
+    @Subscribe
+    public void onDisconnect(com.velocitypowered.api.event.connection.DisconnectEvent event) {
+        stateManager.getTransfers().connected(event.getPlayer().getUniqueId());
     }
 
     @Subscribe

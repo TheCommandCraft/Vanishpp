@@ -20,6 +20,10 @@ public class SqlStorage implements StorageProvider {
     private volatile boolean initialized;
     private volatile boolean closed;
     private final java.util.concurrent.atomic.AtomicBoolean recoveryScheduled = new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile boolean recovering;
+    private volatile Thread recoveryOwner;
+    private Runnable cancelRecoveryRetry = () -> {};
+    private long recoveryDelay = 100L;
     private final String type;
     private final org.bukkit.configuration.file.FileConfiguration settings;
     private volatile long lastNotificationTime = 0;
@@ -107,19 +111,47 @@ public class SqlStorage implements StorageProvider {
     }
 
     private void ensureInitialized() {
-        if (initialized && !closed) return;
+        if (initialized && !closed && (!recovering || recoveryOwner == Thread.currentThread())) return;
         if (!closed && recoveryScheduled.compareAndSet(false, true)) {
+            recovering = true;
             plugin.getVanishScheduler().runAsync(() -> {
                 try {
                     init();
-                    plugin.storageRecovered(this);
-                } catch (Exception e) {
-                    initialized = false;
-                    plugin.getLogger().warning("SQL initialization will retry: " + e.getMessage());
-                } finally { recoveryScheduled.set(false); }
+                    if (plugin.getStorageProvider() == this) plugin.storageRecovered(this);
+                    else finishRecovery(() -> {});
+                } catch (Exception e) { recoveryFailed(e); }
             });
         }
-        throw new IllegalStateException("SQL storage is unavailable; initialization retry is asynchronous");
+        throw new IllegalStateException("SQL storage is unavailable; initialization and recovery are asynchronous");
+    }
+
+    public boolean isRecovering() { return recovering; }
+
+    /** The ordered worker alone may access an initialized provider before readiness is published. */
+    public void finishRecovery(Runnable restore) {
+        recoveryOwner = Thread.currentThread();
+        try {
+            restore.run();
+            recovering = false;
+            recoveryDelay = 100L;
+            cancelRecoveryRetry.run();
+            recoveryScheduled.set(false);
+        } catch (RuntimeException e) { recoveryFailed(e); }
+        finally { recoveryOwner = null; }
+    }
+
+    private synchronized void recoveryFailed(Exception failure) {
+        initialized = false;
+        recovering = false;
+        recoveryScheduled.set(false);
+        plugin.getLogger().warning("SQL recovery will retry: " + failure.getMessage());
+        cancelRecoveryRetry.run();
+        if (!closed) {
+            cancelRecoveryRetry = plugin.getVanishScheduler().startLater(() -> {
+                try { ensureInitialized(); } catch (IllegalStateException unavailable) { /* retry was queued */ }
+            }, recoveryDelay);
+            recoveryDelay = Math.min(600L, recoveryDelay * 2L);
+        }
     }
 
     private void checkPluginVersionStamp(Connection conn) throws SQLException {
@@ -323,6 +355,7 @@ public class SqlStorage implements StorageProvider {
     @Override
     public synchronized void shutdown() {
         closed = true;
+        cancelRecoveryRetry.run();
         if (dataSource instanceof HikariDataSource hds) {
             hds.close();
         } else if (dataSource instanceof AutoCloseable ac) {
