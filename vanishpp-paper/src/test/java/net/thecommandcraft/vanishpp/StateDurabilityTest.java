@@ -406,6 +406,7 @@ class StateDurabilityTest {
         plugin.scheduleRuleRevert(player, "can_chat", false, 0);
         scheduler.drainAsync();
         SqlStorage otherServer = sqlStorage(dataSource);
+        otherServer.init();
         otherServer.setRule(player.getUniqueId(), "can_chat", true);
         scheduler.runDelayedPass();
         scheduler.drainAsync();
@@ -777,6 +778,21 @@ class StateDurabilityTest {
         verifyNoInteractions(unavailable);
         scheduler.drainAsync();
         verify(unavailable, atLeastOnce()).getConnection();
+    }
+
+    @Test
+    void failedSqlFinalStatisticsAreReportedToTheShutdownCaller() throws Exception {
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:final_failure_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage sql = sqlStorage(database);
+        sql.init();
+        DataSource unavailable = mock(DataSource.class);
+        when(unavailable.getConnection()).thenThrow(new java.sql.SQLException("final save unavailable"));
+        var sourceField = SqlStorage.class.getDeclaredField("dataSource");
+        sourceField.setAccessible(true);
+        sourceField.set(sql, unavailable);
+        assertThrows(IllegalStateException.class, () -> sql.recordVanishSession(player.getUniqueId(), 5000),
+                "SQL must report a failed final save instead of letting shutdown mark it successful");
     }
 
     private void login() {
