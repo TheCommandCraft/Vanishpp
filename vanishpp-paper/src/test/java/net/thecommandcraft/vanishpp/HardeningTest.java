@@ -43,15 +43,31 @@ class HardeningTest {
     private Vanishpp plugin;
     private PlayerMock player;
     private ControlledScheduler scheduler;
+    private final Map<Inventory, Component> titles = new IdentityHashMap<>();
 
     @BeforeEach
     void setUp() throws Exception {
-        server = MockBukkit.mock();
+        server = MockBukkit.mock(new ServerMock() {
+            @Override public be.seeseemelk.mockbukkit.inventory.InventoryMock createInventory(InventoryHolder holder, int size, Component title) {
+                var inventory = super.createInventory(holder, size, PlainTextComponentSerializer.plainText().serialize(title));
+                titles.put(inventory, title);
+                return inventory;
+            }
+        });
         plugin = MockBukkit.load(Vanishpp.class);
         plugin.getConfigManager().disableBlockTriggering = false;
         plugin.getConfigManager().preventSleeping = false;
         plugin.getConfigManager().enableFly = false;
-        player = server.addPlayer();
+        player = new PlayerMock(server, "Viewer") {
+            @Override public InventoryView openInventory(Inventory inventory) {
+                var view = new be.seeseemelk.mockbukkit.inventory.PlayerInventoryViewMock(this, inventory) {
+                    @Override public Component title() { return titles.getOrDefault(inventory, Component.text("Inventory")); }
+                };
+                super.openInventory(view);
+                return getOpenInventory();
+            }
+        };
+        server.addPlayer(player);
         server.getScheduler().cancelTasks(plugin);
         scheduler = new ControlledScheduler();
         field(plugin, "vanishScheduler", scheduler);
@@ -140,7 +156,7 @@ class HardeningTest {
         plugin.vanishPlayer(player, player, "denied");
         boolean deniedVanish = plugin.isVanished(player);
         String deniedReason = plugin.getVanishReason(player.getUniqueId());
-        plugin.getRawVanishedPlayers().clear();
+        state().clear();
         plugin.setVanishReason(player.getUniqueId(), null);
         when(hook.isDenyVanish(player)).thenReturn(false);
         plugin.vanishPlayer(player, player);
@@ -193,7 +209,7 @@ class HardeningTest {
             }
         };
         server.addPlayer(subject);
-        plugin.getRawVanishedPlayers().add(subject.getUniqueId());
+        state().add(subject.getUniqueId());
         scheduler.run("global", () -> plugin.resyncVanishEffects(subject));
         assertTrue(subject.isInvisible(), "the dispatched refresh must actually apply effects");
         assertTrue(violations.isEmpty(), "global callbacks must dispatch player effects to the owning entity scheduler: " + violations);
@@ -213,7 +229,7 @@ class HardeningTest {
             }
         };
         server.addPlayer(observer); violations.clear();
-        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        state().add(player.getUniqueId());
         scheduler.run("global", () -> plugin.updateVanishVisibilityFolia(player));
         assertFalse(observer.canSee(player), "ownership dispatch must still hide the subject");
         assertTrue(violations.isEmpty(), "visibility operations must run on each observer's owner: " + violations);
@@ -235,7 +251,7 @@ class HardeningTest {
             }
         };
         server.addPlayer(target); server.addPlayer(follower);
-        follower.setOp(true); plugin.getRawVanishedPlayers().add(follower.getUniqueId());
+        follower.setOp(true); state().add(follower.getUniqueId());
         var command = new net.thecommandcraft.vanishpp.commands.VanishFollowCommand(plugin);
         checking.set(true);
         scheduler.runEntity(follower, () -> command.onCommand(follower, plugin.getCommand("vfollow"), "vfollow",
@@ -265,7 +281,7 @@ class HardeningTest {
         new MobAiManager(plugin).register();
         assertTrue(scheduler.periods.stream().noneMatch(period -> period == 1L),
                 "mob safety must not install an every-tick player-by-mob sweep");
-        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        state().add(player.getUniqueId());
         var target = new EntityTargetEvent(mock(Mob.class), player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
         new PlayerListener(plugin).onMobTarget(target);
         assertTrue(target.isCancelled(), "event-based target prevention must remain active");
@@ -311,7 +327,7 @@ class HardeningTest {
         plugin.vanishPlayer(player, player, "cancelled");
         boolean cancelledVanishChangedState = plugin.isVanished(player);
         String cancelledReason = plugin.getVanishReason(player.getUniqueId());
-        plugin.getRawVanishedPlayers().clear(); plugin.setVanishReason(player.getUniqueId(), null);
+        state().clear(); plugin.setVanishReason(player.getUniqueId(), null);
         listener.cancelVanish = false;
         plugin.vanishPlayer(player, player);
         listener.cancelUnvanish = true;
@@ -330,7 +346,7 @@ class HardeningTest {
 
     @Test
     void mobTargetingMasterSwitchActuallyAllowsTargetingWhenDisabled() {
-        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        state().add(player.getUniqueId());
         plugin.getConfigManager().disableMobTarget = false;
         var event = new EntityTargetEvent(mock(Mob.class), player, EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
         new PlayerListener(plugin).onMobTarget(event);
@@ -339,7 +355,7 @@ class HardeningTest {
 
     @Test
     void chatMasterSwitchDisablesAccidentalChatBlocking() {
-        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        state().add(player.getUniqueId());
         plugin.getConfigManager().preventAccidentalChat = false;
         Set<net.kyori.adventure.audience.Audience> viewers = new HashSet<>(List.of(player));
         var event = new io.papermc.paper.event.player.AsyncChatEvent(false, player, viewers,
@@ -350,7 +366,7 @@ class HardeningTest {
 
     @Test
     void entityInteractionMasterSwitchAppliesEvenWhenPersonalRuleAllowsInteraction() {
-        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        state().add(player.getUniqueId());
         plugin.getRuleManager().setRule(player, RuleManager.CAN_INTERACT, true);
         plugin.getConfigManager().preventEntityInteract = true;
         var event = new PlayerInteractEntityEvent(player, mock(org.bukkit.entity.Cow.class), EquipmentSlot.HAND);
@@ -360,7 +376,7 @@ class HardeningTest {
 
     @Test
     void advancementAnnouncementSwitchIsHonored() {
-        plugin.getRawVanishedPlayers().add(player.getUniqueId());
+        state().add(player.getUniqueId());
         plugin.getConfigManager().hideAdvancements = false;
         var event = mock(PlayerAdvancementDoneEvent.class);
         when(event.getPlayer()).thenReturn(player);
@@ -368,6 +384,21 @@ class HardeningTest {
         doAnswer(call -> { suppressed.set(true); return null; }).when(event).message(null);
         new PlayerListener(plugin).onAdvancement(event);
         assertFalse(suppressed.get(), "hide-announcements.advancements false must preserve the announcement");
+    }
+
+    @Test
+    void serverListSamplesAreFilteredIndependentlyOfCountAdjustment() {
+        state().add(player.getUniqueId());
+        plugin.getConfigManager().adjustServerListCount = false;
+        plugin.getConfigManager().hideFromServerList = true;
+        var event = mock(com.destroystokyo.paper.event.server.PaperServerListPingEvent.class);
+        var visible = new com.destroystokyo.paper.event.server.PaperServerListPingEvent.ListedPlayerInfo("Visible", UUID.randomUUID());
+        var entries = new ArrayList<>(List.of(visible,
+                new com.destroystokyo.paper.event.server.PaperServerListPingEvent.ListedPlayerInfo(player.getName(), player.getUniqueId())));
+        when(event.getListedPlayers()).thenReturn(entries);
+        new PlayerListener(plugin).onServerListPing(event);
+        assertEquals(List.of(visible), entries, "hide-from-server-list must filter samples even when count adjustment is disabled");
+        verify(event, never()).setNumPlayers(anyInt());
     }
 
     @Test
@@ -518,6 +549,14 @@ class HardeningTest {
             } catch (NoSuchFieldException ignored) { type = type.getSuperclass(); }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<UUID> state() {
+        try {
+            Field field = Vanishpp.class.getDeclaredField("vanishedPlayers"); field.setAccessible(true);
+            return (Set<UUID>) field.get(plugin);
+        } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
     }
 
     private static void invoke(Object target, String name) throws Exception {
