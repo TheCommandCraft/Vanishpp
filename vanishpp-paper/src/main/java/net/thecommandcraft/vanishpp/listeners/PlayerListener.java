@@ -128,7 +128,7 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (plugin.getProxyBridge() != null && config.getConfig().getBoolean("proxy.enabled", false)) {
+        if (plugin.getProxyBridge() != null && plugin.getProxyBridge().isConfigured()) {
             Component originalMessage = event.joinMessage();
             event.joinMessage(null);
             plugin.resumeVisibility(player);

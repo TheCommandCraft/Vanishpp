@@ -16,7 +16,10 @@ import java.util.List;
 public class SqlStorage implements StorageProvider {
 
     private final Vanishpp plugin;
-    private DataSource dataSource;
+    private volatile DataSource dataSource;
+    private volatile boolean initialized;
+    private volatile boolean closed;
+    private volatile Thread recoveryOwner;
     private final String type;
     private volatile long lastNotificationTime = 0;
     private static final long NOTIFICATION_COOLDOWN = 300000; // 5 minutes between notifications
@@ -37,7 +40,8 @@ public class SqlStorage implements StorageProvider {
     }
 
     @Override
-    public void init() throws Exception {
+    public synchronized void init() throws Exception {
+        if (closed) throw new IllegalStateException("Storage is closed");
         if (this.dataSource == null) {
             HikariConfig config = new HikariConfig();
             String host = plugin.getConfig().getString("storage.mysql.host", "localhost");
@@ -66,7 +70,7 @@ public class SqlStorage implements StorageProvider {
             this.dataSource = new HikariDataSource(config);
         }
 
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = connection()) {
             try (Statement st = conn.createStatement()) {
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_vanished (uuid VARCHAR(36) PRIMARY KEY)");
                 st.execute("CREATE TABLE IF NOT EXISTS vpp_rules (uuid VARCHAR(36), rule_key VARCHAR(64), rule_value TEXT, PRIMARY KEY(uuid, rule_key))");
@@ -87,6 +91,28 @@ public class SqlStorage implements StorageProvider {
             }
             runSchemaMigrations(conn);
             checkPluginVersionStamp(conn);
+        }
+        initialized = true;
+    }
+
+    private Connection connection() throws SQLException {
+        DataSource source = dataSource;
+        if (closed || source == null) throw new SQLException("SQL storage is unavailable");
+        return source.getConnection();
+    }
+
+    private void ensureInitialized() {
+        if (initialized && !closed && (recoveryOwner == null || recoveryOwner == Thread.currentThread())) return;
+        synchronized (this) {
+            if (initialized && !closed) return;
+            recoveryOwner = Thread.currentThread();
+            try {
+                init();
+                plugin.storageRecovered(this);
+            } catch (Exception e) {
+                initialized = false;
+                throw new IllegalStateException("SQL storage is unavailable; read will retry", e);
+            } finally { recoveryOwner = null; }
         }
     }
 
@@ -146,7 +172,7 @@ public class SqlStorage implements StorageProvider {
         Map<String, Long> summary = new LinkedHashMap<>();
         String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels",
                            "vpp_rule_presets", "vpp_history", "vpp_stats"};
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = connection()) {
             for (String table : tables) {
                 try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM " + table);
                      ResultSet rs = ps.executeQuery()) {
@@ -165,7 +191,7 @@ public class SqlStorage implements StorageProvider {
     public void resetDatabase() {
         String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements",
                            "vpp_rule_presets", "vpp_preferences", "vpp_history", "vpp_stats"};
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              Statement st = conn.createStatement()) {
             for (String table : tables) {
                 st.execute("DELETE FROM " + table);
@@ -289,7 +315,8 @@ public class SqlStorage implements StorageProvider {
     }
 
     @Override
-    public void shutdown() {
+    public synchronized void shutdown() {
+        closed = true;
         if (dataSource instanceof HikariDataSource hds) {
             hds.close();
         } else if (dataSource instanceof AutoCloseable ac) {
@@ -314,7 +341,8 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public boolean isVanished(UUID uuid) {
-        try (Connection conn = dataSource.getConnection();
+        ensureInitialized();
+        try (Connection conn = connection();
                 PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM vpp_vanished WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
@@ -328,6 +356,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setVanished(UUID uuid, boolean vanished) {
+        ensureInitialized();
         if (writeSuspended) return;
         String query = vanished ? "INSERT IGNORE INTO vpp_vanished (uuid) VALUES (?)"
                 : "DELETE FROM vpp_vanished WHERE uuid = ?";
@@ -335,7 +364,7 @@ public class SqlStorage implements StorageProvider {
             query = "INSERT INTO vpp_vanished (uuid) VALUES (?) ON CONFLICT (uuid) DO NOTHING";
         }
 
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
                 PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, uuid.toString());
             ps.executeUpdate();
@@ -346,8 +375,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Set<UUID> getVanishedPlayers() {
+        ensureInitialized();
         Set<UUID> players = new HashSet<>();
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
                 PreparedStatement ps = conn.prepareStatement("SELECT uuid FROM vpp_vanished");
                 ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
@@ -366,7 +396,8 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public boolean getRule(UUID uuid, String rule, boolean defaultValue) {
-        try (Connection conn = dataSource.getConnection();
+        ensureInitialized();
+        try (Connection conn = connection();
                 PreparedStatement ps = conn
                         .prepareStatement("SELECT rule_value FROM vpp_rules WHERE uuid = ? AND rule_key = ?")) {
             ps.setString(1, uuid.toString());
@@ -384,8 +415,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setRule(UUID uuid, String rule, Object value) {
+        ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = connection()) {
             conn.setAutoCommit(false);
             try {
                 if (!rule.startsWith(EXPIRY_PREFIX)) writeRule(conn, uuid, EXPIRY_PREFIX + rule, null);
@@ -402,8 +434,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setTemporaryRule(UUID uuid, String rule, boolean value, String token) {
+        ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = connection()) {
             conn.setAutoCommit(false);
             try {
                 writeRule(conn, uuid, EXPIRY_PREFIX + rule, token);
@@ -428,8 +461,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public boolean expireRule(UUID uuid, String rule, String token) {
+        ensureInitialized();
         if (writeSuspended) return false;
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = connection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement ps = conn.prepareStatement(
                     "SELECT rule_value FROM vpp_rules WHERE uuid = ? AND rule_key = ? FOR UPDATE")) {
@@ -454,8 +488,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Map<String, Object> getRules(UUID uuid) {
+        ensureInitialized();
         Map<String, Object> rules = new HashMap<>();
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
                 PreparedStatement ps = conn
                         .prepareStatement("SELECT rule_key, rule_value FROM vpp_rules WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
@@ -477,7 +512,8 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public boolean hasAcknowledged(UUID uuid, String notificationId) {
-        try (Connection conn = dataSource.getConnection();
+        ensureInitialized();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT 1 FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
             ps.setString(1, uuid.toString());
@@ -493,11 +529,12 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void addAcknowledgement(UUID uuid, String notificationId) {
+        ensureInitialized();
         if (writeSuspended) return;
         String query = type.equals("postgresql")
                 ? "INSERT INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?) ON CONFLICT (uuid, notification_id) DO NOTHING"
                 : "INSERT IGNORE INTO vpp_acknowledgements (uuid, notification_id) VALUES (?, ?)";
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, uuid.toString());
             ps.setString(2, notificationId);
@@ -509,7 +546,8 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public int getVanishLevel(UUID uuid) {
-        try (Connection conn = dataSource.getConnection();
+        ensureInitialized();
+        try (Connection conn = connection();
                 PreparedStatement ps = conn.prepareStatement("SELECT level FROM vpp_levels WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
@@ -524,13 +562,14 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setVanishLevel(UUID uuid, int level) {
+        ensureInitialized();
         if (writeSuspended) return;
         String query = "REPLACE INTO vpp_levels (uuid, level) VALUES (?, ?)";
         if (type.equals("postgresql")) {
             query = "INSERT INTO vpp_levels (uuid, level) VALUES (?, ?) ON CONFLICT (uuid) DO UPDATE SET level = EXCLUDED.level";
         }
 
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
                 PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, uuid.toString());
             ps.setInt(2, level);
@@ -544,6 +583,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void saveRulePreset(UUID uuid, String presetName, Map<String, Boolean> rules) {
+        ensureInitialized();
         if (writeSuspended) return;
         // Delete existing rows for this preset first, then re-insert
         String del = "DELETE FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?";
@@ -551,7 +591,7 @@ public class SqlStorage implements StorageProvider {
                 ? "INSERT INTO vpp_rule_presets (uuid, preset_name, rule_key, rule_value) VALUES (?,?,?,?)"
                   + " ON CONFLICT (uuid, preset_name, rule_key) DO UPDATE SET rule_value = EXCLUDED.rule_value"
                 : "REPLACE INTO vpp_rule_presets (uuid, preset_name, rule_key, rule_value) VALUES (?,?,?,?)";
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = connection()) {
             try (PreparedStatement d = conn.prepareStatement(del)) {
                 d.setString(1, uuid.toString()); d.setString(2, presetName); d.executeUpdate();
             }
@@ -568,7 +608,8 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Map<String, Boolean> loadRulePreset(UUID uuid, String presetName) {
-        try (Connection conn = dataSource.getConnection();
+        ensureInitialized();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT rule_key, rule_value FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?")) {
             ps.setString(1, uuid.toString()); ps.setString(2, presetName);
@@ -583,8 +624,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Set<String> listRulePresets(UUID uuid) {
+        ensureInitialized();
         Set<String> names = new LinkedHashSet<>();
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT DISTINCT preset_name FROM vpp_rule_presets WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
@@ -597,8 +639,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void deleteRulePreset(UUID uuid, String presetName) {
+        ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "DELETE FROM vpp_rule_presets WHERE uuid = ? AND preset_name = ?")) {
             ps.setString(1, uuid.toString()); ps.setString(2, presetName);
@@ -610,16 +653,18 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public boolean getAutoVanishOnJoin(UUID uuid) {
+        ensureInitialized();
         return getPref(uuid, "auto_vanish_join", "false").equalsIgnoreCase("true");
     }
 
     @Override
     public void setAutoVanishOnJoin(UUID uuid, boolean value) {
+        ensureInitialized();
         setPref(uuid, "auto_vanish_join", String.valueOf(value));
     }
 
     private String getPref(UUID uuid, String key, String def) {
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT pref_value FROM vpp_preferences WHERE uuid = ? AND pref_key = ?")) {
             ps.setString(1, uuid.toString()); ps.setString(2, key);
@@ -635,7 +680,7 @@ public class SqlStorage implements StorageProvider {
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?) ON CONFLICT (uuid,pref_key) DO UPDATE SET pref_value=EXCLUDED.pref_value"
                 : "REPLACE INTO vpp_preferences (uuid,pref_key,pref_value) VALUES(?,?,?)";
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, uuid.toString()); ps.setString(2, key); ps.setString(3, value);
             ps.executeUpdate();
@@ -646,10 +691,11 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void addHistoryEntry(VanishHistoryEntry entry) {
+        ensureInitialized();
         if (writeSuspended) return;
         String q = "INSERT INTO vpp_history (uuid,player_name,action,timestamp,server,reason,duration_ms)"
                 + " VALUES (?,?,?,?,?,?,?)";
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, entry.getPlayerUuid().toString());
             ps.setString(2, entry.getPlayerName());
@@ -664,19 +710,21 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public List<VanishHistoryEntry> getPlayerHistory(UUID uuid, int page, int perPage) {
+        ensureInitialized();
         String q = "SELECT * FROM vpp_history WHERE uuid = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?";
         return queryHistory(q, uuid.toString(), perPage, (page - 1) * perPage);
     }
 
     @Override
     public List<VanishHistoryEntry> getAllHistory(int page, int perPage) {
+        ensureInitialized();
         String q = "SELECT * FROM vpp_history ORDER BY timestamp DESC LIMIT ? OFFSET ?";
         return queryHistory(q, null, perPage, (page - 1) * perPage);
     }
 
     private List<VanishHistoryEntry> queryHistory(String query, String uuidFilter, int limit, int offset) {
         List<VanishHistoryEntry> list = new ArrayList<>();
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(query)) {
             int idx = 1;
             if (uuidFilter != null) ps.setString(idx++, uuidFilter);
@@ -700,9 +748,10 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public int pruneHistory(int retentionDays) {
+        ensureInitialized();
         if (retentionDays <= 0) return 0;
         long cutoff = java.time.Instant.now().minusSeconds((long) retentionDays * 86400).toEpochMilli();
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "DELETE FROM vpp_history WHERE timestamp < ?")) {
             ps.setLong(1, cutoff);
@@ -714,7 +763,8 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public VanishStats getStats(UUID uuid) {
-        try (Connection conn = dataSource.getConnection();
+        ensureInitialized();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT total_ms, vanish_count, longest_ms FROM vpp_stats WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
@@ -729,6 +779,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void recordVanishSession(UUID uuid, long durationMs) {
+        ensureInitialized();
         if (writeSuspended || durationMs <= 0) return;
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,1,?)"
@@ -739,7 +790,7 @@ public class SqlStorage implements StorageProvider {
                   + " ON DUPLICATE KEY UPDATE total_ms=total_ms+VALUES(total_ms),"
                   + " vanish_count=vanish_count+1,"
                   + " longest_ms=GREATEST(longest_ms,VALUES(longest_ms))";
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, uuid.toString());
             ps.setLong(2, durationMs);
@@ -750,6 +801,7 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void setStats(UUID uuid, VanishStats stats) {
+        ensureInitialized();
         if (writeSuspended) return;
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,?,?)"
@@ -758,7 +810,7 @@ public class SqlStorage implements StorageProvider {
                 : "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,?,?)"
                   + " ON DUPLICATE KEY UPDATE total_ms=VALUES(total_ms),"
                   + " vanish_count=VALUES(vanish_count), longest_ms=VALUES(longest_ms)";
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(q)) {
             ps.setString(1, uuid.toString());
             ps.setLong(2, stats.getTotalVanishTimeMs());
@@ -772,11 +824,12 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Set<UUID> getAllKnownPlayers() {
+        ensureInitialized();
         Set<UUID> uuids = new HashSet<>();
         String[] tables = {"vpp_vanished", "vpp_rules", "vpp_levels", "vpp_acknowledgements",
                 "vpp_rule_presets", "vpp_preferences", "vpp_history", "vpp_stats"};
         for (String table : tables) {
-            try (Connection conn = dataSource.getConnection();
+            try (Connection conn = connection();
                  PreparedStatement ps = conn.prepareStatement("SELECT DISTINCT uuid FROM " + table);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -792,8 +845,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public Set<String> getAcknowledgements(UUID uuid) {
+        ensureInitialized();
         Set<String> ids = new HashSet<>();
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT notification_id FROM vpp_acknowledgements WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
@@ -808,8 +862,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void removeAcknowledgement(UUID uuid, String notificationId) {
+        ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connection();
              PreparedStatement ps = conn.prepareStatement("DELETE FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
             ps.setString(1, uuid.toString());
             ps.setString(2, notificationId);
@@ -819,8 +874,9 @@ public class SqlStorage implements StorageProvider {
 
     @Override
     public void removePlayerData(UUID uuid) {
+        ensureInitialized();
         if (writeSuspended) return;
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = connection()) {
             conn.setAutoCommit(false);
             try {
                 for (String table : new String[]{"vpp_rules","vpp_acknowledgements","vpp_levels",

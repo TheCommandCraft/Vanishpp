@@ -48,7 +48,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private Set<UUID> ignoredWarningPlayers; // concurrent — accessed from async join reconciliation
 
     private ConfigManager configManager;
-    private StorageProvider storageProvider;
+    private volatile StorageProvider storageProvider;
     private final net.thecommandcraft.vanishpp.common.state.OrderedWrites stateWrites =
             new net.thecommandcraft.vanishpp.common.state.OrderedWrites(
                     task -> getVanishScheduler().runAsync(task), e -> getLogger().log(Level.SEVERE, "State write failed", e));
@@ -328,13 +328,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // 7. Restore Player State
         this.vanishedPlayers = ConcurrentHashMap.newKeySet();
+        this.ignoredWarningPlayers = ConcurrentHashMap.newKeySet();
         try { this.vanishedPlayers.addAll(storageProvider.getVanishedPlayers()); }
         catch (RuntimeException e) { getLogger().warning("Initial state read failed; logins will retry storage: " + e.getMessage()); }
-        this.ignoredWarningPlayers = ConcurrentHashMap.newKeySet();
-        for (UUID uuid : storageProvider.getAllKnownPlayers()) {
-            if (storageProvider.hasAcknowledged(uuid, "protocol-lib-warning")) ignoredWarningPlayers.add(uuid);
-        }
-        restoreRuleExpiries();
+        try {
+            for (UUID uuid : storageProvider.getAllKnownPlayers()) {
+                if (storageProvider.hasAcknowledged(uuid, "protocol-lib-warning")) ignoredWarningPlayers.add(uuid);
+            }
+            restoreRuleExpiries();
+        } catch (RuntimeException e) { getLogger().warning("Stored preferences and deadlines will load when SQL recovers: " + e.getMessage()); }
 
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
@@ -575,23 +577,23 @@ public class Vanishpp extends JavaPlugin implements Listener {
             newProvider = new YamlStorage(this);
         }
 
+        boolean ready = false;
         try {
             newProvider.init();
+            ready = true;
         } catch (Exception e) {
             getLogger().severe("FAILED TO INITIALIZE STORAGE: " + e.getMessage());
-            newProvider.shutdown();
             if (storageProvider != null) {
+                newProvider.shutdown();
                 getLogger().warning("Keeping the previous storage provider.");
                 return;
             }
-            getLogger().severe("Falling back to YAML storage.");
-            newProvider = new YamlStorage(this);
-            try {
-                newProvider.init();
-            } catch (Exception ignored) {}
+            if (newProvider instanceof SqlStorage) {
+                getLogger().warning("Keeping the configured SQL provider; state reads will retry initialization.");
+            } else throw new IllegalStateException("Storage initialization failed", e);
         }
 
-        if (newProvider instanceof SqlStorage sql && sql.writeSuspended) {
+        if (ready && newProvider instanceof SqlStorage sql && sql.writeSuspended) {
             downgradeDetected = true;
             downgradeFromVersion = sql.dbVersion;
             getLogger().severe("╔═══════════════════════════════════════════════════╗");
@@ -609,7 +611,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         // Migrate data from old storage if the new storage is empty and another source has data
-        try { migrateIfNeeded(newProvider, type); }
+        try { if (ready) migrateIfNeeded(newProvider, type); }
         catch (RuntimeException e) {
             newProvider.shutdown();
             throw e;
@@ -625,10 +627,21 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
+    public void storageRecovered(StorageProvider provider) {
+        if (provider != storageProvider || stopping) return;
+        migrateIfNeeded(provider, "SQL");
+        vanishScheduler.runGlobal(() -> {
+            if (provider != storageProvider || stopping) return;
+            restoreRuleExpiries();
+            for (UUID uuid : provider.getAllKnownPlayers())
+                if (provider.hasAcknowledged(uuid, "protocol-lib-warning")) ignoredWarningPlayers.add(uuid);
+        });
+    }
+
     private void migrateIfNeeded(StorageProvider target, String targetType) {
         if (!target.getAllKnownPlayers().isEmpty()) return; // target already has data, nothing to migrate
 
-        StorageProvider source = storageProvider;
+        StorageProvider source = storageProvider == target ? null : storageProvider;
         boolean sourceOwned = false;
         if (source == null && !targetType.equals("YAML")) {
             YamlStorage yaml = new YamlStorage(this);

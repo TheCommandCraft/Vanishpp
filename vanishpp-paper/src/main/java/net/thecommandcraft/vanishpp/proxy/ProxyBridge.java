@@ -32,6 +32,7 @@ import java.util.function.Consumer;
 public class ProxyBridge implements PluginMessageListener {
 
     private final Vanishpp plugin;
+    private final boolean configured;
     private volatile boolean active = false;
     private volatile boolean helloSent = false;
     private volatile boolean proxyDetected = false;
@@ -65,6 +66,7 @@ public class ProxyBridge implements PluginMessageListener {
 
     public ProxyBridge(Vanishpp plugin) {
         this.plugin = plugin;
+        this.configured = plugin.getConfigManager().getConfig().getBoolean("proxy.enabled", false);
         this.serverName = plugin.getConfigManager().getConfig()
                 .getString("proxy.server-name", "").trim();
     }
@@ -72,7 +74,7 @@ public class ProxyBridge implements PluginMessageListener {
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public void init() {
-        if (active || !plugin.getConfigManager().getConfig().getBoolean("proxy.enabled", false)) return;
+        if (active || !configured) return;
         active = true;
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, VppChannel.CHANNEL);
         plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, VppChannel.CHANNEL, this);
@@ -302,6 +304,8 @@ public class ProxyBridge implements PluginMessageListener {
             }, () -> plugin.abortProxyJoin(player.getUniqueId()));
         }, 100L);
     }
+
+    public boolean isConfigured() { return configured; }
 
     private void sendJoinQuery(String requestId, JoinRequest request) {
         JsonObject payload = new JsonObject();

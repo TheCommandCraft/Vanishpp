@@ -164,7 +164,7 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 
 **Storage options:** YAML (default), MySQL 5.7+, PostgreSQL 12+, Redis (cross-server sync)
 
-Vanish state writes are ordered and drained before storage closes. A failed database read retains known hidden state and retries; a login with no safe cached state must reconnect after storage recovers. Reload keeps following, mob checks, bridge retries, and other feature timers running. Equipped armour is never removed when unvanishing.
+Vanish state writes are ordered and drained before storage closes. A failed database read retains known hidden state and retries. Failed SQL initialization retains that provider for recovery rather than falling back to unrelated YAML; a login with no safe cached state must reconnect after storage recovers. Reload keeps following, mob checks, bridge retries, and other feature timers running. Equipped armour is never removed when unvanishing.
 
 Original gamemodes, temporary-rule deadlines, and warning acknowledgements survive reconnects and restarts. A newer rule decision cancels an older expiry, including shared SQL changes. Automatic migration to an empty backend copies preferences, presets, history, statistics, rules, levels, acknowledgements, and vanish state in either direction. The previous provider stays open until migration completes.
 
