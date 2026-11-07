@@ -201,9 +201,9 @@ class HardeningTest {
 
     @Test
     void gameplayRuleReadsUsePreparedSnapshotsWithoutStorageQueries() throws Exception {
-        StorageProvider storage = spy(plugin.getStorageProvider());
+        SqlStorage storage = mock(SqlStorage.class);
         field(plugin, "storageProvider", storage);
-        storage.setRule(player.getUniqueId(), RuleManager.CAN_CHAT, true);
+        when(storage.getRules(player.getUniqueId())).thenReturn(Map.of(RuleManager.CAN_CHAT, true));
         var listener = new PlayerListener(plugin);
         scheduler.run("async", () -> listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(
                 player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId())));
@@ -466,11 +466,23 @@ class HardeningTest {
     }
 
     private static void field(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value);
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                Field field = type.getDeclaredField(name); field.setAccessible(true); field.set(target, value); return;
+            } catch (NoSuchFieldException ignored) { type = type.getSuperclass(); }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     private static void invoke(Object target, String name) throws Exception {
-        var method = target.getClass().getDeclaredMethod(name); method.setAccessible(true); method.invoke(target);
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                var method = type.getDeclaredMethod(name); method.setAccessible(true); method.invoke(target); return;
+            } catch (NoSuchMethodException ignored) { type = type.getSuperclass(); }
+        }
+        throw new NoSuchMethodException(name);
     }
 
     private static class TransitionListener implements Listener {
