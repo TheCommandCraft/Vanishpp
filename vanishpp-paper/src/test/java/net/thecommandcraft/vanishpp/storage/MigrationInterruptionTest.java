@@ -136,48 +136,34 @@ class MigrationInterruptionTest {
     }
 
     @Test
-    void committedYamlCheckpointReplaysBothFilesExactlyOnce(@TempDir Path directory) throws Exception {
-        YamlStorage partial = yaml(directory);
-        partial.setVanished(first, true);
-        partial.addHistoryEntry(source.getAllHistory(1, 20).getFirst());
-        YamlConfiguration journal = new YamlConfiguration();
-        journal.set("version", 1);
-        journal.set("data", Files.readString(plugin.getDataFolder().toPath().resolve("data.yml")));
-        journal.set("history", Files.readString(plugin.getDataFolder().toPath().resolve("history.yml")));
-        journal.save(directory.resolve("migration.yml").toFile());
-        assertComplete(yaml(directory));
-        assertComplete(yaml(directory));
-        assertFalse(Files.exists(directory.resolve("migration.yml")), "fully replayed checkpoint must be retired");
-    }
-
-    @Test
-    void invalidYamlCheckpointCannotPublishPartialLegacyFiles(@TempDir Path directory) throws Exception {
-        yaml(directory).setVanished(first, true);
-        YamlConfiguration journal = new YamlConfiguration();
-        journal.set("version", 1);
-        journal.set("data", "vanished-players: [unterminated");
-        journal.set("history", "{}");
-        journal.save(directory.resolve("migration.yml").toFile());
-        assertThrows(IllegalStateException.class, () -> yaml(directory), "invalid checkpoint must keep YAML unavailable instead of publishing partial files");
-    }
-
-    @Test
-    void checkpointSurvivesFailureBetweenTheTwoYamlFileReplacements(@TempDir Path directory) throws Exception {
+    void completedYamlMigrationIsOneSnapshotAndReopensExactlyOnce(@TempDir Path directory) throws Exception {
         YamlStorage target = yaml(directory);
+        migrate(target, "YAML");
+        YamlConfiguration snapshot = YamlConfiguration.loadConfiguration(directory.resolve("data.yml").toFile());
+        assertEquals(2, snapshot.getMapList("history").size(), "complete atomic snapshot must include history in the destination file");
+        Files.deleteIfExists(directory.resolve("history.yml"));
+        assertComplete(yaml(directory));
+        migrate(yaml(directory), "YAML");
+        assertComplete(yaml(directory));
+        assertFalse(Files.exists(directory.resolve("migration.yml")), "migration must not require a checkpoint protocol");
+    }
+
+    @Test
+    void failedYamlDestinationWriteLeavesThePreviousSnapshotUntouched(@TempDir Path directory) throws Exception {
+        YamlStorage target = yaml(directory);
+        String before = Files.readString(directory.resolve("data.yml"));
         Path blocked = directory.resolve("data.yml.tmp");
-        Files.createDirectory(blocked); // History can install, but the data replacement cannot be written.
-        assertDoesNotThrow(() -> migrate(target, "YAML"),
-                "complete checkpoint must make the copy durable despite interrupted file installation");
-        assertComplete(target);
-        assertTrue(Files.exists(directory.resolve("migration.yml")), "interrupted installation must retain its complete checkpoint");
-        assertTrue(YamlConfiguration.loadConfiguration(directory.resolve("data.yml").toFile())
-                .getStringList("vanished-players").isEmpty(), "legacy data file must still be uninstalled in this stimulus");
+        Files.createDirectory(blocked);
+        assertAll(
+                () -> assertThrows(IllegalStateException.class, () -> migrate(target, "YAML"),
+                        "failed destination write must fail migration instead of publishing another checkpoint"),
+                () -> assertEquals(before, Files.readString(directory.resolve("data.yml")), "failed write must leave destination bytes untouched"),
+                () -> assertTrue(target.getAllKnownPlayers().isEmpty(), "failed destination write must leave the in-memory destination untouched"));
         Files.delete(blocked);
-        YamlStorage recovered = yaml(directory);
-        assertComplete(recovered);
-        recovered.setVanished(first, false);
-        assertFalse(yaml(directory).isVanished(first), "a later write must not be overwritten by a stale checkpoint replay");
-        assertFalse(Files.exists(directory.resolve("migration.yml")));
+        migrate(target, "YAML");
+        assertComplete(yaml(directory));
+        migrate(yaml(directory), "YAML");
+        assertComplete(yaml(directory));
     }
 
     @Test
