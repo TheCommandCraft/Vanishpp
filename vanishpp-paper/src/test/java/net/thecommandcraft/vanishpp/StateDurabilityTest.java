@@ -203,6 +203,56 @@ class StateDurabilityTest {
     }
 
     @Test
+    void networkDecisionsAfterAChoiceDuringTheHoldStillApply() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        when(storage.getAutoVanishOnJoin(player.getUniqueId()))
+                .thenThrow(new IllegalStateException("unavailable"))
+                .thenReturn(false);
+        field(plugin, "storageProvider", storage);
+        plugin.getConfigManager().getConfig().set("proxy.enabled", true);
+        ProxyBridge bridge = new ProxyBridge(plugin);
+        for (String name : List.of("active", "helloSent", "handshakeComplete", "proxyDetected")) {
+            var field = ProxyBridge.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(bridge, true);
+        }
+        field(plugin, "proxyBridge", bridge);
+        login();
+        var query = player.packets.stream().filter(packet -> packet.type()
+                == net.thecommandcraft.vanishpp.common.protocol.VppMessage.STATE_QUERY).findFirst().orElseThrow();
+        var reply = new com.google.gson.JsonObject();
+        reply.add("vanished", new com.google.gson.JsonArray());
+        reply.addProperty("requestId", com.google.gson.JsonParser.parseString(query.jsonPayload())
+                .getAsJsonObject().get("requestId").getAsString());
+        reply.addProperty("joiningUuid", player.getUniqueId().toString());
+        reply.addProperty("joiningVanished", false);
+        stateResponse(bridge, reply);
+        plugin.applyVanishEffects(player);
+        plugin.handleNetworkVanishSync(player.getUniqueId(), false);
+        assertFalse(plugin.isVanished(player), "a network decision after a choice made during the hold must apply");
+        scheduler.drainAsync();
+        assertFalse(plugin.isVanished(player), "the late storage answer must not restore the superseded hold");
+    }
+
+    @Test
+    void anOlderLoginReadCannotOverwriteAReplacementLogin() throws Exception {
+        StorageProvider storage = mock(StorageProvider.class);
+        PlayerListener listener = new PlayerListener(plugin);
+        AtomicBoolean replaced = new AtomicBoolean();
+        when(storage.isVanished(player.getUniqueId())).thenAnswer(call -> {
+            if (replaced.compareAndSet(false, true)) {
+                listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
+                return false;
+            }
+            throw new IllegalStateException("unavailable");
+        });
+        field(plugin, "storageProvider", storage);
+        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
+        Set<?> unread = listenerField(listener, "unreadJoins");
+        assertTrue(unread.contains(player.getUniqueId()), "the replacement login's failed read must survive the older attempt finishing");
+    }
+
+    @Test
     void deniedAndAbandonedLoginsForgetTheirFailedRead() throws Exception {
         StorageProvider storage = mock(StorageProvider.class);
         when(storage.isVanished(any())).thenThrow(new IllegalStateException("unavailable"));
