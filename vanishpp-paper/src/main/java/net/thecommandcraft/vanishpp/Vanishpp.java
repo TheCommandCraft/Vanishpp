@@ -1700,9 +1700,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private boolean changeVanishOwned(Player player, CommandSender executor, boolean hidden, String reason, TransitionMessages messages) {
         UUID uuid = player.getUniqueId();
         ProxyJoin pending = proxyJoins.get(uuid);
-        boolean previouslyHidden = pending != null && pending.version() == stateVersion(uuid)
-                ? pending.previouslyHidden() : isVanished(uuid);
-        if (stopping || !player.isOnline() || hidden == previouslyHidden
+        // A request made while a join is held is a decision even when it matches the state before the hold:
+        // it supersedes the hold, so the delayed join answer and auto-vanish cannot override it.
+        boolean held = pending != null && pending.version() == stateVersion(uuid);
+        boolean previouslyHidden = held ? pending.previouslyHidden() : isVanished(uuid);
+        if (stopping || !player.isOnline() || (!held && hidden == previouslyHidden)
                 || (proxyBridge != null && proxyBridge.isTransferPending(uuid)) || !changingPlayers.add(uuid)) return false;
         CommandSender source = executor == null ? player : executor;
         boolean changed = false;
@@ -1722,7 +1724,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 if (isValidMessage(message)) player.sendMessage(messageManager.parse(message, player));
             }
             if (messages == TransitionMessages.FULL) {
-                announceTransition(player, hidden);
+                // A held join's announcement is still withheld; the release decides it.
+                if (!held) announceTransition(player, hidden);
                 notifyStaff(player, source, hidden);
             }
         } finally {
