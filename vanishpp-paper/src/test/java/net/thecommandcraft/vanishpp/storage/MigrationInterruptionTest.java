@@ -33,8 +33,12 @@ class MigrationInterruptionTest {
         var server = MockBukkit.mock();
         plugin = MockBukkit.load(Vanishpp.class);
         server.getScheduler().cancelTasks(plugin);
+        var startup = new java.util.concurrent.CountDownLatch(1);
+        plugin.submitStorageWork(startup::countDown);
+        assertTrue(startup.await(5, java.util.concurrent.TimeUnit.SECONDS), "storage work queued during startup must finish");
         tasks = new Tasks();
         field("vanishScheduler", tasks);
+        plugin.flushStorageWork();
         source = plugin.getStorageProvider();
         for (UUID id : List.of(first, second)) {
             source.setVanished(id, true);
