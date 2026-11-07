@@ -33,11 +33,14 @@ jobs:
             ${{ runner.os }}-m2-${{ github.event.pull_request.head.ref }}-
 
       - name: Build and run tests
-        run: mvn clean test
+        run: mvn clean verify
 
       - name: Upload test reports (optional)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: "**/target/surefire-reports/"
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
           retention-days: 7

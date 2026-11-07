@@ -1,5 +1,7 @@
 package net.thecommandcraft.vanishpp.storage;
 
+import be.seeseemelk.mockbukkit.MockBukkit;
+import net.thecommandcraft.vanishpp.Vanishpp;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,271 +12,178 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Tests SQL schema creation and migration using an in-memory H2 database.
- * Validates that all required tables exist and that all StorageProvider
- * operations work correctly on a fresh schema.
- */
+/** Tests production SQL initialization and upgrades against an isolated H2 database. */
 class SqlStorageMigrationTest {
 
     private Connection conn;
+    private SqlStorage storage;
 
     @BeforeEach
     void setUp() throws Exception {
+        MockBukkit.mock();
+        Vanishpp plugin = MockBukkit.load(Vanishpp.class);
         JdbcDataSource ds = new JdbcDataSource();
-        ds.setURL("jdbc:h2:mem:vanishpp_test;DB_CLOSE_DELAY=-1;MODE=MySQL");
+        ds.setURL("jdbc:h2:mem:migration_" + UUID.randomUUID() + ";MODE=MySQL");
         conn = ds.getConnection();
-        createSchema();
+        storage = new SqlStorage(plugin, ds);
+        storage.init();
     }
 
     @AfterEach
     void tearDown() throws Exception {
-        conn.close();
-    }
-
-    /** Mirrors SqlStorage.init() schema creation logic. */
-    private void createSchema() throws SQLException {
-        try (Statement st = conn.createStatement()) {
-            st.execute("CREATE TABLE IF NOT EXISTS vpp_vanished (uuid VARCHAR(36) PRIMARY KEY)");
-            st.execute("CREATE TABLE IF NOT EXISTS vpp_rules (uuid VARCHAR(36), rule_key VARCHAR(64), rule_value TEXT, PRIMARY KEY(uuid, rule_key))");
-            st.execute("CREATE TABLE IF NOT EXISTS vpp_levels (uuid VARCHAR(36) PRIMARY KEY, level INT)");
-            st.execute("CREATE TABLE IF NOT EXISTS vpp_acknowledgements (uuid VARCHAR(36), notification_id VARCHAR(128), PRIMARY KEY(uuid, notification_id))");
-            st.execute("CREATE TABLE IF NOT EXISTS vpp_schema_version (version INT PRIMARY KEY)");
-            st.execute("MERGE INTO vpp_schema_version (version) KEY(version) VALUES (1)");
+        try {
+            if (conn != null) conn.close();
+            if (storage != null) storage.shutdown();
+        } finally {
+            MockBukkit.unmock();
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Schema version table
-    // -------------------------------------------------------------------------
 
     @Test
     void testSchemaVersionTableExists() throws Exception {
         try (ResultSet rs = conn.getMetaData().getTables(null, null, "VPP_SCHEMA_VERSION", null)) {
-            assertTrue(rs.next(), "vpp_schema_version table must exist");
+            assertTrue(rs.next(), "Production init must create the schema version table");
         }
     }
 
     @Test
-    void testSchemaVersionSeedIsOne() throws Exception {
-        try (PreparedStatement ps = conn.prepareStatement("SELECT version FROM vpp_schema_version");
-             ResultSet rs = ps.executeQuery()) {
-            assertTrue(rs.next(), "vpp_schema_version must have a row");
-            assertEquals(1, rs.getInt("version"), "Initial schema version must be 1");
-        }
+    void testFreshSchemaMigratesToCurrentVersion() throws Exception {
+        assertEquals(3, schemaVersion(), "Production init must migrate a fresh schema to version 3");
     }
-
-    // -------------------------------------------------------------------------
-    // All required tables exist
-    // -------------------------------------------------------------------------
 
     @Test
     void testAllRequiredTablesExist() throws Exception {
-        DatabaseMetaData meta = conn.getMetaData();
         for (String table : List.of("VPP_VANISHED", "VPP_RULES", "VPP_LEVELS",
-                                    "VPP_ACKNOWLEDGEMENTS", "VPP_SCHEMA_VERSION")) {
-            try (ResultSet rs = meta.getTables(null, null, table, null)) {
-                assertTrue(rs.next(), "Table " + table + " must exist in schema");
+                "VPP_ACKNOWLEDGEMENTS", "VPP_SCHEMA_VERSION", "VPP_PLUGIN_VERSION",
+                "VPP_RULE_PRESETS", "VPP_PREFERENCES", "VPP_HISTORY", "VPP_STATS")) {
+            try (ResultSet rs = conn.getMetaData().getTables(null, null, table, null)) {
+                assertTrue(rs.next(), "Production init must create " + table);
             }
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Vanish state
-    // -------------------------------------------------------------------------
-
     @Test
-    void testVanishStateInsertAndSelect() throws Exception {
+    void testVersionOneUpgradePreservesPlayers() throws Exception {
+        // Recreate the old layout as input; only production init performs the upgrade.
+        try (Statement st = conn.createStatement()) {
+            st.execute("DROP ALL OBJECTS");
+            st.execute("CREATE TABLE vpp_vanished (uuid VARCHAR(36) PRIMARY KEY)");
+            st.execute("CREATE TABLE vpp_rules (uuid VARCHAR(36), rule_key VARCHAR(64), rule_value TEXT, PRIMARY KEY(uuid, rule_key))");
+            st.execute("CREATE TABLE vpp_levels (uuid VARCHAR(36) PRIMARY KEY, level INT)");
+            st.execute("CREATE TABLE vpp_schema_version (version INT PRIMARY KEY)");
+            st.execute("INSERT INTO vpp_schema_version VALUES (1)");
+        }
         UUID uuid = UUID.randomUUID();
-        conn.prepareStatement("INSERT INTO vpp_vanished (uuid) VALUES ('" + uuid + "')").executeUpdate();
+        storage.setVanished(uuid, true);
+        storage.setRule(uuid, "can_chat", true);
+        storage.setVanishLevel(uuid, 5);
 
-        try (PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM vpp_vanished WHERE uuid = ?")) {
-            ps.setString(1, uuid.toString());
-            try (ResultSet rs = ps.executeQuery()) {
-                assertTrue(rs.next(), "Inserted UUID must be retrievable");
+        storage.init();
+
+        assertEquals(3, schemaVersion(), "Production init must upgrade version 1 to version 3");
+        assertTrue(storage.isVanished(uuid), "Upgrade must preserve vanished players");
+        assertEquals(true, storage.getRules(uuid).get("can_chat"));
+        assertEquals(5, storage.getVanishLevel(uuid));
+        for (String table : List.of("VPP_VANISHED", "VPP_RULES", "VPP_LEVELS")) {
+            String column = table.equals("VPP_VANISHED") ? "CREATED_AT" : "UPDATED_AT";
+            try (ResultSet rs = conn.getMetaData().getColumns(null, null, table, column)) {
+                assertTrue(rs.next(), "Upgrade must add " + table + "." + column);
             }
         }
+        storage.setAutoVanishOnJoin(uuid, true);
+        assertTrue(storage.getAutoVanishOnJoin(uuid), "Upgraded preferences table must be usable");
     }
 
     @Test
-    void testVanishStateDelete() throws Exception {
+    void testVanishStateInsertAndSelect() {
         UUID uuid = UUID.randomUUID();
-        conn.prepareStatement("INSERT INTO vpp_vanished (uuid) VALUES ('" + uuid + "')").executeUpdate();
-        conn.prepareStatement("DELETE FROM vpp_vanished WHERE uuid = '" + uuid + "'").executeUpdate();
-
-        try (PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM vpp_vanished WHERE uuid = ?")) {
-            ps.setString(1, uuid.toString());
-            try (ResultSet rs = ps.executeQuery()) {
-                assertFalse(rs.next(), "Deleted UUID must not be retrievable");
-            }
-        }
+        assertFalse(storage.isVanished(uuid));
+        storage.setVanished(uuid, true);
+        assertTrue(storage.isVanished(uuid), "Production storage must persist vanish");
     }
 
-    // -------------------------------------------------------------------------
-    // Rules
-    // -------------------------------------------------------------------------
-
     @Test
-    void testRulesInsertAndSelect() throws Exception {
+    void testVanishStateDelete() {
         UUID uuid = UUID.randomUUID();
-        try (PreparedStatement ps = conn.prepareStatement(
-                "MERGE INTO vpp_rules (uuid, rule_key, rule_value) KEY(uuid, rule_key) VALUES (?, ?, ?)")) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, "can_chat");
-            ps.setString(3, "true");
-            ps.executeUpdate();
-        }
-
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT rule_value FROM vpp_rules WHERE uuid = ? AND rule_key = ?")) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, "can_chat");
-            try (ResultSet rs = ps.executeQuery()) {
-                assertTrue(rs.next());
-                assertEquals("true", rs.getString("rule_value"));
-            }
-        }
+        storage.setVanished(uuid, true);
+        assertTrue(storage.isVanished(uuid));
+        storage.setVanished(uuid, false);
+        assertFalse(storage.isVanished(uuid));
     }
 
     @Test
-    void testRulesUpsertOverwrites() throws Exception {
+    void testRulesInsertAndSelect() {
         UUID uuid = UUID.randomUUID();
-        for (String val : List.of("true", "false")) {
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "MERGE INTO vpp_rules (uuid, rule_key, rule_value) KEY(uuid, rule_key) VALUES (?, ?, ?)")) {
-                ps.setString(1, uuid.toString());
-                ps.setString(2, "can_chat");
-                ps.setString(3, val);
-                ps.executeUpdate();
-            }
-        }
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT rule_value FROM vpp_rules WHERE uuid = ? AND rule_key = ?")) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, "can_chat");
-            try (ResultSet rs = ps.executeQuery()) {
-                assertTrue(rs.next());
-                assertEquals("false", rs.getString("rule_value"), "Second upsert must overwrite first");
-            }
-        }
+        storage.setRule(uuid, "can_chat", true);
+        assertEquals(true, storage.getRules(uuid).get("can_chat"));
     }
 
-    // -------------------------------------------------------------------------
-    // Acknowledgements
-    // -------------------------------------------------------------------------
-
     @Test
-    void testAcknowledgementInsertAndSelect() throws Exception {
+    void testRulesUpsertOverwrites() {
         UUID uuid = UUID.randomUUID();
-        try (PreparedStatement ps = conn.prepareStatement(
-                "MERGE INTO vpp_acknowledgements (uuid, notification_id) KEY(uuid, notification_id) VALUES (?, ?)")) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, "migration_v7");
-            ps.executeUpdate();
-        }
-
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT 1 FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, "migration_v7");
-            try (ResultSet rs = ps.executeQuery()) {
-                assertTrue(rs.next(), "Inserted acknowledgement must be retrievable");
-            }
-        }
+        storage.setRule(uuid, "can_chat", true);
+        assertEquals(true, storage.getRules(uuid).get("can_chat"));
+        storage.setRule(uuid, "can_chat", false);
+        assertEquals(false, storage.getRules(uuid).get("can_chat"));
     }
 
     @Test
-    void testAcknowledgementIsPerPlayer() throws Exception {
-        UUID a = UUID.randomUUID();
-        UUID b = UUID.randomUUID();
-        try (PreparedStatement ps = conn.prepareStatement(
-                "MERGE INTO vpp_acknowledgements (uuid, notification_id) KEY(uuid, notification_id) VALUES (?, ?)")) {
-            ps.setString(1, a.toString());
-            ps.setString(2, "migration_v7");
-            ps.executeUpdate();
-        }
+    void testAcknowledgementInsertAndSelect() {
+        UUID uuid = UUID.randomUUID();
+        assertFalse(storage.hasAcknowledged(uuid, "migration_v7"));
+        storage.addAcknowledgement(uuid, "migration_v7");
+        assertTrue(storage.hasAcknowledged(uuid, "migration_v7"));
+    }
 
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT 1 FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
-            ps.setString(1, b.toString());
-            ps.setString(2, "migration_v7");
-            try (ResultSet rs = ps.executeQuery()) {
-                assertFalse(rs.next(), "Acknowledgement for player A must not affect player B");
-            }
-        }
+    @Test
+    void testAcknowledgementIsPerPlayer() {
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID();
+        storage.addAcknowledgement(a, "migration_v7");
+        assertTrue(storage.hasAcknowledged(a, "migration_v7"));
+        assertFalse(storage.hasAcknowledged(b, "migration_v7"));
     }
 
     @Test
     void testAcknowledgementIdempotent() throws Exception {
         UUID uuid = UUID.randomUUID();
-        String sql = "MERGE INTO vpp_acknowledgements (uuid, notification_id) KEY(uuid, notification_id) VALUES (?, ?)";
-        // Insert twice — must not throw or duplicate
-        for (int i = 0; i < 2; i++) {
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, uuid.toString());
-                ps.setString(2, "migration_v7");
-                assertDoesNotThrow((org.junit.jupiter.api.function.Executable) ps::executeUpdate,
-                        "Duplicate acknowledgement insert must not throw");
-            }
-        }
-
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT COUNT(*) FROM vpp_acknowledgements WHERE uuid = ? AND notification_id = ?")) {
+        storage.addAcknowledgement(uuid, "migration_v7");
+        storage.addAcknowledgement(uuid, "migration_v7");
+        try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM vpp_acknowledgements WHERE uuid = ?")) {
             ps.setString(1, uuid.toString());
-            ps.setString(2, "migration_v7");
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
-                assertEquals(1, rs.getInt(1), "Idempotent insert must not create duplicate rows");
+                assertEquals(1, rs.getInt(1), "Repeated acknowledgement must not duplicate rows");
             }
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Levels
-    // -------------------------------------------------------------------------
 
     @Test
-    void testLevelUpsert() throws Exception {
+    void testLevelUpsert() {
         UUID uuid = UUID.randomUUID();
-        String sql = "MERGE INTO vpp_levels (uuid, level) KEY(uuid) VALUES (?, ?)";
-        for (int level : List.of(2, 5)) {
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, uuid.toString());
-                ps.setInt(2, level);
-                ps.executeUpdate();
-            }
-        }
-        try (PreparedStatement ps = conn.prepareStatement("SELECT level FROM vpp_levels WHERE uuid = ?")) {
-            ps.setString(1, uuid.toString());
-            try (ResultSet rs = ps.executeQuery()) {
-                assertTrue(rs.next());
-                assertEquals(5, rs.getInt("level"), "Level must reflect most recent upsert");
-            }
-        }
+        storage.setVanishLevel(uuid, 2);
+        assertEquals(2, storage.getVanishLevel(uuid));
+        storage.setVanishLevel(uuid, 5);
+        assertEquals(5, storage.getVanishLevel(uuid));
     }
-
-    // -------------------------------------------------------------------------
-    // Schema migration no-op when already at current version
-    // -------------------------------------------------------------------------
 
     @Test
     void testSchemaMigrationIsNoOpWhenUpToDate() throws Exception {
-        // Version is already 1 (seeded in setUp). Running migration again must be harmless.
-        int versionBefore;
-        try (PreparedStatement ps = conn.prepareStatement("SELECT version FROM vpp_schema_version");
-             ResultSet rs = ps.executeQuery()) {
-            rs.next();
-            versionBefore = rs.getInt("version");
-        }
+        UUID uuid = UUID.randomUUID();
+        storage.setVanished(uuid, true);
+        storage.setRule(uuid, "can_chat", true);
+        storage.init();
+        assertEquals(3, schemaVersion());
+        assertTrue(storage.isVanished(uuid), "Repeated init must preserve player state");
+        assertEquals(true, storage.getRules(uuid).get("can_chat"));
+    }
 
-        // Simulate re-running migration logic: if version >= CURRENT, skip
-        int currentSchemaVersion = 1;
-        boolean migrationRan = false;
-        if (versionBefore < currentSchemaVersion) {
-            migrationRan = true;
+    private int schemaVersion() throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT version FROM vpp_schema_version")) {
+            assertTrue(rs.next(), "Production init must seed the schema version");
+            int version = rs.getInt(1);
+            assertFalse(rs.next(), "Schema version must have exactly one row");
+            return version;
         }
-
-        assertFalse(migrationRan, "Migration must not re-run when schema is already at current version");
-        assertEquals(1, versionBefore, "Version must still be 1 after no-op migration check");
     }
 }

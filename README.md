@@ -210,6 +210,10 @@ Before submitting a PR, make sure the full test suite passes:
 mvn clean verify
 ```
 
+Pull requests run this command too. Paper tests run after packaging through Maven Failsafe;
+`mvn clean test` alone does not run them. The PR check uploads both Surefire and Failsafe
+reports, including when a test fails.
+
 ---
 
 ## License

@@ -127,6 +127,8 @@ public class RedisStorage {
                 return;
 
             String action = parts[0];
+            if (!action.equals("VANISH") && !action.equals("UNVANISH"))
+                return;
             UUID uuid = UUID.fromString(parts[1]);
 
             // Sync with local memory / visibility logic
