@@ -61,7 +61,7 @@ public class PaperChannelListener {
             case HELLO              -> handleHello(server, serverName, json);
             case VANISH_EVENT       -> handleVanishEvent(serverName, json);
             case TRANSFER_READY     -> stateManager.getTransfers().complete(serverConn, json, () -> handleVanishEvent(serverName, json));
-            case STATE_QUERY        -> handleStateQuery(server, json);
+            case STATE_QUERY        -> handleStateQuery(serverConn, server, json);
             case CONFIG_REQUEST     -> handleConfigRequest(server, serverName);
             case RELOAD_REQUEST     -> handleReloadRequest(json);
             case PLAYER_LIST_QUERY  -> handlePlayerListQuery(server, json);
@@ -160,10 +160,11 @@ public class PaperChannelListener {
     }
 
     /** Paper wants the full vanished player set. */
-    private void handleStateQuery(RegisteredServer server, JsonObject json) {
+    private void handleStateQuery(ServerConnection carrier, RegisteredServer server, JsonObject json) {
         if (json.has("joiningUuid") && json.has("requestId")) {
-            dispatcher.sendStateResponse(server, stateManager, UUID.fromString(json.get("joiningUuid").getAsString()),
-                    json.get("requestId").getAsString());
+            UUID joining = UUID.fromString(json.get("joiningUuid").getAsString());
+            stateManager.getTransfers().sourceConnected(joining, carrier);
+            dispatcher.sendStateResponse(server, stateManager, joining, json.get("requestId").getAsString());
         } else dispatcher.sendStateResponse(server, stateManager);
     }
 

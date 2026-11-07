@@ -3,6 +3,7 @@ package net.thecommandcraft.vanishpp.velocity.messaging;
 import com.google.gson.JsonObject;
 import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -37,21 +38,49 @@ public final class TransferBarrier implements AutoCloseable {
     }
     private final VanishppVelocity plugin;
     private final Map<UUID, Pending> pending = new HashMap<>();
+    /**
+     * Each player's connection to a backend that finished the Vanish++ handshake and answers the barrier.
+     * Keyed by the connection itself, so a reconnect to a restarted backend must prove the handshake again.
+     */
+    private final Map<UUID, ServerConnection> connectedSources = new HashMap<>();
+    /** Handshaken backends that asked for a player's state before the proxy switched that player onto them. */
+    private final Map<UUID, RegisteredServer> joiningSources = new HashMap<>();
     private boolean closed;
 
     public TransferBarrier(VanishppVelocity plugin) { this.plugin = plugin; }
 
+    /** A backend asks for a joining player's state only after its handshake, through any carrier connection. */
+    public synchronized void sourceConnected(UUID uuid, ServerConnection carrier) {
+        ServerConnection connection = plugin.getProxy().getPlayer(uuid).flatMap(player -> player.getCurrentServer())
+                .filter(current -> current.getServer().equals(carrier.getServer())).orElse(null);
+        if (connection != null) connectedSources.put(uuid, connection);
+        else joiningSources.put(uuid, carrier.getServer());
+    }
+
+    public synchronized void established(Player player) {
+        RegisteredServer joining = joiningSources.remove(player.getUniqueId());
+        player.getCurrentServer().filter(current -> current.getServer().equals(joining))
+                .ifPresent(connection -> connectedSources.put(player.getUniqueId(), connection));
+    }
+
+    public synchronized void disconnected(UUID uuid) {
+        connected(uuid);
+        joiningSources.remove(uuid);
+    }
+
     public synchronized void begin(ServerPreConnectEvent event, Continuation continuation) {
+        UUID uuid = event.getPlayer().getUniqueId();
         ServerConnection source = event.getPlayer().getCurrentServer().orElse(null);
-        if (source == null && event.getPreviousServer() != null) {
+        ServerConnection connected = connectedSources.get(uuid);
+        if (source == null && event.getPreviousServer() != null && connected != null
+                && connected.getServer().equals(event.getPreviousServer())) {
             event.setResult(ServerPreConnectEvent.ServerResult.denied());
             continuation.resume(); return;
         }
-        if (closed || !event.getResult().isAllowed() || source == null
+        if (closed || !event.getResult().isAllowed() || source == null || !source.equals(connected)
                 || event.getResult().getServer().filter(source.getServer()::equals).isPresent()) {
             continuation.resume(); return;
         }
-        UUID uuid = event.getPlayer().getUniqueId();
         Pending previous = pending.remove(uuid);
         if (previous != null) deny(uuid, previous);
         Pending transfer = new Pending(event, continuation, source);
@@ -113,6 +142,7 @@ public final class TransferBarrier implements AutoCloseable {
     }
 
     public synchronized void connected(UUID uuid) {
+        connectedSources.remove(uuid); // The new connection proves its own handshake with its join query.
         Pending transfer = pending.remove(uuid);
         if (transfer != null) transfer.cancelTasks(); // Source detach/quit releases the Paper fence.
     }

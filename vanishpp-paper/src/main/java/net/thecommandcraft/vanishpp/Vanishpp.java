@@ -850,12 +850,17 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
     }
 
-    public void completeProxyJoin(Player player, boolean hidden) {
+    public void completeProxyJoin(Player player, boolean hidden) { completeProxyJoin(player, hidden, true); }
+
+    /** Lifts a join hold; {@code persist} is false when {@code hidden} was just read from storage. */
+    public void completeProxyJoin(Player player, boolean hidden, boolean persist) {
         UUID uuid = player.getUniqueId();
         ProxyJoin pending = proxyJoins.remove(uuid);
         if (pending == null || pending.version() != stateVersion(uuid)) return;
-        long decisionVersion = beginStateDecision(uuid);
-        stateWrites.submit(() -> persistState(uuid, hidden, decisionVersion));
+        if (persist) {
+            long decisionVersion = beginStateDecision(uuid);
+            stateWrites.submit(() -> persistState(uuid, hidden, decisionVersion));
+        }
         if (hidden) applyVanishEffects(player, false);
         else if (pending.previouslyHidden()) removeVanishEffects(player, false);
         else {

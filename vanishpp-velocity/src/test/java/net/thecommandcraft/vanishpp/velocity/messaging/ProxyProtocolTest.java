@@ -101,6 +101,17 @@ class ProxyProtocolTest {
     }
 
     @Test
+    void handshakeReportedBeforeTheSwitchCompletesHoldsLaterSwitches() throws Exception {
+        ServerConnection joined = connection(server("joined"));
+        joinQuery(joined);
+        current = joined;
+        states.getTransfers().established(player);
+        AtomicBoolean resumed = new AtomicBoolean();
+        beginTransfer(resumed);
+        assertFalse(resumed.get(), "a backend that asked for the player's state before the switch completed must hold later switches");
+    }
+
+    @Test
     void fallbackFromABackendWithoutAFinishedHandshakeIsAllowed() throws Exception {
         RegisteredServer plain = server("plain");
         current = connection(plain);
