@@ -1003,6 +1003,47 @@ class StateDurabilityTest {
         }
     }
 
+    @Test
+    void failedAcknowledgementRecoveryDoesNotPublishSqlReadiness() throws Exception {
+        plugin.setWarningIgnored(player, true); scheduler.drainAsync();
+        plugin.getIgnoredWarningPlayers().clear();
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:ack_recovery_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
+        SqlStorage schema = sqlStorage(database); schema.init();
+        plugin.getConfigManager().getConfig().set("storage.type", "MYSQL");
+        field(plugin, "storageProvider", null);
+        AtomicBoolean failRead = new AtomicBoolean(true), attempted = new AtomicBoolean();
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        try (var pools = mockConstruction(com.zaxxer.hikari.HikariDataSource.class, (pool, context) -> {
+            if (attempts.incrementAndGet() == 1) throw new IllegalStateException("initial outage");
+            when(pool.getConnection()).thenAnswer(call -> {
+                java.sql.Connection real = database.getConnection();
+                return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{java.sql.Connection.class},
+                        (self, method, args) -> {
+                            if (method.getName().equals("prepareStatement") && failRead.get()
+                                    && (((String) args[0]).startsWith("SELECT notification_id")
+                                    || ((String) args[0]).startsWith("SELECT 1 FROM vpp_acknowledgements"))) {
+                                attempted.set(true); throw new java.sql.SQLException("acknowledgement read unavailable");
+                            }
+                            return invokeJdbc(method, real, args);
+                        });
+            });
+        })) {
+            var initialize = Vanishpp.class.getDeclaredMethod("initStorage"); initialize.setAccessible(true); initialize.invoke(plugin);
+            StorageProvider active = plugin.getStorageProvider();
+            assertThrows(IllegalStateException.class, () -> active.isVanished(player.getUniqueId()));
+            scheduler.drainAsync();
+            assertTrue(attempted.get(), "recovery acknowledgement read must actually fail");
+            assertAll(
+                    () -> assertThrows(IllegalStateException.class, () -> active.isVanished(player.getUniqueId()),
+                            "failed acknowledgement restoration must keep SQL recovery unavailable"),
+                    () -> {
+                        failRead.set(false); scheduler.runDelayedPass(); scheduler.drainAsync();
+                        assertTrue(plugin.isWarningIgnored(player), "acknowledgement restoration must retry before readiness");
+                    });
+        }
+    }
+
     private void login() {
         PlayerListener listener = new PlayerListener(plugin);
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
