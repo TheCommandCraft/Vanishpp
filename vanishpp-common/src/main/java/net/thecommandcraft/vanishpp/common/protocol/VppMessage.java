@@ -50,4 +50,10 @@ public enum VppMessage {
      * Payload: { uuid, message }
      */
     PLAYER_MESSAGE,
+    /** Proxy asks the source to settle accepted decisions before a server switch. */
+    TRANSFER_PREPARE,
+    /** Source confirms its settled decision. Payload includes requestId and a sequenced vanish event. */
+    TRANSFER_READY,
+    /** Proxy cancelled the switch; source may accept new decisions again. */
+    TRANSFER_CANCEL,
 }

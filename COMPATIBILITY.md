@@ -39,3 +39,5 @@ Voice callbacks use immutable audience facts published on player-owned server ta
 State synchronization includes proxy session/revision fields and explicit visible-player decisions. Upgrade both jars together. Back up Velocity `state.yml` alongside `config.yml`; it preserves decisions when SQL writes are still queued or the proxy uses YAML. Older peers do not provide the revision and bootstrap guarantees.
 
 Native-proxy joins now wait for a targeted state response before becoming visible. This includes the first carrier on an empty backend and players online during a plugin restart. A missing response disconnects that joining player after five seconds; it does not turn unknown state into an unvanish.
+
+Native server transfers require the matching companion on the source and destination. Velocity waits for a source persistence barrier before connecting to the destination; an unanswered barrier denies the switch after five seconds. The source briefly holds new vanish decisions during that transfer. This protocol requires both jars to be upgraded together.

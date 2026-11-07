@@ -44,6 +44,12 @@ public class ProxyBridge implements PluginMessageListener {
     private final Map<UUID, Long> networkRevisions = new HashMap<>();
     private record PendingChange(long sequence, byte[] packet) {}
     private final Map<UUID, PendingChange> pendingChanges = new ConcurrentHashMap<>();
+    private static final class Transfer {
+        final String id;
+        Runnable cancel = () -> {};
+        Transfer(String id) { this.id = id; }
+    }
+    private final Map<UUID, Transfer> transfers = new ConcurrentHashMap<>();
     private record JoinRequest(UUID uuid, Consumer<Boolean> callback) {}
     private final Map<String, JoinRequest> pendingJoins = new ConcurrentHashMap<>();
 
@@ -89,6 +95,8 @@ public class ProxyBridge implements PluginMessageListener {
         networkSession = null;
         networkRevisions.clear();
         pendingChanges.clear();
+        transfers.values().forEach(transfer -> transfer.cancel.run());
+        transfers.clear();
         pendingPackets.clear();
         plugin.getServer().getMessenger().unregisterOutgoingPluginChannel(plugin, VppChannel.CHANNEL);
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, VppChannel.CHANNEL);
@@ -154,6 +162,8 @@ public class ProxyBridge implements PluginMessageListener {
 
         switch (packet.type()) {
             case PONG                -> handlePong(json);
+            case TRANSFER_PREPARE    -> prepareTransfer(json);
+            case TRANSFER_CANCEL     -> cancelTransfer(json);
             case CONFIG_PUSH         -> handleConfigPush(json);
             case VANISH_SYNC         -> handleVanishSync(json);
             case STATE_RESPONSE      -> handleStateResponse(json);
@@ -284,7 +294,8 @@ public class ProxyBridge implements PluginMessageListener {
     }
 
     public void forgetPlayer(UUID uuid) {
-        pendingChanges.remove(uuid);
+        Transfer transfer = transfers.remove(uuid);
+        if (transfer != null) transfer.cancel.run();
         pendingJoins.entrySet().removeIf(entry -> entry.getValue().uuid().equals(uuid));
     }
 
@@ -304,6 +315,51 @@ public class ProxyBridge implements PluginMessageListener {
                 plugin.abortProxyJoin(player.getUniqueId());
             }, () -> plugin.abortProxyJoin(player.getUniqueId()));
         }, 100L);
+    }
+
+    public boolean isTransferPending(UUID uuid) { return transfers.containsKey(uuid); }
+
+    private void prepareTransfer(JsonObject json) {
+        UUID uuid = UUID.fromString(json.get("uuid").getAsString());
+        String id = json.get("requestId").getAsString();
+        Player player = Bukkit.getPlayer(uuid);
+        if (player == null) return;
+        plugin.getVanishScheduler().runEntityNow(player, () -> {
+            if (!player.isOnline() || plugin.isProxyJoinPending(uuid)) return;
+            Transfer transfer = new Transfer(id);
+            Transfer old = transfers.put(uuid, transfer);
+            if (old != null) old.cancel.run();
+            // The proxy denies an unanswered switch after five seconds. Release a lost cancel safely later.
+            transfer.cancel = plugin.getVanishScheduler().startLater(() -> transfers.remove(uuid, transfer), 200L);
+            settleTransfer(player, transfer);
+        });
+    }
+
+    private void cancelTransfer(JsonObject json) {
+        UUID uuid = UUID.fromString(json.get("uuid").getAsString());
+        Transfer transfer = transfers.get(uuid);
+        if (transfer != null && transfer.id.equals(json.get("requestId").getAsString()) && transfers.remove(uuid, transfer))
+            transfer.cancel.run();
+    }
+
+    private void settleTransfer(Player player, Transfer transfer) {
+        UUID uuid = player.getUniqueId();
+        long version = plugin.stateVersion(uuid);
+        plugin.submitStorageWork(() -> {
+            if (transfers.get(uuid) != transfer || plugin.hasPendingStateWrite(uuid)) return;
+            var provider = plugin.getStorageProvider();
+            int level = provider.getVanishLevel(uuid);
+            plugin.getVanishScheduler().runEntity(player, () -> {
+                if (!active || !player.isOnline() || transfers.get(uuid) != transfer) return;
+                if (version != plugin.stateVersion(uuid) || provider != plugin.getStorageProvider()) {
+                    settleTransfer(player, transfer); return;
+                }
+                byte[] event = prepareVanishEvent(uuid, player.getName(), plugin.isVanished(uuid), level);
+                JsonObject payload = JsonParser.parseString(VppPacket.decode(event).jsonPayload()).getAsJsonObject();
+                payload.addProperty("requestId", transfer.id);
+                player.sendPluginMessage(plugin, VppChannel.CHANNEL, VppPacket.encode(VppMessage.TRANSFER_READY, payload.toString()));
+            }, null);
+        });
     }
 
     public boolean isConfigured() { return configured; }

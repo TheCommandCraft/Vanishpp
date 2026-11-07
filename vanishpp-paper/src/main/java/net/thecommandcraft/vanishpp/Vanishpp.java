@@ -501,10 +501,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 this.luckPermsHook.load();
             } catch (Throwable ignored) { this.luckPermsHook = null; }
         }
+        YamlConfiguration settings = new YamlConfiguration();
+        try { settings.loadFromString(configManager.getConfig().saveToString()); }
+        catch (org.bukkit.configuration.InvalidConfigurationException e) { throw new IllegalStateException(e); }
         stateWrites.submit(() -> {
             if (stopping) return;
             if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
-            initStorage();
+            initStorage(settings);
             restoreRuleExpiries();
         });
 
@@ -566,11 +569,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
         catch (RuntimeException e) { getLogger().log(java.util.logging.Level.SEVERE, "Failed to shut down " + name, e); }
     }
 
-    private void initStorage() {
-        String type = configManager.getConfig().getString("storage.type", "YAML").toUpperCase();
+    private void initStorage() { initStorage(configManager.getConfig()); }
+
+    private void initStorage(org.bukkit.configuration.file.FileConfiguration settings) {
+        String type = settings.getString("storage.type", "YAML").toUpperCase();
         StorageProvider newProvider;
         if (type.equals("MYSQL") || type.equals("POSTGRESQL")) {
-            newProvider = new SqlStorage(this, type);
+            newProvider = new SqlStorage(this, type, settings);
         } else {
             newProvider = new YamlStorage(this);
         }
@@ -619,8 +624,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         this.storageProvider = newProvider;
         if (previous != null && previous != newProvider) previous.shutdown();
 
-        if (configManager.getConfig().getBoolean("storage.redis.enabled", false)) {
-            this.redisStorage = new RedisStorage(this);
+        if (settings.getBoolean("storage.redis.enabled", false)) {
+            this.redisStorage = new RedisStorage(this, settings);
             this.redisStorage.init();
         }
     }
@@ -721,6 +726,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
             return version;
         }
     }
+
+    public boolean hasPendingStateWrite(UUID uuid) { return pendingStateWrites.containsKey(uuid); }
 
     private void persistState(UUID uuid, boolean hidden, long version) {
         storageProvider.setVanished(uuid, hidden);
@@ -1308,6 +1315,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void restoreVanishEffects(Player player) { applyVanishEffects(player, false); }
 
     private void applyVanishEffects(Player player, boolean persist) {
+        if (persist && proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         if (stopping) return;
         long decisionVersion = persist ? beginStateDecision(player.getUniqueId()) : stateVersion(player.getUniqueId());
         vanishedPlayers.add(player.getUniqueId());
@@ -1436,6 +1444,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void removeVanishEffects(Player player) { removeVanishEffects(player, true); }
 
     private void removeVanishEffects(Player player, boolean persist) {
+        if (persist && proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         if (stopping) return;
         long decisionVersion = persist ? beginStateDecision(player.getUniqueId()) : stateVersion(player.getUniqueId());
         vanishedPlayers.remove(player.getUniqueId());
@@ -1559,6 +1568,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
      * right after they connect.
      */
     public void vanishPlayerSilently(Player player) {
+        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         applyVanishEffects(player);
         if (isValidMessage(configManager.vanishMessage)) {
             player.sendMessage(messageManager.parse(configManager.vanishMessage, player));
@@ -1567,6 +1577,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {
+        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         // No gamemode snapshot needed here: vanish itself never forces spectator mode, and
         // whichever mechanism actually puts the player into spectator later (/vspec,
         // /vfollow, double-shift toggle) saves the real original gamemode itself via
@@ -1599,6 +1610,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void unvanishPlayer(Player player, CommandSender executor) {
+        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         if (configManager.broadcastFakeJoin) {
             String fakeMsg = configManager.fakeJoinMessage;
             if (isValidMessage(fakeMsg)) {
@@ -1626,6 +1638,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     /** Vanish a player with an optional reason string. */
     public void vanishPlayer(Player player, CommandSender executor, String reason) {
+        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         if (reason != null && !reason.isEmpty()) {
             vanishReasons.put(player.getUniqueId(), reason);
         }
@@ -1829,7 +1842,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
                     if (isVanished(player)) resyncVanishEffects(player);
                 }, null);
             } else {
-                submitStorageWork(() -> provider.setRule(uuid, PENDING_NOTIFY_PREFIX + rule, true));
+                String message = configManager.getLanguageManager().getMessage("rules.expired")
+                        .replace("%rule%", rule).replace("%player%", uuid.toString());
+                if (proxyBridge != null && proxyBridge.isProxyDetected() && !Bukkit.getOnlinePlayers().isEmpty())
+                    proxyBridge.sendPlayerMessage(uuid, message);
+                else submitStorageWork(() -> {
+                    if (provider == storageProvider) provider.setRule(uuid, PENDING_NOTIFY_PREFIX + rule, true);
+                });
             }
         });
     }

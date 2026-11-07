@@ -11,6 +11,7 @@ import java.util.UUID;
 public class RedisStorage {
 
     private final Vanishpp plugin;
+    private final org.bukkit.configuration.file.FileConfiguration settings;
     private JedisPool jedisPool;
     private String channel = "vanishpp:sync";
     private Thread pubSubThread;
@@ -18,14 +19,17 @@ public class RedisStorage {
     private volatile Jedis subscriber;
     private volatile JedisPubSub subscription;
 
-    public RedisStorage(Vanishpp plugin) {
+    public RedisStorage(Vanishpp plugin) { this(plugin, plugin.getConfig()); }
+
+    public RedisStorage(Vanishpp plugin, org.bukkit.configuration.file.FileConfiguration settings) {
         this.plugin = plugin;
+        this.settings = settings;
     }
 
     public void init() {
-        String host = plugin.getConfig().getString("storage.redis.host", "localhost");
-        int port = plugin.getConfig().getInt("storage.redis.port", 6379);
-        String password = plugin.getConfig().getString("storage.redis.password", "");
+        String host = settings.getString("storage.redis.host", "localhost");
+        int port = settings.getInt("storage.redis.port", 6379);
+        String password = settings.getString("storage.redis.password", "");
 
         JedisPoolConfig poolConfig = new JedisPoolConfig();
         poolConfig.setMaxTotal(8);

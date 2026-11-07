@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ProxyStateManager {
 
     private final VanishppVelocity plugin;
+    private final net.thecommandcraft.vanishpp.velocity.messaging.TransferBarrier transfers;
     private final VelocityConfigManager configManager;
     private ProxySqlStorage sqlStorage;
     private final Set<UUID> knownVisible = ConcurrentHashMap.newKeySet();
@@ -31,6 +32,7 @@ public class ProxyStateManager {
 
     public ProxyStateManager(VanishppVelocity plugin, VelocityConfigManager configManager) {
         this.plugin = plugin;
+        this.transfers = new net.thecommandcraft.vanishpp.velocity.messaging.TransferBarrier(plugin);
         this.configManager = configManager;
         this.writes = new net.thecommandcraft.vanishpp.common.state.OrderedWrites(
                 task -> plugin.getProxy().getScheduler().buildTask(plugin, task).schedule(),
@@ -68,6 +70,7 @@ public class ProxyStateManager {
     }
 
     public void shutdown() {
+        transfers.close();
         writes.close();
         if (sqlStorage != null) sqlStorage.shutdown();
     }
@@ -181,6 +184,8 @@ public class ProxyStateManager {
             writes.submit(() -> sqlStorage.addAcknowledgement(uuid, notificationId));
         }
     }
+    public net.thecommandcraft.vanishpp.velocity.messaging.TransferBarrier getTransfers() { return transfers; }
+
     public synchronized boolean bootstrap(Collection<NetworkVanishState> states) {
         if (sqlAuthoritative) return false;
         boolean changed = false;

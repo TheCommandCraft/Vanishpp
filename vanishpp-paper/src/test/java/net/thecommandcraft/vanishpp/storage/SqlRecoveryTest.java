@@ -18,6 +18,12 @@ class SqlRecoveryTest {
         MockBukkit.mock();
         try {
             Vanishpp plugin = MockBukkit.load(Vanishpp.class);
+            java.util.List<Runnable> workers = new java.util.ArrayList<>();
+            var scheduler = mock(net.thecommandcraft.vanishpp.utils.VanishScheduler.class);
+            doAnswer(call -> { workers.add(call.getArgument(0)); return null; }).when(scheduler).runAsync(any());
+            var schedulerField = Vanishpp.class.getDeclaredField("vanishScheduler");
+            schedulerField.setAccessible(true);
+            schedulerField.set(plugin, scheduler);
             JdbcDataSource database = new JdbcDataSource();
             database.setURL("jdbc:h2:mem:recovery_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;MODE=MySQL");
             SqlStorage seed = new SqlStorage(plugin, database);
@@ -31,6 +37,8 @@ class SqlRecoveryTest {
             })) {
                 SqlStorage storage = new SqlStorage(plugin, "MYSQL");
                 assertThrows(Exception.class, storage::init, "first pool initialization must fail in the fixture");
+                assertThrows(IllegalStateException.class, () -> storage.isVanished(id), "unavailable read must queue recovery");
+                while (!workers.isEmpty()) workers.removeFirst().run();
                 assertDoesNotThrow(() -> {
                     assertTrue(storage.isVanished(id), "recovered SQL must restore the persisted hidden player");
                 }, "failed pool initialization must retry rather than leave a permanently unusable provider");

@@ -19,17 +19,21 @@ public class SqlStorage implements StorageProvider {
     private volatile DataSource dataSource;
     private volatile boolean initialized;
     private volatile boolean closed;
-    private volatile Thread recoveryOwner;
+    private final java.util.concurrent.atomic.AtomicBoolean recoveryScheduled = new java.util.concurrent.atomic.AtomicBoolean();
     private final String type;
+    private final org.bukkit.configuration.file.FileConfiguration settings;
     private volatile long lastNotificationTime = 0;
     private static final long NOTIFICATION_COOLDOWN = 300000; // 5 minutes between notifications
 
     public volatile boolean writeSuspended = false;
     public String dbVersion = null;
 
-    public SqlStorage(Vanishpp plugin, String type) {
+    public SqlStorage(Vanishpp plugin, String type) { this(plugin, type, plugin.getConfig()); }
+
+    public SqlStorage(Vanishpp plugin, String type, org.bukkit.configuration.file.FileConfiguration settings) {
         this.plugin = plugin;
         this.type = type.toLowerCase();
+        this.settings = settings;
     }
 
     /** Package-private constructor for testing with a pre-configured DataSource (e.g. H2 in-memory). */
@@ -37,6 +41,7 @@ public class SqlStorage implements StorageProvider {
         this.plugin = plugin;
         this.type = "mysql";
         this.dataSource = dataSource;
+        this.settings = plugin.getConfig();
     }
 
     @Override
@@ -44,12 +49,12 @@ public class SqlStorage implements StorageProvider {
         if (closed) throw new IllegalStateException("Storage is closed");
         if (this.dataSource == null) {
             HikariConfig config = new HikariConfig();
-            String host = plugin.getConfig().getString("storage.mysql.host", "localhost");
-            int port = plugin.getConfig().getInt("storage.mysql.port", 3306);
-            String database = plugin.getConfig().getString("storage.mysql.database", "vanishpp");
-            String username = plugin.getConfig().getString("storage.mysql.username", "root");
-            String password = plugin.getConfig().getString("storage.mysql.password", "");
-            boolean useSSL = plugin.getConfig().getBoolean("storage.mysql.use-ssl", false);
+            String host = settings.getString("storage.mysql.host", "localhost");
+            int port = settings.getInt("storage.mysql.port", 3306);
+            String database = settings.getString("storage.mysql.database", "vanishpp");
+            String username = settings.getString("storage.mysql.username", "root");
+            String password = settings.getString("storage.mysql.password", "");
+            boolean useSSL = settings.getBoolean("storage.mysql.use-ssl", false);
 
             if (type.equals("mysql")) {
                 // Force driver class load in plugin classloader before HikariCP tries to find it
@@ -64,7 +69,7 @@ public class SqlStorage implements StorageProvider {
 
             config.setUsername(username);
             config.setPassword(password);
-            config.setMaximumPoolSize(plugin.getConfig().getInt("storage.mysql.pool-size", 10));
+            config.setMaximumPoolSize(settings.getInt("storage.mysql.pool-size", 10));
             config.setConnectionTimeout(5000);
 
             this.dataSource = new HikariDataSource(config);
@@ -102,18 +107,19 @@ public class SqlStorage implements StorageProvider {
     }
 
     private void ensureInitialized() {
-        if (initialized && !closed && (recoveryOwner == null || recoveryOwner == Thread.currentThread())) return;
-        synchronized (this) {
-            if (initialized && !closed) return;
-            recoveryOwner = Thread.currentThread();
-            try {
-                init();
-                plugin.storageRecovered(this);
-            } catch (Exception e) {
-                initialized = false;
-                throw new IllegalStateException("SQL storage is unavailable; read will retry", e);
-            } finally { recoveryOwner = null; }
+        if (initialized && !closed) return;
+        if (!closed && recoveryScheduled.compareAndSet(false, true)) {
+            plugin.getVanishScheduler().runAsync(() -> {
+                try {
+                    init();
+                    plugin.storageRecovered(this);
+                } catch (Exception e) {
+                    initialized = false;
+                    plugin.getLogger().warning("SQL initialization will retry: " + e.getMessage());
+                } finally { recoveryScheduled.set(false); }
+            });
         }
+        throw new IllegalStateException("SQL storage is unavailable; initialization retry is asynchronous");
     }
 
     private void checkPluginVersionStamp(Connection conn) throws SQLException {
@@ -805,7 +811,8 @@ public class SqlStorage implements StorageProvider {
     @Override
     public void recordVanishSession(UUID uuid, long durationMs) {
         ensureInitialized();
-        if (writeSuspended || durationMs <= 0) return;
+        if (durationMs <= 0) return;
+        if (writeSuspended) throw new IllegalStateException("Statistics writes are suspended");
         String q = type.equals("postgresql")
                 ? "INSERT INTO vpp_stats (uuid,total_ms,vanish_count,longest_ms) VALUES(?,?,1,?)"
                   + " ON CONFLICT (uuid) DO UPDATE SET total_ms=vpp_stats.total_ms+EXCLUDED.total_ms,"
@@ -821,7 +828,7 @@ public class SqlStorage implements StorageProvider {
             ps.setLong(2, durationMs);
             ps.setLong(3, durationMs);
             ps.executeUpdate();
-        } catch (SQLException e) { handleDatabaseError(e); }
+        } catch (SQLException e) { throw new IllegalStateException("Could not record final session for " + uuid, e); }
     }
 
     @Override

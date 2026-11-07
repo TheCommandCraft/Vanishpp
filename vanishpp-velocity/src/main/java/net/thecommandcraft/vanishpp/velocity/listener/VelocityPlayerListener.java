@@ -25,6 +25,12 @@ public class VelocityPlayerListener {
         this.dispatcher = dispatcher;
     }
 
+    @Subscribe(order = com.velocitypowered.api.event.PostOrder.LAST)
+    public void onServerPreConnect(com.velocitypowered.api.event.player.ServerPreConnectEvent event,
+                                   com.velocitypowered.api.event.Continuation continuation) {
+        stateManager.getTransfers().begin(event, continuation);
+    }
+
     /** When a player switches servers, update their tracked server name and flush any queued messages. */
     @Subscribe
     public void onServerConnected(ServerConnectedEvent event) {

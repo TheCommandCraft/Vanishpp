@@ -60,6 +60,7 @@ public class PaperChannelListener {
         switch (packet.type()) {
             case HELLO              -> handleHello(server, serverName, json);
             case VANISH_EVENT       -> handleVanishEvent(serverName, json);
+            case TRANSFER_READY     -> stateManager.getTransfers().complete(serverConn, json, () -> handleVanishEvent(serverName, json));
             case STATE_QUERY        -> handleStateQuery(server, json);
             case CONFIG_REQUEST     -> handleConfigRequest(server, serverName);
             case RELOAD_REQUEST     -> handleReloadRequest(json);
@@ -120,14 +121,14 @@ public class PaperChannelListener {
     }
 
     /** A player vanished or unvanished on a Paper server — update state and broadcast to all other servers. */
-    private void handleVanishEvent(String serverName, JsonObject json) {
+    private boolean handleVanishEvent(String serverName, JsonObject json) {
         UUID uuid = UUID.fromString(json.get("uuid").getAsString());
         String playerName = json.has("playerName") ? json.get("playerName").getAsString() : "";
         boolean vanished  = json.get("vanished").getAsBoolean();
         int     level     = json.has("vanishLevel") ? json.get("vanishLevel").getAsInt() : 1;
 
         if (plugin.getProxy().getPlayer(uuid).flatMap(player -> player.getCurrentServer())
-                .map(connection -> !connection.getServerInfo().getName().equals(serverName)).orElse(false)) return;
+                .map(connection -> !connection.getServerInfo().getName().equals(serverName)).orElse(false)) return false;
         synchronized (stateManager) {
             String clientKey = null;
             long sequence = 0L;
@@ -137,7 +138,7 @@ public class PaperChannelListener {
                 long previous = clientRevisions.getOrDefault(clientKey, -1L);
                 if (sequence <= previous) {
                     if (sequence == previous) acknowledge(serverName, uuid, json);
-                    return;
+                    return sequence == previous;
                 }
             }
             stateManager.setVanished(uuid, playerName, serverName, vanished, level);
@@ -147,6 +148,7 @@ public class PaperChannelListener {
         }
 
         plugin.getLogger().debug("VanishEvent: {} {} on {}", playerName, vanished ? "vanished" : "unvanished", serverName);
+        return true;
     }
 
     private void acknowledge(String serverName, UUID uuid, JsonObject json) {
