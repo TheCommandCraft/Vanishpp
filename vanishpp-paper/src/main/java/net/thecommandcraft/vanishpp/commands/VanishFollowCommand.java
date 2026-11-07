@@ -33,6 +33,7 @@ import java.util.UUID;
 public class VanishFollowCommand implements CommandExecutor, TabCompleter, Listener {
 
     private final Vanishpp plugin;
+    private final java.util.Map<UUID, UUID> requests = new java.util.concurrent.ConcurrentHashMap<>();
 
     public VanishFollowCommand(Vanishpp plugin) {
         this.plugin = plugin;
@@ -97,7 +98,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
         player.setGameMode(GameMode.SPECTATOR);
 
         plugin.spectateFollowTargets.put(player.getUniqueId(), target.getUniqueId());
-        player.teleportAsync(target.getLocation());
+        updateFollowOverlay(player);
 
         plugin.getMessageManager().sendMessage(player,
                 plugin.getConfigManager().getLanguageManager().getMessage("vfollow.started")
@@ -106,6 +107,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
     }
 
     private void stopFollow(Player player) {
+        requests.remove(player.getUniqueId());
         UUID removed = plugin.spectateFollowTargets.remove(player.getUniqueId());
         if (removed == null) {
             plugin.getMessageManager().sendMessage(player,
@@ -134,30 +136,36 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
             stopFollow(follower);
             return;
         }
-        // Teleport follower to target (spectator camera follows). Re-teleporting every
-        // sweep - not just on a world change - is what actually keeps the camera glued to
-        // a moving target; a same-world-only distance check would still leave the
-        // follower behind for as long as the target keeps moving within one world.
-        follower.teleportAsync(target.getLocation());
-        // Action bar overlay
-        String overlay = String.format("§7Following: §e%s §8| §7XYZ: §f%.1f, %.1f, %.1f §8| §7HP: §c%.1f §8| §7%s",
-                target.getName(),
-                target.getLocation().getX(),
-                target.getLocation().getY(),
-                target.getLocation().getZ(),
-                target.getHealth(),
-                target.getGameMode().name());
-        follower.sendActionBar(plugin.getMessageManager().parse(overlay, target));
+        UUID request = UUID.randomUUID();
+        requests.put(follower.getUniqueId(), request);
+        plugin.getVanishScheduler().runEntityNow(target, () -> {
+            if (!target.isOnline()) return;
+            plugin.voiceAudience.publish(target);
+            org.bukkit.Location location = target.getLocation().clone();
+            String overlay = String.format("§7Following: §e%s §8| §7XYZ: §f%.1f, %.1f, %.1f §8| §7HP: §c%.1f §8| §7%s",
+                    target.getName(), location.getX(), location.getY(), location.getZ(), target.getHealth(), target.getGameMode().name());
+            plugin.getVanishScheduler().runEntityNow(follower, () -> {
+                if (!follower.isOnline() || !plugin.isVanished(follower)
+                        || !targetUuid.equals(plugin.spectateFollowTargets.get(follower.getUniqueId()))
+                        || !java.util.Objects.equals(requests.get(follower.getUniqueId()), request)) return;
+                if (!plugin.getPermissionManager().canSee(follower, target)) { stopFollow(follower); return; }
+                follower.teleportAsync(location);
+                follower.sendActionBar(plugin.getMessageManager().parse(overlay, follower));
+            });
+        });
     }
 
     @EventHandler
     public void onTargetQuit(PlayerQuitEvent event) {
         UUID quitter = event.getPlayer().getUniqueId();
+        requests.remove(quitter);
         // Anyone following this quitter should stop and have their gamemode restored
         for (UUID followerUuid : new ArrayList<>(plugin.spectateFollowTargets.keySet())) {
             if (quitter.equals(plugin.spectateFollowTargets.get(followerUuid))) {
                 Player follower = Bukkit.getPlayer(followerUuid);
                 if (follower != null) {
+                    plugin.getVanishScheduler().runEntityNow(follower, () -> {
+                    if (!quitter.equals(plugin.spectateFollowTargets.get(followerUuid))) return;
                     plugin.spectateFollowTargets.remove(followerUuid);
                     plugin.restoreSavedGamemode(follower);
                     follower.sendActionBar(Component.empty());
@@ -165,6 +173,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
                             plugin.getConfigManager().getLanguageManager()
                                     .getMessage("vfollow.target-disconnected")
                                     .replace("%player%", event.getPlayer().getName()));
+                    });
                 }
             }
         }
@@ -173,7 +182,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.spectator")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.spectator")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             completions.add("stop");

@@ -27,6 +27,21 @@ public interface VanishScheduler {
     /** Like runEntity, but runs right away when the current thread already owns the entity. */
     void runEntityNow(Entity entity, Runnable runnable);
 
+    default boolean owns(Entity entity) { return true; }
+    default boolean supportsScoreboards() { return true; }
+    default boolean regionThreaded() { return false; }
+
+    default void runLaterEntity(Entity entity, Runnable runnable, long ticks) {
+        runLaterGlobal(() -> runEntityNow(entity, runnable), ticks);
+    }
+
+    default void runSender(org.bukkit.command.CommandSender sender, Runnable runnable) {
+        if (sender instanceof Entity entity) runEntityNow(entity, runnable);
+        else runGlobal(runnable);
+    }
+
+    default void runRegion(org.bukkit.World world, int chunkX, int chunkZ, Runnable runnable) { runGlobal(runnable); }
+
     void runAsync(Runnable runnable);
 
     void cancelAllTasks();

@@ -40,7 +40,7 @@ class ScoreboardMovementListener {
                 cooldowns.put(uuid, now);
 
                 Player player = event.getPlayer();
-                Bukkit.getScheduler().runTask(plugin, () -> {
+                plugin.getVanishScheduler().runEntityNow(player, () -> {
                     if (player.isOnline()) tickCallback.accept(player);
                 });
             }

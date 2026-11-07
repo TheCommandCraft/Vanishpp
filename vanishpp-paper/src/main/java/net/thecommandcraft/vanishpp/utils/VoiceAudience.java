@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Audio callbacks only read immutable facts published from player-owned tasks. */
+/** Async and cross-region callbacks read immutable facts published from player-owned tasks. */
 public final class VoiceAudience {
     public record Facts(boolean permission, int seeLevel, int vanishLevel) {}
     private record Settings(boolean enabled, boolean layered) {}
@@ -27,17 +27,23 @@ public final class VoiceAudience {
         plugin.getServer().getOnlinePlayers().forEach(player -> online.add(player.getUniqueId()));
         departing.removeIf(uuid -> !online.contains(uuid));
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            if (departing.contains(player.getUniqueId())) continue;
-            long ticket = generation;
-            plugin.getVanishScheduler().runEntityNow(player, () -> {
-                if (!player.isOnline()) return;
-                Facts facts = plugin.getPermissionManager().voiceFacts(player);
-                synchronized (this) {
-                    if (ticket == generation) players.put(player.getUniqueId(), facts);
-                }
-            });
+            publish(player);
         }
     }
+
+    public void publish(Player player) {
+        if (departing.contains(player.getUniqueId())) return;
+        long ticket = generation;
+        plugin.getVanishScheduler().runEntityNow(player, () -> {
+            if (!player.isOnline()) return;
+            Facts facts = plugin.getPermissionManager().voiceFacts(player);
+            synchronized (this) {
+                if (ticket == generation) players.put(player.getUniqueId(), facts);
+            }
+        });
+    }
+
+    public Facts facts(UUID player) { return players.get(player); }
 
     public synchronized void invalidate(UUID player) { generation++; players.remove(player); }
     public synchronized void invalidateAll() { generation++; players.clear(); }

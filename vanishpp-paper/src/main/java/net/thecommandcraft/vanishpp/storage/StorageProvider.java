@@ -49,6 +49,8 @@ public interface StorageProvider {
     // Permission Levels (Advanced Tracking)
     int getVanishLevel(UUID uuid);
 
+    default int getRecoveryVanishLevel(UUID uuid) { return getVanishLevel(uuid); }
+
     void setVanishLevel(UUID uuid, int level);
 
     // Cleanup
@@ -91,6 +93,11 @@ public interface StorageProvider {
     List<VanishHistoryEntry> getPlayerHistory(UUID uuid, int page, int perPage);
 
     List<VanishHistoryEntry> getAllHistory(int page, int perPage);
+
+    default UUID resolveHistoryPlayer(String name) {
+        return getAllHistory(1, Integer.MAX_VALUE).stream().filter(entry -> entry.getPlayerName().equalsIgnoreCase(name))
+                .map(VanishHistoryEntry::getPlayerUuid).findFirst().orElse(null);
+    }
 
     int pruneHistory(int retentionDays);
 

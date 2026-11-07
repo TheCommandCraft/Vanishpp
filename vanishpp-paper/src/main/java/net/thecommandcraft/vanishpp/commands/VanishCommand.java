@@ -50,7 +50,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
                         plugin.getConfigManager().getLanguageManager().getMessage("console-specify"));
                 return true;
             }
-            if (!sender.hasPermission("vanishpp.vanish")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish")) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
@@ -63,7 +63,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
 
         // Info: /vanish version, /vanish info
         if (first.equals("version") || first.equals("info")) {
-            if (!sender.hasPermission("vanishpp.vanish")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish")) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
                 return true;
@@ -74,7 +74,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
 
         // Bulk: /vanish all
         if (first.equals("all")) {
-            if (!sender.hasPermission("vanishpp.vanish.bulk")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.bulk")) {
                 plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
                 return true;
             }
@@ -94,7 +94,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
 
         // Bulk: /vanish world
         if (first.equals("world")) {
-            if (!sender.hasPermission("vanishpp.vanish.bulk")) {
+            if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.bulk")) {
                 plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
                 return true;
             }
@@ -120,7 +120,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
         }
 
         // Targeting a specific player: /vanish <player> [reason...]
-        if (!sender.hasPermission("vanishpp.vanish.others")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.others")) {
             plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().noPermissionMessage);
             return true;
         }
@@ -186,15 +186,15 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
             @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
-            if (sender.hasPermission("vanishpp.vanish")) {
+            if (plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish")) {
                 completions.add("version");
                 completions.add("info");
             }
-            if (sender.hasPermission("vanishpp.vanish.bulk")) {
+            if (plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.bulk")) {
                 completions.add("all");
                 completions.add("world");
             }
-            if (sender.hasPermission("vanishpp.vanish.others")) {
+            if (plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish.others")) {
                 for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             }
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());

@@ -45,20 +45,23 @@ public final class ViewerTeams {
 
     public ViewerTeams(Vanishpp plugin) { this.plugin = plugin; }
 
-    public void joined(UUID player) { departing.remove(player); }
+    public void joined(UUID player) { if (plugin.getVanishScheduler().supportsScoreboards()) departing.remove(player); }
 
     public void update(Player subject, boolean vanished) {
+        if (!plugin.getVanishScheduler().supportsScoreboards()) return;
         if (vanished) departing.remove(subject.getUniqueId());
         refresh();
     }
 
     public void retireSubject(Player subject) {
+        if (!plugin.getVanishScheduler().supportsScoreboards()) return;
         departing.add(subject.getUniqueId());
         forget(subject.getUniqueId());
         refresh();
     }
 
     public void refresh() {
+        if (!plugin.getVanishScheduler().supportsScoreboards()) return;
         List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
         List<Overlay> active = new ArrayList<>();
         departing.removeIf(uuid -> online.stream().noneMatch(player -> player.getUniqueId().equals(uuid)));

@@ -95,10 +95,10 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 | `/vchat confirm` | `/vanishchat` | Confirm a chat message (if safety is on) | `vanishpp.chat` |
 | `/vreload` | `/vanishreload` | Reload config and resync all vanish effects | `vanishpp.reload` |
 | `/vscoreboard` | — | Toggle the vanish sidebar scoreboard | `vanishpp.scoreboard` |
-| `/vspec <player\|stop>` | — | Quick-spectate a player. `/vspec stop` to return. | `vanishpp.spec` |
-| `/vfollow <player\|stop>` | — | Lock camera to silently follow a player. | `vanishpp.follow` |
+| `/vspec <player\|stop>` | — | Quick-spectate a player. `/vspec stop` to return. | `vanishpp.spectator` |
+| `/vfollow <player\|stop>` | — | Lock camera to silently follow a player. | `vanishpp.spectator` |
 | `/vhistory [player]` | — | View vanish/unvanish audit log. | `vanishpp.history` |
-| `/vautovanish [player]` | — | Toggle auto-vanish on join for a player. | `vanishpp.autovanish` |
+| `/vautovanish [player]` | — | Toggle auto-vanish on join for a player. | `vanishpp.vanish` |
 | `/vstats [player]` | — | View vanish time statistics. | `vanishpp.stats` |
 | `/vadmin` | — | In-game dashboard GUI for vanish overview. | `vanishpp.admin` |
 | `/vwand` | — | Give the vanish wand (Blaze Rod toggle item). | `vanishpp.wand` |
@@ -141,6 +141,23 @@ Hooks directly into the server protocol to scrub your existence from clients. *(
 
 ---
 
+## Permissions, events, and configuration
+
+`/vperms` grants authorize command execution, completion and GUI controls through the same permission resolver. Editing someone else's rules requires both `vanishpp.rules` and `vanishpp.rules.others` at every click. Read-only built-in invsee blocks collection, shift-clicks, hotbar swaps and drags that could change the target inventory. Plugin hiding retains the server's `bukkit.command.plugins` check.
+
+Vanish flight requires `vanishpp.fly`. Flight that Vanish++ grants is restored when that permission is revoked; existing flight from another provider is preserved. The vanish wand remains usable while ordinary interactions are restricted. The configuration GUI keeps its session across redraws, supports translated titles, and displays current settings.
+
+WorldGuard's `vanishpp-deny-vanish` and `vanishpp-deny-unvanish` flags apply to locally requested transitions, including commands, the wand, the dashboard and the API. Set these feature flags to `allow` to activate them. There is no Vanish++ permission bypass. `worldguard.enabled: false` disables the integration.
+
+`VanishEvent` and `UnvanishEvent` fire before a local request changes reasons, messages, effects or persistence; cancellation stops it. Proxy/Redis reconciliation and persisted login restoration are authoritative and cannot be vetoed by a local listener. `VanishStateChangeEvent` fires only for an actual accepted change. Mutation calls dispatch to the player's owning scheduler. Storage-query API methods must be called asynchronously when using SQL.
+
+Gameplay rules and scoreboard levels use SQL snapshots loaded before login and refreshed every five seconds. Completed local rule changes update the snapshot; a failed refresh retains the last complete values. Mob targeting uses events and a one-time detarget pass, without an every-tick mob sweep.
+
+`vanish-history.enabled` controls recording. `retention-days` removes old entries in asynchronous minute-by-minute maintenance; `0` retains them indefinitely. `/vhistory <name>` resolves disconnected players from saved history. Webhooks send `webhook.auth-header` as `Authorization` and escape all substituted JSON strings. The older `webhook.authorization` spelling is accepted when `auth-header` is absent.
+
+The mob-targeting and accidental-chat master switches are honored, as are advancement announcements and the entity-interaction restriction. Server-list sample hiding is independent of count adjustment. Unimplemented anti-combat, rate-limit, timed-vanish, AFK, per-world-rule and staff-sound controls are no longer advertised in the bundled configuration.
+
+On Folia, entity visibility and supported packet filtering remain active. Scoreboard-backed overlays and the optional info scoreboard are disabled because Folia does not support the scoreboard API. Paper keeps those displays.
 ## Requirements & Compatibility
 
 **Requirements:**

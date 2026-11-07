@@ -76,8 +76,15 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
         plugin.saveGamemodeForRestore(player);
 
         player.setGameMode(GameMode.SPECTATOR);
-        player.teleportAsync(target.getLocation());
         plugin.spectateFollowTargets.put(player.getUniqueId(), target.getUniqueId());
+        plugin.getVanishScheduler().runEntityNow(target, () -> {
+            Location destination = target.getLocation().clone();
+            plugin.getVanishScheduler().runEntityNow(player, () -> {
+                if (player.isOnline() && plugin.isVanished(player)
+                        && target.getUniqueId().equals(plugin.spectateFollowTargets.get(player.getUniqueId())))
+                    player.teleportAsync(destination);
+            });
+        });
 
         plugin.getMessageManager().sendMessage(player,
                 plugin.getConfigManager().getLanguageManager().getMessage("vspec.started")
@@ -105,7 +112,7 @@ public class VanishSpectateCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.spectator") || !sender.hasPermission("vanishpp.vanish")) return new ArrayList<>();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.spectator") || !plugin.getPermissionManager().hasPermission(sender, "vanishpp.vanish")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             completions.add("stop");

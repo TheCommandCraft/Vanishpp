@@ -44,8 +44,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     /** Rule-key prefix used to persist cross-server expiry notifications in the shared DB. */
     public static final String PENDING_NOTIFY_PREFIX = "__notify_expired__";
 
-    private Set<UUID> vanishedPlayers;
-    private Set<UUID> ignoredWarningPlayers; // concurrent — accessed from async join reconciliation
+    private final Set<UUID> vanishedPlayers = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> ignoredWarningPlayers = ConcurrentHashMap.newKeySet();
 
     private ConfigManager configManager;
     private volatile StorageProvider storageProvider;
@@ -133,6 +133,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private LuckPermsHook luckPermsHook;
     private WebhookManager webhookManager;
     private WorldGuardHook worldGuardHook;
+    private net.thecommandcraft.vanishpp.gui.RulesGUI rulesGUI;
+    private net.thecommandcraft.vanishpp.listeners.MobAiManager mobAiManager;
+    private final Map<String, String> commandPermissions = new ConcurrentHashMap<>();
+    private final net.thecommandcraft.vanishpp.config.PlayerDataCache playerData = new net.thecommandcraft.vanishpp.config.PlayerDataCache(this);
     private net.thecommandcraft.vanishpp.scoreboard.VanishBossbar vanishBossbar;
 
     @Override
@@ -197,6 +201,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         this.ruleManager = new RuleManager(this);
         ruleManager.load();
+        this.rulesGUI = new net.thecommandcraft.vanishpp.gui.RulesGUI(this);
 
         // 3. Load Hooks
         this.integrationManager = new IntegrationManager(this);
@@ -302,7 +307,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new VanishWandListener(this), this);
         getServer().getPluginManager().registerEvents(new IncognitoListener(this), this);
         getServer().getPluginManager().registerEvents(new VanishZoneListener(this), this);
-        net.thecommandcraft.vanishpp.listeners.MobAiManager mobAiManager =
+        mobAiManager =
                 new net.thecommandcraft.vanishpp.listeners.MobAiManager(this);
         getServer().getPluginManager().registerEvents(mobAiManager, this);
         mobAiManager.register();
@@ -334,8 +339,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         startSyncTask();
 
         // 7. Restore Player State
-        this.vanishedPlayers = ConcurrentHashMap.newKeySet();
-        this.ignoredWarningPlayers = ConcurrentHashMap.newKeySet();
         try { this.vanishedPlayers.addAll(storageProvider.getVanishedPlayers()); }
         catch (RuntimeException e) { getLogger().warning("Initial state read failed; logins will retry storage: " + e.getMessage()); }
         try {
@@ -347,13 +350,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null && p.isOnline()) {
-                restoreVanishEffects(p);
-                integrationManager.updateHooks(p, true);
-                if (tabPluginHook != null)
-                    tabPluginHook.update(p, true);
-                updateVanishVisibility(p);
-            }
+            if (p != null) restoreVanishEffects(p);
         }
 
         if (configManager.getConfig().getBoolean("proxy.enabled", false)) {
@@ -511,6 +508,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (redisStorage != null) { redisStorage.shutdown(); redisStorage = null; }
             initStorage(settings);
             restoreRuleExpiries();
+            playerData.refreshKnown();
         });
 
         // Reload scoreboard config
@@ -737,21 +735,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         Player p = Bukkit.getPlayer(uuid);
-        if (vanish) {
-            vanishedPlayers.add(uuid);
-            if (p != null && p.isOnline()) {
-                applyVanishEffects(p, false);
-                integrationManager.updateHooks(p, true);
-                if (tabPluginHook != null)
-                    tabPluginHook.update(p, true);
-                updateVanishVisibility(p);
-            }
-        } else {
-            vanishedPlayers.remove(uuid);
-            if (p != null && p.isOnline()) {
-                removeVanishEffects(p, false);
-            }
-        }
+        if (vanish) vanishedPlayers.add(uuid); else vanishedPlayers.remove(uuid);
+        if (p != null) vanishScheduler.runEntityNow(p, () -> {
+            if (!p.isOnline() || stopping || stateVersion(uuid) != decisionVersion) return;
+            if (vanish) applyVanishEffects(p, false); else removeVanishEffects(p, false);
+            postStateChange(p, vanish);
+        });
     }
 
     /** Reconciliation restores effects without publishing a new user decision. */
@@ -851,6 +840,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void completeProxyJoin(Player player, boolean hidden) {
+        vanishScheduler.runEntityNow(player, () -> completeProxyJoinOwned(player, hidden));
+    }
+
+    private void completeProxyJoinOwned(Player player, boolean hidden) {
         UUID uuid = player.getUniqueId();
         ProxyJoin pending = proxyJoins.remove(uuid);
         if (pending == null || pending.version() != stateVersion(uuid)) return;
@@ -866,6 +859,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             player.setCollidable(pending.collidable());
             updateVanishVisibility(player);
         }
+        if (hidden != pending.previouslyHidden()) postStateChange(player, hidden);
     }
 
     public void abortProxyJoin(UUID uuid) {
@@ -884,6 +878,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public boolean isProxyAuthoritative() { return proxyBridge != null && proxyBridge.isProxyDetected(); }
 
     public void reconcileVanishState(Player player, boolean dbVanished) {
+        vanishScheduler.runEntityNow(player, () -> reconcileVanishStateOwned(player, dbVanished));
+    }
+
+    private void reconcileVanishStateOwned(Player player, boolean dbVanished) {
         if (isProxyJoinPending(player.getUniqueId())) return;
         if (isProxyAuthoritative()) dbVanished = isVanished(player);
         boolean memVanished = vanishedPlayers.contains(player.getUniqueId());
@@ -913,6 +911,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             getLogger().fine("Cross-server unvanish detected for " + player.getName() + " on join — clearing locally");
             removeVanishEffects(player, false);
         }
+        postStateChange(player, dbVanished);
     }
 
     private void startDowngradeAlertTask() {
@@ -1095,9 +1094,34 @@ public class Vanishpp extends JavaPlugin implements Listener {
             getLogger().warning("Command '" + name + "' is not defined in plugin.yml — skipping registration.");
             return;
         }
-        cmd.setExecutor(executor);
-        if (!(executor instanceof org.bukkit.command.TabCompleter))
-            cmd.setTabCompleter((sender, command, alias, args) -> java.util.Collections.emptyList());
+        String permission = cmd.getPermission();
+        if (permission != null) {
+            List<String> labels = new ArrayList<>(cmd.getAliases());
+            labels.add(cmd.getName());
+            for (String label : labels) {
+                commandPermissions.put(label.toLowerCase(Locale.ROOT), permission);
+                commandPermissions.put("vanishpp:" + label.toLowerCase(Locale.ROOT), permission);
+            }
+            // The executor uses PermissionManager, including grants made through /vperms.
+            cmd.setPermission(null);
+        }
+        if (permission == null) cmd.setExecutor(executor);
+        else cmd.setExecutor((sender, command, label, args) -> {
+            if (!permissionManager.hasPermission(sender, permission)) {
+                messageManager.sendMessage(sender, configManager.getLanguageManager().getMessage("unknown-command"));
+                return true;
+            }
+            return executor.onCommand(sender, command, label, args);
+        });
+        if (executor instanceof org.bukkit.command.TabCompleter completer)
+            cmd.setTabCompleter((sender, command, alias, args) -> permission == null || permissionManager.hasPermission(sender, permission)
+                    ? completer.onTabComplete(sender, command, alias, args) : java.util.Collections.emptyList());
+        else cmd.setTabCompleter((sender, command, alias, args) -> java.util.Collections.emptyList());
+    }
+
+    public boolean canAdvertiseCommand(Player player, String label) {
+        String permission = commandPermissions.get(label.toLowerCase(Locale.ROOT));
+        return permission == null || permissionManager.hasPermission(player, permission);
     }
 
     /** Cleans up per-player cached state. Call on player quit. */
@@ -1114,6 +1138,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void cleanupPlayerCache(UUID uuid) {
+        playerData.forget(uuid);
         abortProxyJoin(uuid);
         stateVersions.merge(uuid, 1L, Long::sum);
         if (proxyBridge != null) proxyBridge.forgetPlayer(uuid);
@@ -1192,6 +1217,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     // --- CORE LOGIC ---
     private void setupTeams() {
+        if (!vanishScheduler.supportsScoreboards()) return;
         try {
             org.bukkit.scoreboard.ScoreboardManager sm = Bukkit.getScoreboardManager();
             if (sm == null) {
@@ -1243,7 +1269,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 // here too raced with it and caused visible flicker between the two.
                 if (spectateFollowTargets.containsKey(uuid) || isProxyJoinPending(uuid)) continue;
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
+                if (p != null) vanishScheduler.runEntityNow(p, () -> {
+                    if (!p.isOnline() || !isVanished(uuid)) return;
                     long pausedUntil = actionBarPausedUntil.getOrDefault(uuid, 0L);
                     if (now > pausedUntil) {
                         actionBarWarningComponent.remove(uuid);
@@ -1252,7 +1279,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
                         Component warning = actionBarWarningComponent.get(uuid);
                         if (warning != null) p.sendActionBar(warning);
                     }
-                }
+                });
             }
         }, 1L, 20L);
     }
@@ -1269,52 +1296,36 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     private void startSyncTask() {
-        // Fast visibility/glow/prefix sync — runs every 10 ticks (0.5s).
-        // Lightweight: just checks and fixes show/hide state without forced entity respawn.
-        // Catches permission changes, op/deop, and any external plugins overriding visibility.
+        vanishScheduler.runTimerGlobal(() -> {
+            int retention = configManager.getConfig().getInt("vanish-history.retention-days", 30);
+            if (retention <= 0) return;
+            vanishScheduler.runAsync(() -> {
+                try { storageProvider.pruneHistory(retention); }
+                catch (RuntimeException e) { getLogger().warning("History retention will retry: " + e.getMessage()); }
+            });
+        }, 1L, 1200L);
         vanishScheduler.runTimerGlobal(() -> {
             voiceAudience.refresh();
             if (!hasProtocolLib) viewerTeams.refresh();
-            Set<UUID> vanishedCopy = Set.copyOf(vanishedPlayers);
-            List<Player> onlinePlayers = new ArrayList<>(Bukkit.getOnlinePlayers());
-
-            for (UUID uuid : vanishedCopy) {
+            for (UUID uuid : Set.copyOf(vanishedPlayers)) {
                 Player vanished = Bukkit.getPlayer(uuid);
-                if (vanished == null || !vanished.isOnline()) continue;
-                if (isProxyJoinPending(uuid)) { updateVanishVisibility(vanished); continue; }
-                if (proxyBridge != null && proxyBridge.isProxyDetected() && !proxyBridge.isTransferPending(uuid)) {
-                    int level = permissionManager.vanishLevel(vanished);
-                    Integer previous = publishedVisibilityLevels.put(uuid, level);
-                    if (!java.util.Objects.equals(previous, level))
-                        proxyBridge.sendVanishEvent(uuid, vanished.getName(), true, level);
-                }
-
-                // Reapply team entry + tab prefix (catches TAB plugin or scoreboard overrides)
-                if (hasProtocolLib && vanishTeam != null && !vanishTeam.hasEntry(vanished.getName()))
-                    vanishTeam.addEntry(vanished.getName());
-                updatePlayerListName(vanished);
-
-                // Fix visibility: ensure non-seers can't see, seers can see
-                for (Player observer : onlinePlayers) {
-                    if (observer.equals(vanished)) continue;
-                    boolean canSee = permissionManager.canSee(observer, vanished);
-                    boolean currentlySees = observer.canSee(vanished);
-                    if (!canSee && currentlySees) {
-                        observer.hidePlayer(this, vanished);
-                    } else if (canSee && !currentlySees) {
-                        observer.showPlayer(this, vanished);
+                if (vanished == null) continue;
+                vanishScheduler.runEntityNow(vanished, () -> {
+                    if (!vanished.isOnline() || !isVanished(uuid)) return;
+                    if (isProxyJoinPending(uuid)) { updateVanishVisibility(vanished); return; }
+                    if (proxyBridge != null && proxyBridge.isProxyDetected() && !proxyBridge.isTransferPending(uuid)) {
+                        int level = permissionManager.vanishLevel(vanished);
+                        Integer previous = publishedVisibilityLevels.put(uuid, level);
+                        if (!java.util.Objects.equals(previous, level)) proxyBridge.sendVanishEvent(uuid, vanished.getName(), true, level);
                     }
-                }
-
-                // Send glow metadata to staff (ensures glow is always visible)
-                if (hasProtocolLib && protocolLibManager != null) {
-                    protocolLibManager.sendGlowMetadata(vanished);
-                }
-
-                // Mob targeting is handled by EntityTargetEvent (PlayerListener) — no polling needed.
+                    if (hasProtocolLib && vanishTeam != null && !vanishTeam.hasEntry(vanished.getName())) vanishTeam.addEntry(vanished.getName());
+                    updatePlayerListName(vanished);
+                    refreshVanishFlight(vanished);
+                    updateVanishVisibility(vanished);
+                    if (hasProtocolLib && protocolLibManager != null) protocolLibManager.sendGlowMetadata(vanished);
+                });
             }
         }, 10L, 10L);
-
         // Pending rule-expiry notification delivery — runs every 100 ticks (5 seconds).
         // Handles the case where a timed rule expired on another server while the player was
         // already connected here (so no PlayerJoinEvent fired to trigger the join-time check).
@@ -1325,12 +1336,13 @@ public class Vanishpp extends JavaPlugin implements Listener {
             if (online.isEmpty()) return;
             vanishScheduler.runAsync(() -> {
                 for (Player p : online) {
-                    if (!p.isOnline()) continue;
-                    java.util.Map<String, Object> rules = storageProvider.getRules(p.getUniqueId());
+                    try { playerData.load(p.getUniqueId()); }
+                    catch (RuntimeException e) { getLogger().warning("Player settings refresh will retry: " + e.getMessage()); continue; }
+                    java.util.Map<String, Object> rules = playerData.rules(p.getUniqueId());
                     boolean hasPending = rules.entrySet().stream().anyMatch(e ->
                             e.getKey().startsWith(PENDING_NOTIFY_PREFIX) && Boolean.parseBoolean(String.valueOf(e.getValue())));
                     if (!hasPending) continue;
-                    vanishScheduler.runGlobal(() -> {
+                    vanishScheduler.runEntityNow(p, () -> {
                         if (!p.isOnline()) return;
                         for (java.util.Map.Entry<String, Object> entry : rules.entrySet()) {
                             if (!entry.getKey().startsWith(PENDING_NOTIFY_PREFIX)) continue;
@@ -1373,11 +1385,18 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }, 1200L, 1200L); // 60 seconds
     }
 
-    public void applyVanishEffects(Player player) { applyVanishEffects(player, true); }
+    public void applyVanishEffects(Player player) { changeVanish(player, player, true, null, TransitionMessages.NONE); }
 
-    public void restoreVanishEffects(Player player) { applyVanishEffects(player, false); }
+    public void restoreVanishEffects(Player player) {
+        vanishScheduler.runEntityNow(player, () -> {
+            boolean before = isVanished(player);
+            applyVanishEffects(player, false);
+            if (!before && isVanished(player)) postStateChange(player, true);
+        });
+    }
 
     private void applyVanishEffects(Player player, boolean persist) {
+        boolean historyEnabled = configManager.getConfig().getBoolean("vanish-history.enabled", true);
         if (persist && proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         if (stopping) return;
         long decisionVersion = persist ? beginStateDecision(player.getUniqueId()) : stateVersion(player.getUniqueId());
@@ -1413,40 +1432,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         player.setCollidable(false);
 
-        // ALWAYS clear existing mob targets when vanishing (regardless of mob_targeting rule)
-        // The rule only controls whether new targets can be acquired AFTER vanishing
-        // Each mob's target access must run on its owning region's thread (Folia safety)
-        for (Entity entity : player.getWorld().getEntities()) {
-            if (entity instanceof Mob mob) {
-                vanishScheduler.runEntity(mob, () -> {
-                    if (player.equals(mob.getTarget())) {
-                        mob.setTarget(null);
-                        mob.getPathfinder().stopPathfinding();
-                    }
-                }, null);
-            }
-        }
+        if (mobAiManager != null) mobAiManager.clearTargets(player);
 
-        if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
-            // Store original state if not already saved
-            if (!player.hasMetadata("vanishpp_pre_vanish_fly")) {
-                player.setMetadata("vanishpp_pre_vanish_fly", 
-                        new FixedMetadataValue(this, player.getAllowFlight()));
-            }
-
-            // Apply immediately for smooth manual vanish
-            player.setAllowFlight(true);
-
-            // Re-enforce after 1 second to override plugins like AuthMe that reset flight on login
-            vanishScheduler.runLaterGlobal(() -> {
-                if (player.isOnline() && isVanished(player)) {
-                    if (!player.getAllowFlight()) {
-                        player.setAllowFlight(true);
-                    }
-                }
-            }, 20L);
-        }
-
+        refreshVanishFlight(player);
+        vanishScheduler.runLaterEntity(player, () -> {
+            if (player.isOnline()) refreshVanishFlight(player);
+        }, 20L);
         integrationManager.updateHooks(player, true);
         if (integrationManager.getStatusbot() != null)
             integrationManager.getStatusbot().refreshStatus();
@@ -1475,7 +1466,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             // Add history entry
             try {
                 String serverName = Bukkit.getServer().getName();
-                storageProvider.addHistoryEntry(
+                if (historyEnabled) storageProvider.addHistoryEntry(
                     net.thecommandcraft.vanishpp.storage.VanishHistoryEntry.vanish(persistUuid, persistName, serverName, reason));
             } catch (Exception ignored) {}
             if (proxyBridge != null && proxyBridge.isProxyDetected()) {
@@ -1503,9 +1494,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     }
 
-    public void removeVanishEffects(Player player) { removeVanishEffects(player, true); }
+    public void removeVanishEffects(Player player) { changeVanish(player, player, false, null, TransitionMessages.NONE); }
 
     private void removeVanishEffects(Player player, boolean persist) {
+        boolean historyEnabled = configManager.getConfig().getBoolean("vanish-history.enabled", true);
         if (persist && proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
         if (stopping) return;
         long decisionVersion = persist ? beginStateDecision(player.getUniqueId()) : stateVersion(player.getUniqueId());
@@ -1555,7 +1547,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         removeLegacyInvisibility(player);
         player.setInvisible(false);
         if (configManager.disableFlyOnUnvanish && player.getGameMode() != GameMode.CREATIVE
-                && player.getGameMode() != GameMode.SPECTATOR) {
+                && player.getGameMode() != GameMode.SPECTATOR && player.hasMetadata("vanishpp_pre_vanish_fly")) {
             // Restore exactly the fly state that existed before vanish
             boolean hadFly = player.hasMetadata("vanishpp_pre_vanish_fly")
                     && (boolean) player.getMetadata("vanishpp_pre_vanish_fly").get(0).value();
@@ -1590,7 +1582,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             // Add history entry
             try {
                 String serverName = Bukkit.getServer().getName();
-                storageProvider.addHistoryEntry(
+                if (historyEnabled) storageProvider.addHistoryEntry(
                     net.thecommandcraft.vanishpp.storage.VanishHistoryEntry.unvanish(persistUuid, persistNameUv, serverName, null, sessionDuration));
                 if (sessionDuration > 0) {
                     storageProvider.recordVanishSession(persistUuid, sessionDuration);
@@ -1629,91 +1621,85 @@ public class Vanishpp extends JavaPlugin implements Listener {
      * right after they connect.
      */
     public void vanishPlayerSilently(Player player) {
-        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
-        applyVanishEffects(player);
-        if (isValidMessage(configManager.vanishMessage)) {
-            player.sendMessage(messageManager.parse(configManager.vanishMessage, player));
-        }
-        // No fake-quit broadcast, no Discord fake-quit, no staff notification
+        changeVanish(player, player, true, null, TransitionMessages.SELF);
     }
 
     public void vanishPlayer(Player player, CommandSender executor) {
-        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
-        // No gamemode snapshot needed here: vanish itself never forces spectator mode, and
-        // whichever mechanism actually puts the player into spectator later (/vspec,
-        // /vfollow, double-shift toggle) saves the real original gamemode itself via
-        // saveGamemodeForRestore()'s putIfAbsent guard - so it's always captured at the
-        // right moment regardless of vanish/spectate ordering.
-        applyVanishEffects(player);
-        if (isValidMessage(configManager.vanishMessage)) {
-            player.sendMessage(messageManager.parse(configManager.vanishMessage, player));
-        }
-        if (configManager.broadcastFakeQuit) {
-            String fakeMsg = configManager.fakeQuitMessage;
-            if (isValidMessage(fakeMsg)) {
-                String finalMsg = fakeMsg.replace("%player%", player.getName())
-                        .replace("%displayname%", player.getDisplayName());
-                broadcastToUnaware(messageManager.parse(finalMsg, player), player);
-            } else {
-                broadcastToUnaware(
-                        Component.translatable("multiplayer.player.left", NamedTextColor.YELLOW, player.displayName()),
-                        player);
-            }
-            // Send to Discord
-            if (integrationManager.getDiscordSRV() != null) {
-                integrationManager.getDiscordSRV().sendFakeQuit(player);
-            }
-            if (integrationManager.getStatusbot() != null) {
-                integrationManager.getStatusbot().sendFakeQuit(player);
-            }
-        }
-        notifyStaff(player, executor, true);
+        changeVanish(player, executor, true, null, TransitionMessages.FULL);
     }
 
     public void unvanishPlayer(Player player, CommandSender executor) {
-        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
-        if (configManager.broadcastFakeJoin) {
-            String fakeMsg = configManager.fakeJoinMessage;
-            if (isValidMessage(fakeMsg)) {
-                String finalMsg = fakeMsg.replace("%player%", player.getName())
-                        .replace("%displayname%", player.getDisplayName());
-                broadcastToUnaware(messageManager.parse(finalMsg, player), player);
-            } else {
-                broadcastToUnaware(Component.translatable("multiplayer.player.joined", NamedTextColor.YELLOW,
-                        player.displayName()), player);
-            }
-            // Send to Discord
-            if (integrationManager.getDiscordSRV() != null) {
-                integrationManager.getDiscordSRV().sendFakeJoin(player);
-            }
-            if (integrationManager.getStatusbot() != null) {
-                integrationManager.getStatusbot().sendFakeJoin(player);
-            }
-        }
-        removeVanishEffects(player);
-        if (isValidMessage(configManager.unvanishMessage)) {
-            player.sendMessage(messageManager.parse(configManager.unvanishMessage, player));
-        }
-        notifyStaff(player, executor, false);
+        changeVanish(player, executor, false, null, TransitionMessages.FULL);
     }
 
-    /** Vanish a player with an optional reason string. */
     public void vanishPlayer(Player player, CommandSender executor, String reason) {
-        if (proxyBridge != null && proxyBridge.isTransferPending(player.getUniqueId())) return;
-        if (reason != null && !reason.isEmpty()) {
-            vanishReasons.put(player.getUniqueId(), reason);
-        }
-        vanishPlayer(player, executor);
+        changeVanish(player, executor, true, reason, TransitionMessages.FULL);
     }
 
+    private enum TransitionMessages { NONE, SELF, FULL }
+    private final Set<UUID> changingPlayers = ConcurrentHashMap.newKeySet();
+
+    private void changeVanish(Player player, CommandSender executor, boolean hidden, String reason, TransitionMessages messages) {
+        vanishScheduler.runEntityNow(player, () -> {
+            UUID uuid = player.getUniqueId();
+            if (stopping || !player.isOnline() || hidden == isVanished(uuid)
+                    || (proxyBridge != null && proxyBridge.isTransferPending(uuid)) || !changingPlayers.add(uuid)) return;
+            CommandSender source = executor == null ? player : executor;
+            boolean changed = false;
+            try {
+                if (worldGuardHook != null && (hidden ? worldGuardHook.isDenyVanish(player) : worldGuardHook.isDenyUnvanish(player))) return;
+                org.bukkit.event.Cancellable before = hidden
+                        ? new net.thecommandcraft.vanishpp.api.events.VanishEvent(player, source)
+                        : new net.thecommandcraft.vanishpp.api.events.UnvanishEvent(player, source);
+                Bukkit.getPluginManager().callEvent((org.bukkit.event.Event) before);
+                if (before.isCancelled() || stopping || (proxyBridge != null && proxyBridge.isTransferPending(uuid))) return;
+                if (hidden && reason != null && !reason.isEmpty()) vanishReasons.put(uuid, reason);
+                if (hidden) applyVanishEffects(player, true); else removeVanishEffects(player, true);
+                changed = isVanished(uuid) == hidden;
+                if (!changed) return;
+                if (messages != TransitionMessages.NONE) {
+                    String message = hidden ? configManager.vanishMessage : configManager.unvanishMessage;
+                    if (isValidMessage(message)) player.sendMessage(messageManager.parse(message, player));
+                }
+                if (messages == TransitionMessages.FULL) {
+                    announceTransition(player, hidden);
+                    notifyStaff(player, source, hidden);
+                }
+            } finally {
+                changingPlayers.remove(uuid);
+                if (changed) postStateChange(player, hidden);
+            }
+        });
+    }
+
+    private void postStateChange(Player player, boolean hidden) {
+        Bukkit.getPluginManager().callEvent(new net.thecommandcraft.vanishpp.api.events.VanishStateChangeEvent(player, hidden));
+    }
+
+    private void announceTransition(Player player, boolean hidden) {
+        if (!(hidden ? configManager.broadcastFakeQuit : configManager.broadcastFakeJoin)) return;
+        String template = hidden ? configManager.fakeQuitMessage : configManager.fakeJoinMessage;
+        Component message = isValidMessage(template)
+                ? messageManager.parse(template.replace("%player%", player.getName()).replace("%displayname%", player.getDisplayName()), player)
+                : Component.translatable(hidden ? "multiplayer.player.left" : "multiplayer.player.joined", NamedTextColor.YELLOW, player.displayName());
+        broadcastToUnaware(message, player);
+        if (integrationManager.getDiscordSRV() != null) {
+            if (hidden) integrationManager.getDiscordSRV().sendFakeQuit(player); else integrationManager.getDiscordSRV().sendFakeJoin(player);
+        }
+        if (integrationManager.getStatusbot() != null) {
+            if (hidden) integrationManager.getStatusbot().sendFakeQuit(player); else integrationManager.getStatusbot().sendFakeJoin(player);
+        }
+    }
     private boolean isValidMessage(String msg) {
         return msg != null && !msg.isEmpty() && !msg.equalsIgnoreCase("false") && !msg.equalsIgnoreCase("none");
     }
 
     private void broadcastToUnaware(Component message, Player vanishedPlayer) {
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-            if (!permissionManager.canSee(onlinePlayer, vanishedPlayer) && !onlinePlayer.equals(vanishedPlayer))
-                onlinePlayer.sendMessage(message);
+            vanishScheduler.runEntityNow(onlinePlayer, () -> {
+                if (!permissionManager.canReceiveStaffNotice(onlinePlayer, vanishedPlayer) && !onlinePlayer.equals(vanishedPlayer))
+                    onlinePlayer.sendMessage(message);
+            });
         }
     }
 
@@ -1724,59 +1710,42 @@ public class Vanishpp extends JavaPlugin implements Listener {
         String notification = template.replace("%player%", subject.getName()).replace("%staff%", executor.getName());
         Component comp = messageManager.parse(notification, subject);
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (permissionManager.canReceiveStaffNotice(p, subject))
-                p.sendMessage(comp);
+            vanishScheduler.runEntityNow(p, () -> {
+                if (permissionManager.canReceiveStaffNotice(p, subject)) p.sendMessage(comp);
+            });
         }
         Bukkit.getConsoleSender().sendMessage(comp);
     }
 
     public void updateVanishVisibility(Player subject) {
-        voiceAudience.refresh();
-        boolean isVanished = isVanished(subject);
-        for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
-            if (observer.equals(subject))
-                continue;
-            boolean canSee = permissionManager.canSee(observer, subject);
-            if (isVanished && !canSee) {
-                observer.hidePlayer(this, subject);
-            } else {
-                observer.showPlayer(this, subject);
+        vanishScheduler.runEntityNow(subject, () -> {
+            voiceAudience.publish(subject);
+            for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
+                if (observer.equals(subject)) continue;
+                vanishScheduler.runEntityNow(observer, () -> {
+                    if (!observer.isOnline()) return;
+                    if (isVanished(subject) && !permissionManager.canSee(observer, subject)) observer.hidePlayer(this, subject);
+                    else observer.showPlayer(this, subject);
+                });
             }
-        }
+        });
     }
 
-    /**
-     * Folia-safe visibility update with region-aware scheduling.
-     * For Folia, ensures visibility packets are sent from the correct region thread.
-     */
-    public void updateVanishVisibilityFolia(Player subject) {
-        // For Folia: schedule the visibility update on the subject's region to avoid thread safety issues
-        // For other servers: runs immediately
-        boolean isVanished = isVanished(subject);
-        for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
-            if (observer.equals(subject))
-                continue;
-            boolean canSee = permissionManager.canSee(observer, subject);
-            if (isVanished && !canSee) {
-                observer.hidePlayer(this, subject);
-            } else {
-                observer.showPlayer(this, subject);
-            }
-        }
-    }
-
-    /**
-     * Hide-then-show for observers to force entity respawn + metadata packets.
-     * After showing, sends an explicit glow metadata packet to staff so the glow
-     * appears immediately (not on next sneak/pose change).
-     */
+    public void updateVanishVisibilityFolia(Player subject) { updateVanishVisibility(subject); }
     public void refreshVisibilityWithGlow(Player subject) {
+        vanishScheduler.runEntityNow(subject, () -> refreshVisibilityWithGlowOwned(subject));
+    }
+
+    private void refreshVisibilityWithGlowOwned(Player subject) {
+        voiceAudience.publish(subject);
         boolean subjectVanished = isVanished(subject);
         for (Player observer : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             if (observer.equals(subject))
                 continue;
+            vanishScheduler.runEntityNow(observer, () -> {
+            if (!observer.isOnline()) return;
             boolean canSee = permissionManager.canSee(observer, subject);
-            if (subjectVanished && !canSee) {
+            if (isVanished(subject) && !canSee) {
                 observer.hidePlayer(this, subject);
             } else if (canSee) {
                 // Force entity respawn only for seers — needed to apply/clear glow metadata.
@@ -1787,11 +1756,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 // Non-seer, subject not vanished: just show (hide was already a no-op)
                 observer.showPlayer(this, subject);
             }
+            });
         }
         // Send explicit glow metadata after entity respawn
         if (subjectVanished && hasProtocolLib && protocolLibManager != null) {
-            vanishScheduler.runLaterGlobal(() -> {
-                if (subject.isOnline())
+            vanishScheduler.runLaterEntity(subject, () -> {
+                if (subject.isOnline() && isVanished(subject))
                     protocolLibManager.sendGlowMetadata(subject);
             }, 2L);
         }
@@ -1802,6 +1772,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
      * Use after respawn, world change, gamemode change, or reload.
      */
     public void resyncVanishEffects(Player player) {
+        vanishScheduler.runEntityNow(player, () -> resyncVanishEffectsOwned(player));
+    }
+
+    private void resyncVanishEffectsOwned(Player player) {
         if (!isVanished(player)) return;
 
         // Team + prefix
@@ -1816,9 +1790,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         player.setCollidable(false);
 
         // Fly
-        if (configManager.enableFly && player.getGameMode() != GameMode.SPECTATOR) {
-            player.setAllowFlight(true);
-        }
+        refreshVanishFlight(player);
 
         // Night vision
         if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
@@ -1830,16 +1802,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (configManager.preventSleeping)
             try { player.setSleepingIgnored(true); } catch (Throwable ignored) {}
 
-        // ALWAYS clear mob targets (regardless of mob_targeting rule)
-        // The rule only controls whether new targets can be acquired AFTER vanishing
-        for (Entity entity : player.getWorld().getEntities()) {
-            if (entity instanceof Mob mob) vanishScheduler.runEntity(mob, () -> {
-                if (isVanished(player) && player.equals(mob.getTarget())) {
-                    mob.setTarget(null);
-                    mob.getPathfinder().stopPathfinding();
-                }
-            }, null);
-        }
+        if (mobAiManager != null) mobAiManager.clearTargets(player);
 
         // Hooks
         integrationManager.updateHooks(player, true);
@@ -1850,6 +1813,23 @@ public class Vanishpp extends JavaPlugin implements Listener {
         refreshVisibilityWithGlow(player);
     }
 
+    public void refreshVanishFlight(Player player) {
+        vanishScheduler.runEntityNow(player, () -> {
+            if (!isVanished(player)) return;
+            boolean permitted = configManager.enableFly && permissionManager.hasPermission(player, "vanishpp.fly");
+            if (permitted && player.getGameMode() != GameMode.SPECTATOR) {
+                if (!player.hasMetadata("vanishpp_pre_vanish_fly"))
+                    player.setMetadata("vanishpp_pre_vanish_fly", new FixedMetadataValue(this, player.getAllowFlight()));
+                player.setAllowFlight(true);
+            } else if (!permitted && player.hasMetadata("vanishpp_pre_vanish_fly")
+                    && player.getGameMode() != GameMode.CREATIVE && player.getGameMode() != GameMode.SPECTATOR) {
+                boolean original = (boolean) player.getMetadata("vanishpp_pre_vanish_fly").get(0).value();
+                player.setAllowFlight(original);
+                if (!original) player.setFlying(false);
+                player.removeMetadata("vanishpp_pre_vanish_fly", this);
+            }
+        });
+    }
     public void scheduleRuleRevert(Player player, String rule, boolean originalValue, int seconds) {
         setTemporaryRule(player, rule, ruleManager.getRule(player, rule), originalValue, seconds);
     }
@@ -1866,6 +1846,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         submitStorageWork(() -> {
             try {
                 storageProvider.setRule(key.uuid(), rule, value);
+                playerData.ruleWritten(key.uuid(), rule, value);
                 ruleExpiries.cancel(key.uuid(), rule);
             } finally { pendingRules.remove(key, decision); }
         });
@@ -1881,6 +1862,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             try {
                 StorageProvider provider = storageProvider;
                 provider.setTemporaryRule(key.uuid(), rule, value, token);
+                playerData.ruleWritten(key.uuid(), rule, value);
                 ruleExpiries.replace(key.uuid(), rule, token, provider);
             } finally { pendingRules.remove(key, decision); }
         });
@@ -1889,7 +1871,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private void restoreRuleExpiries() { ruleExpiries.reload(); }
 
     /** Called on the storage worker after a successful compare-and-expire transaction. */
-    public void ruleExpired(UUID uuid, String rule, StorageProvider provider) {
+    public void ruleExpired(UUID uuid, String rule, StorageProvider provider, boolean value) {
+        playerData.ruleWritten(uuid, rule, value);
+        playerData.ruleWritten(uuid, StorageProvider.EXPIRY_PREFIX + rule, null);
         long version = stateVersion(uuid);
         vanishScheduler.runGlobal(() -> {
             if (stopping || provider != storageProvider) return;
@@ -1938,6 +1922,10 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public WorldGuardHook getWorldGuardHook() {
         return worldGuardHook;
     }
+
+    public net.thecommandcraft.vanishpp.gui.RulesGUI getRulesGUI() { return rulesGUI; }
+
+    public net.thecommandcraft.vanishpp.config.PlayerDataCache getPlayerData() { return playerData; }
 
     public VanishZoneManager getVanishZoneManager() {
         return vanishZoneManager;

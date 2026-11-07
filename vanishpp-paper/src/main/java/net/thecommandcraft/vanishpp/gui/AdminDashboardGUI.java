@@ -96,15 +96,15 @@ public class AdminDashboardGUI implements Listener {
         boolean rightClick = event.isRightClick();
         if (rightClick) {
             // Right-click → unvanish
-            if (viewer.hasPermission("vanishpp.vanish.others")) {
+            if (plugin.getPermissionManager().hasPermission(viewer, "vanishpp.vanish.others")) {
                 viewer.closeInventory();
                 plugin.unvanishPlayer(target, viewer);
             }
         } else {
             // Left-click → open rules GUI
-            if (viewer.hasPermission("vanishpp.rules.others")) {
+            if (plugin.getPermissionManager().hasPermission(viewer, "vanishpp.rules.others")) {
                 viewer.closeInventory();
-                new RulesGUI(plugin).open(viewer, target);
+                plugin.getRulesGUI().open(viewer, target);
             }
         }
     }
@@ -138,7 +138,7 @@ public class AdminDashboardGUI implements Listener {
                 - plugin.vanishStartTimes.getOrDefault(p.getUniqueId(), System.currentTimeMillis());
         long secs = elapsedMs / 1000;
         String elapsed = (secs / 60) + "m " + (secs % 60) + "s";
-        int level = plugin.getStorageProvider().getVanishLevel(p.getUniqueId());
+        int level = plugin.getPlayerData().level(p.getUniqueId());
 
         meta.displayName(Component.text(p.getName(), NamedTextColor.GOLD)
                 .decoration(TextDecoration.ITALIC, false));

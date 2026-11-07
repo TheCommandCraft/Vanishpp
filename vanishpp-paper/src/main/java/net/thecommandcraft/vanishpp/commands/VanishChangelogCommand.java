@@ -53,7 +53,7 @@ public class VanishChangelogCommand implements CommandExecutor {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.changelog")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.changelog")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;

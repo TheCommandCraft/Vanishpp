@@ -154,10 +154,11 @@ public class ConfigRenderer {
      */
     private ItemStack createSettingItem(ConfigCategory.ConfigValue value) {
         ItemStack item;
+        Object currentValue = plugin.getConfigManager().getConfig().get(value.key, value.defaultValue);
 
         if (value.type.isBoolean()) {
             // Boolean: show true/false state
-            Object defaultVal = value.defaultValue;
+            Object defaultVal = currentValue;
             boolean isTrue = defaultVal instanceof Boolean && (Boolean) defaultVal;
             item = new ItemStack(isTrue ? BOOLEAN_TRUE : BOOLEAN_FALSE);
         } else if (value.type.isNumeric()) {
@@ -182,7 +183,7 @@ public class ConfigRenderer {
             lore.add(Component.empty());
 
             if (value.type.isBoolean()) {
-                Object val = value.defaultValue;
+                Object val = currentValue;
                 boolean isTrue = val instanceof Boolean && (Boolean) val;
                 String statusKey = isTrue ? "gui.config.setting.value-true" : "gui.config.setting.value-false";
                 String current = plugin.getLanguageManager().getMessage("gui.config.setting.current-prefix")
@@ -190,7 +191,7 @@ public class ConfigRenderer {
                 lore.add(plugin.getMessageManager().parse(current, null).decoration(TextDecoration.ITALIC, false));
                 lore.add(guiText("gui.config.setting.click-to-toggle"));
             } else if (value.type.isNumeric()) {
-                Object val = value.defaultValue;
+                Object val = currentValue;
                 String currentVal = val != null ? String.valueOf(val) : "?";
                 String current = plugin.getLanguageManager().getMessage("gui.config.setting.current-prefix") + currentVal;
                 lore.add(plugin.getMessageManager().parse(current, null).decoration(TextDecoration.ITALIC, false));

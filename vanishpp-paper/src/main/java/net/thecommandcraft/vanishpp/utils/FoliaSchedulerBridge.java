@@ -49,6 +49,18 @@ public class FoliaSchedulerBridge implements VanishScheduler {
         else runEntity(entity, runnable, null);
     }
 
+    @Override public boolean owns(Entity entity) { return Bukkit.isOwnedByCurrentRegion(entity); }
+    @Override public boolean supportsScoreboards() { return false; }
+    @Override public boolean regionThreaded() { return true; }
+
+    @Override public void runLaterEntity(Entity entity, Runnable runnable, long ticks) {
+        entity.getScheduler().runDelayed(plugin, task -> runnable.run(), null, Math.max(1L, ticks));
+    }
+
+    @Override public void runRegion(org.bukkit.World world, int chunkX, int chunkZ, Runnable runnable) {
+        Bukkit.getRegionScheduler().execute(plugin, world, chunkX, chunkZ, runnable);
+    }
+
     @Override
     public void runAsync(Runnable runnable) {
         Bukkit.getAsyncScheduler().runNow(plugin, task -> runnable.run());

@@ -123,6 +123,7 @@ public class PermissionManager {
         save();
     }
 
+
     /**
      * Checks if a UUID has a permission in the custom file.
      * Supports 'vanishpp.*' and category groups like 'vanishpp.abilities'.
@@ -158,6 +159,11 @@ public class PermissionManager {
      * Checks permission via Bukkit (OP/Plugins) OR Custom File.
      */
     public boolean hasPermission(Player player, String permission) {
+        if (!plugin.getVanishScheduler().owns(player)) {
+            var facts = plugin.voiceAudience.facts(player.getUniqueId());
+            return hasPermission(player.getUniqueId(), permission)
+                    || (permission.equals("vanishpp.see") && facts != null && facts.permission());
+        }
         try {
             if (player.hasPermission(permission)) {
                 return true;
@@ -168,6 +174,10 @@ public class PermissionManager {
             return false;
         }
         return hasPermission(player.getUniqueId(), permission);
+    }
+
+    public boolean hasPermission(CommandSender sender, String permission) {
+        return sender instanceof Player player ? hasPermission(player, permission) : sender.hasPermission(permission);
     }
 
     public boolean canSee(Player observer, Player target) {
@@ -230,6 +240,11 @@ public class PermissionManager {
     }
 
     private int getLevel(Player player, String prefix, int def) {
+        if (!plugin.getVanishScheduler().owns(player)) {
+            var facts = plugin.voiceAudience.facts(player.getUniqueId());
+            boolean subject = prefix.equals("vanishpp.vanish.level.");
+            return facts == null ? (subject ? Integer.MAX_VALUE : 0) : subject ? facts.vanishLevel() : facts.seeLevel();
+        }
         if (hasPermission(player, "vanishpp.*"))
             return plugin.getConfigManager().maxLevel;
 

@@ -10,6 +10,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -28,6 +29,7 @@ public class ConfigGUI implements Listener {
     private final Map<UUID, Integer> playerPage;
     private final Map<UUID, Map<Integer, String>> slotToKeyMapping;  // Track slot->key for each player
     private final Set<UUID> openViewers;
+    private final Map<UUID, Inventory> inventories = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastBoundarySound;  // Cooldown for boundary sound spam
 
     public ConfigGUI(Vanishpp plugin) {
@@ -45,7 +47,7 @@ public class ConfigGUI implements Listener {
      * Open the ConfigGUI for a player.
      */
     public void open(Player player) {
-        if (!player.hasPermission("vanishpp.config")) {
+        if (!plugin.getPermissionManager().hasPermission(player, "vanishpp.config")) {
             plugin.getMessageManager().sendMessage(player,
                     plugin.getLanguageManager().getMessage("gui.config.no-permission"));
             return;
@@ -72,6 +74,7 @@ public class ConfigGUI implements Listener {
         Map<Integer, String> slotToKey = (Map<Integer, String>) result[1];
 
         slotToKeyMapping.put(uuid, slotToKey);
+        inventories.put(uuid, inv);
         player.openInventory(inv);
     }
 
@@ -80,21 +83,17 @@ public class ConfigGUI implements Listener {
      */
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        Player player = (Player) event.getWhoClicked();
+        if (!(event.getWhoClicked() instanceof Player player)) return;
         UUID uuid = player.getUniqueId();
 
-        if (!openViewers.contains(uuid)) return;
-        String title = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
-                .legacySection().serialize(event.getView().title()).toLowerCase();
-        if (!title.contains("config")) return;  // Case-insensitive check
+        if (inventories.get(uuid) != event.getView().getTopInventory()) return;
+        event.setCancelled(true);
 
         // Re-check permission in case player lost it while GUI was open
-        if (!player.hasPermission("vanishpp.config")) {
+        if (!plugin.getPermissionManager().hasPermission(player, "vanishpp.config")) {
             player.closeInventory();
             return;
         }
-
-        event.setCancelled(true);
 
         int slot = event.getRawSlot();
         if (slot < 0 || slot >= 54) return;
@@ -278,11 +277,18 @@ public class ConfigGUI implements Listener {
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
+        if (!inventories.remove(uuid, event.getInventory())) return;
         openViewers.remove(uuid);
         playerCategory.remove(uuid);
         playerPage.remove(uuid);
         slotToKeyMapping.remove(uuid);
         lastBoundarySound.remove(uuid);
+    }
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (inventories.get(event.getWhoClicked().getUniqueId()) == event.getView().getTopInventory())
+            event.setCancelled(true);
     }
 
     /**

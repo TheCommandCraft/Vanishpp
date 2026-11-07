@@ -65,6 +65,7 @@ public final class VanishAPI {
     /**
      * Returns the vanish level of a player (used for layered-permissions mode).
      * Returns 1 if the player has no stored level.
+     * With SQL storage, call this storage query asynchronously.
      */
     public int getVanishLevel(@NotNull UUID uuid) {
         return plugin.getStorageProvider().getVanishLevel(uuid);
@@ -73,6 +74,7 @@ public final class VanishAPI {
     /**
      * Returns a snapshot of all current rule values for a player.
      * Keys are the rule constants defined in {@code RuleManager}.
+     * With SQL storage, call this storage query asynchronously.
      */
     @NotNull
     public Map<String, Object> getRules(@NotNull UUID uuid) {
@@ -89,7 +91,7 @@ public final class VanishAPI {
     }
 
     /**
-     * Returns the remaining ms of a timed vanish, or {@code -1} if not timed.
+     * Retained for compatibility. Timed vanish is not implemented; always returns {@code -1}.
      */
     public long getTimedVanishRemaining(@NotNull UUID uuid) {
         return plugin.getTimedRemaining(uuid);
@@ -98,6 +100,7 @@ public final class VanishAPI {
     /**
      * Returns a stats snapshot for a player.
      * Values are read from storage and may not reflect a currently-active session.
+     * With SQL storage, call this storage query asynchronously.
      */
     @NotNull
     public VanishStats getStats(@NotNull UUID uuid) {
@@ -118,7 +121,9 @@ public final class VanishAPI {
      * Vanishes the given player as if they ran {@code /vanish}.
      * Fires {@link net.thecommandcraft.vanishpp.api.events.VanishEvent} — can be cancelled by other plugins.
      *
-     * <p>Must be called on the main server thread.
+     * <p>Dispatched to the player's owning scheduler. Off-owner calls may return before the change completes.
+     * Cancellable events guard local requests; proxy/Redis reconciliation and persisted login restoration
+     * are authoritative and cannot be vetoed. Post-events fire only for actual state changes.
      */
     public void vanish(@NotNull Player player) {
         plugin.vanishPlayer(player, player, null);
@@ -126,7 +131,7 @@ public final class VanishAPI {
 
     /**
      * Vanishes the given player with a reason.
-     * Must be called on the main server thread.
+     * Dispatched to the player's owning scheduler, with the same event contract as {@link #vanish(Player)}.
      */
     public void vanish(@NotNull Player player, @Nullable String reason) {
         plugin.vanishPlayer(player, player, reason);
@@ -136,7 +141,7 @@ public final class VanishAPI {
      * Unvanishes the given player as if they ran {@code /vanish} again.
      * Fires {@link net.thecommandcraft.vanishpp.api.events.UnvanishEvent} — can be cancelled by other plugins.
      *
-     * <p>Must be called on the main server thread.
+     * <p>Dispatched to the player's owning scheduler, with the same event contract as {@link #vanish(Player)}.
      */
     public void unvanish(@NotNull Player player) {
         plugin.unvanishPlayer(player, player);

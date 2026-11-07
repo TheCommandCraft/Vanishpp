@@ -138,7 +138,7 @@ public class ConfigManager {
     public void sendMigrationReport(Player player) {
         if (!migratedThisBoot)
             return;
-        if (plugin.getStorageProvider().hasAcknowledged(player.getUniqueId(), "migration_v" + LATEST_CONFIG_VERSION))
+        if (plugin.getPlayerData().acknowledged(player.getUniqueId(), "migration_v" + LATEST_CONFIG_VERSION))
             return;
 
         player.sendMessage(Component.text(" "));
@@ -272,7 +272,7 @@ public class ConfigManager {
         webhookUrls = config.getStringList("webhook.urls");
         webhookPayloadTemplate = config.getString("webhook.payload-template",
             "{\"player\":\"{player}\",\"action\":\"{action}\",\"reason\":\"{reason}\",\"server\":\"{server}\",\"timestamp\":\"{timestamp}\"}");
-        webhookAuthHeader = config.getString("webhook.authorization", "");
+        webhookAuthHeader = config.getString("webhook.auth-header", config.getString("webhook.authorization", ""));
 
         bossbarEnabled = config.getBoolean("bossbar.enabled", false);
         // Bossbar title: use the language-file value when the admin left the built-in default

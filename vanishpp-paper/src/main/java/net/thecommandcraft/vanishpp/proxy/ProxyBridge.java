@@ -35,6 +35,7 @@ public class ProxyBridge implements PluginMessageListener {
     private final boolean configured;
     private volatile boolean active = false;
     private volatile boolean helloSent = false;
+    private final java.util.concurrent.atomic.AtomicBoolean flushing = new java.util.concurrent.atomic.AtomicBoolean();
     private volatile boolean proxyDetected = false;
     private volatile boolean handshakeComplete = false;
     private volatile String serverName;
@@ -119,6 +120,16 @@ public class ProxyBridge implements PluginMessageListener {
     }
 
     private void sendHello(Player carrier) {
+        var provider = plugin.getStorageProvider();
+        Runnable build = () -> {
+            try { sendHello(carrier, provider); }
+            catch (RuntimeException e) { plugin.getLogger().warning("Proxy bootstrap settings unavailable; retrying: " + e.getMessage()); }
+        };
+        if (provider instanceof net.thecommandcraft.vanishpp.storage.SqlStorage) plugin.submitStorageWork(build);
+        else build.run();
+    }
+
+    private void sendHello(Player carrier, net.thecommandcraft.vanishpp.storage.StorageProvider provider) {
         String name = resolveServerName();
         JsonObject payload = new JsonObject();
         payload.addProperty("serverName", name);
@@ -127,12 +138,16 @@ public class ProxyBridge implements PluginMessageListener {
         for (UUID uuid : plugin.getBootstrapVanishedPlayers()) {
             JsonObject state = new JsonObject();
             state.addProperty("uuid", uuid.toString());
-            state.addProperty("vanishLevel", plugin.getStorageProvider().getVanishLevel(uuid));
+            state.addProperty("vanishLevel", provider.getRecoveryVanishLevel(uuid));
             restored.add(state);
         }
         payload.add("vanished", restored);
-        helloSent = true;
-        carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, VppPacket.encode(VppMessage.HELLO, payload.toString()));
+        byte[] packet = VppPacket.encode(VppMessage.HELLO, payload.toString());
+        plugin.getVanishScheduler().runEntityNow(carrier, () -> {
+            if (!active || handshakeComplete || !carrier.isOnline() || provider != plugin.getStorageProvider()) return;
+            helloSent = true;
+            carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, packet);
+        });
     }
 
     private void scheduleHandshakeTimeout() {
@@ -449,21 +464,25 @@ public class ProxyBridge implements PluginMessageListener {
     /** Sends a raw packet via the first available online player, or queues it for later. */
     public void sendPacket(byte[] data) {
         if (!active) return;
+        pendingPackets.addLast(data);
         Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
-        if (carrier != null) {
-            carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data);
-        } else {
-            pendingPackets.addLast(data);
-        }
+        if (carrier != null) flushPendingPackets(carrier);
     }
 
     /** Flushes any queued packets now that a carrier player is available. Call on PlayerJoinEvent. */
     public void flushPendingPackets(Player carrier) {
-        if (!active) return;
-        byte[] data;
-        while ((data = pendingPackets.pollFirst()) != null) {
-            carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data);
-        }
+        plugin.getVanishScheduler().runEntityNow(carrier, () -> {
+            if (!active || !carrier.isOnline() || !flushing.compareAndSet(false, true)) return;
+            try {
+                for (int sent = 0; sent < 64; sent++) {
+                    byte[] data = pendingPackets.pollFirst();
+                    if (data == null) break;
+                    try { carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, data); }
+                    catch (RuntimeException e) { pendingPackets.addFirst(data); break; }
+                }
+            } finally { flushing.set(false); }
+            if (!pendingPackets.isEmpty()) plugin.getVanishScheduler().runLaterEntity(carrier, () -> flushPendingPackets(carrier), 1L);
+        });
     }
 
     private String resolveServerName() {

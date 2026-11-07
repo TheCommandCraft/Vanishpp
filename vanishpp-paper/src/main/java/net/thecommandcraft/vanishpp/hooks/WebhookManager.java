@@ -9,6 +9,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Sends vanish/unvanish events to one or more HTTP webhook endpoints.
@@ -18,13 +21,15 @@ import java.util.List;
  *   <li>{@code webhook.enabled}</li>
  *   <li>{@code webhook.urls} (list of strings)</li>
  *   <li>{@code webhook.payload-template} — placeholders: {player}, {action}, {reason}, {server}, {timestamp}</li>
- *   <li>{@code webhook.authorization} — sent as the {@code Authorization} header (optional)</li>
+ *   <li>{@code webhook.auth-header} — sent as the {@code Authorization} header (optional)</li>
  * </ul>
  */
 public class WebhookManager {
 
     private static final int MAX_RETRIES = 3;
     private static final long[] RETRY_DELAYS_MS = {1_000, 5_000, 15_000};
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(player|uuid|action|reason|server|timestamp)\\}");
+    private static final com.google.gson.Gson JSON = new com.google.gson.Gson();
 
     private final Vanishpp plugin;
 
@@ -60,13 +65,16 @@ public class WebhookManager {
         String template = plugin.getConfigManager().webhookPayloadTemplate;
         String server   = plugin.getConfigManager().getConfig()
                 .getString("proxy.server-name", "server");
-        return template
-                .replace("{player}",    player.getName())
-                .replace("{uuid}",      player.getUniqueId().toString())
-                .replace("{action}",    action)
-                .replace("{reason}",    reason != null ? reason : "")
-                .replace("{server}",    server)
-                .replace("{timestamp}", Instant.now().toString());
+        Map<String, String> values = Map.of("player", player.getName(), "uuid", player.getUniqueId().toString(),
+                "action", action, "reason", reason != null ? reason : "", "server", server,
+                "timestamp", Instant.now().toString());
+        Matcher matcher = PLACEHOLDER.matcher(template);
+        StringBuilder payload = new StringBuilder();
+        while (matcher.find()) {
+            String quoted = JSON.toJson(values.get(matcher.group(1)));
+            matcher.appendReplacement(payload, Matcher.quoteReplacement(quoted.substring(1, quoted.length() - 1)));
+        }
+        return matcher.appendTail(payload).toString();
     }
 
     private void postWithRetry(String rawUrl, String payload, String auth) {

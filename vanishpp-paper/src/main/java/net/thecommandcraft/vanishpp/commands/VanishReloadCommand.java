@@ -22,7 +22,7 @@ public class VanishReloadCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.reload")) {
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.reload")) {
             plugin.getMessageManager().sendMessage(sender,
                     plugin.getConfigManager().getLanguageManager().getMessage("unknown-command"));
             return true;
@@ -37,7 +37,7 @@ public class VanishReloadCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("vanishpp.reload")) return java.util.Collections.emptyList();
+        if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.reload")) return java.util.Collections.emptyList();
         return Collections.emptyList();
     }
 }

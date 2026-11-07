@@ -82,6 +82,7 @@ public class WorldGuardHook {
     }
 
     private boolean testFlag(Player player, StateFlag flag) {
+        if (!plugin.getConfigManager().getConfig().getBoolean("worldguard.enabled", true)) return false;
         if (flag == null) return false;
         try {
             RegionContainer container = WorldGuard.getInstance().getPlatform().getRegionContainer();
