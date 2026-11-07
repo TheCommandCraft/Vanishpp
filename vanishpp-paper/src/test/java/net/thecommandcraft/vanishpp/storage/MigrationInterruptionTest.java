@@ -161,6 +161,25 @@ class MigrationInterruptionTest {
         assertThrows(IllegalStateException.class, () -> yaml(directory), "invalid checkpoint must keep YAML unavailable instead of publishing partial files");
     }
 
+    @Test
+    void checkpointSurvivesFailureBetweenTheTwoYamlFileReplacements(@TempDir Path directory) throws Exception {
+        YamlStorage target = yaml(directory);
+        Path blocked = directory.resolve("data.yml.tmp");
+        Files.createDirectory(blocked); // History can install, but the data replacement cannot be written.
+        assertDoesNotThrow(() -> migrate(target, "YAML"),
+                "complete checkpoint must make the copy durable despite interrupted file installation");
+        assertComplete(target);
+        assertTrue(Files.exists(directory.resolve("migration.yml")), "interrupted installation must retain its complete checkpoint");
+        assertTrue(YamlConfiguration.loadConfiguration(directory.resolve("data.yml").toFile())
+                .getStringList("vanished-players").isEmpty(), "legacy data file must still be uninstalled in this stimulus");
+        Files.delete(blocked);
+        YamlStorage recovered = yaml(directory);
+        assertComplete(recovered);
+        recovered.setVanished(first, false);
+        assertFalse(yaml(directory).isVanished(first), "a later write must not be overwritten by a stale checkpoint replay");
+        assertFalse(Files.exists(directory.resolve("migration.yml")));
+    }
+
     private void assertComplete(StorageProvider target) {
         assertAll(
                 () -> assertEquals(Set.of(first, second), target.getVanishedPlayers(), "retry must copy every vanished player"),
