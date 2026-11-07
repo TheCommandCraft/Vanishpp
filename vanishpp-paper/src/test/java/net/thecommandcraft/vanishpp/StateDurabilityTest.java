@@ -258,22 +258,22 @@ class StateDurabilityTest {
         when(storage.isVanished(any())).thenThrow(new IllegalStateException("unavailable"));
         field(plugin, "storageProvider", storage);
         PlayerListener listener = new PlayerListener(plugin);
-        listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
-        var login = new org.bukkit.event.player.PlayerLoginEvent(player, "localhost", InetAddress.getLoopbackAddress());
-        login.disallow(org.bukkit.event.player.PlayerLoginEvent.Result.KICK_WHITELIST, Component.text("whitelist"));
-        for (var method : PlayerListener.class.getMethods())
-            if (method.isAnnotationPresent(org.bukkit.event.EventHandler.class)
-                    && Arrays.equals(method.getParameterTypes(), new Class<?>[]{login.getClass()}))
-                method.invoke(listener, login);
         Set<?> unread = listenerField(listener, "unreadJoins");
-        assertFalse(unread.contains(player.getUniqueId()), "a denied login must not keep its failed read");
+        var denied = new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId());
+        denied.disallow(AsyncPlayerPreLoginEvent.Result.KICK_WHITELIST, Component.text("whitelist"));
+        listener.onAsyncPreLogin(denied);
+        assertFalse(unread.contains(player.getUniqueId()), "a login another plugin denied must not record a read");
         UUID abandoned = UUID.randomUUID();
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent("Gone", InetAddress.getLoopbackAddress(), abandoned));
         assertTrue(unread.contains(abandoned), "a failed read is kept for the join that follows");
-        Map<UUID, Long> attempts = listenerField(listener, "loginAttempts");
-        attempts.put(abandoned, System.nanoTime() - java.util.concurrent.TimeUnit.MINUTES.toNanos(10));
+        Map<UUID, Object> attempts = listenerField(listener, "loginAttempts");
+        var attempt = Class.forName(PlayerListener.class.getName() + "$LoginAttempt").getDeclaredConstructor(long.class);
+        attempt.setAccessible(true);
+        attempts.put(abandoned, attempt.newInstance(System.nanoTime() - java.util.concurrent.TimeUnit.MINUTES.toNanos(20)));
         listener.onAsyncPreLogin(new AsyncPlayerPreLoginEvent(player.getName(), InetAddress.getLoopbackAddress(), player.getUniqueId()));
         assertFalse(unread.contains(abandoned), "an attempt that never joined must be forgotten");
+        assertFalse(attempts.containsKey(abandoned));
+        assertTrue(unread.contains(player.getUniqueId()), "expiry retires only the abandoned attempt");
     }
 
     private static void stateResponse(ProxyBridge bridge, com.google.gson.JsonObject json) {

@@ -728,7 +728,11 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public void handleNetworkVanishSync(UUID uuid, boolean vanish) {
         if (stopping) return;
         // An answered join still waiting on storage keeps its provisional hide; the newest decision applies when it lifts.
-        if (proxyJoins.containsKey(uuid) && proxyJoinAnswers.computeIfPresent(uuid, (key, old) -> vanish) != null) return;
+        // Once a local choice has superseded the hold, decisions take the normal path.
+        ProxyJoin held = proxyJoins.get(uuid);
+        if (held != null && held.version() == stateVersion(uuid)
+                && proxyJoinAnswers.computeIfPresent(uuid, (key, old) -> vanish) != null) return;
+        proxyJoinAnswers.remove(uuid);
         long decisionVersion = beginStateDecision(uuid);
         stateWrites.submit(() -> persistState(uuid, vanish, decisionVersion));
         // Idempotency check: skip if state already matches network message

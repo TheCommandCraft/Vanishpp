@@ -77,42 +77,48 @@ public class PlayerListener implements Listener {
 
     // Players whose login read failed join hidden until a retried read answers.
     private final Set<UUID> unreadJoins = ConcurrentHashMap.newKeySet();
-    // When each login that has not joined yet was read, so denied and abandoned attempts can be forgotten.
-    private final Map<UUID, Long> loginAttempts = new ConcurrentHashMap<>();
-    private static final long ABANDONED_LOGIN_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(2);
-
-    private void forgetLogin(UUID uuid) {
-        loginAttempts.remove(uuid);
-        preFetchedVanishState.remove(uuid);
-        unreadJoins.remove(uuid);
-    }
+    // The newest login of each player that has not joined yet. An attempt's read result and its retirement apply
+    // only while it is still the newest, so a replacement login never loses its state to an older one.
+    private record LoginAttempt(long startedAt) {}
+    private final Map<UUID, LoginAttempt> loginAttempts = new ConcurrentHashMap<>();
+    // Covers the configuration phase (resource packs) between pre-login and join; denied or abandoned logins expire.
+    private static final long ABANDONED_LOGIN_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
-        UUID uuid = event.getUniqueId();
         long now = System.nanoTime();
-        loginAttempts.forEach((attempt, readAt) -> {
-            if (now - readAt > ABANDONED_LOGIN_NANOS) forgetLogin(attempt);
+        loginAttempts.forEach((player, attempt) -> {
+            if (now - attempt.startedAt() > ABANDONED_LOGIN_NANOS) loginAttempts.computeIfPresent(player, (key, newest) -> {
+                if (newest != attempt) return newest;
+                preFetchedVanishState.remove(key);
+                unreadJoins.remove(key);
+                return null;
+            });
         });
-        if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-            forgetLogin(uuid);
-            return;
-        }
-        loginAttempts.put(uuid, now);
+        if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) return;
+        UUID uuid = event.getUniqueId();
+        LoginAttempt attempt = new LoginAttempt(now);
+        loginAttempts.put(uuid, attempt);
+        JoinState read;
         try {
-            preFetchedVanishState.put(uuid, readJoinState(uuid));
-            unreadJoins.remove(uuid);
+            read = readJoinState(uuid);
         } catch (Exception e) {
-            preFetchedVanishState.remove(uuid);
-            unreadJoins.add(uuid);
+            read = null;
             plugin.getLogger().warning("Vanish state for " + event.getName()
                     + " is unavailable; they join hidden until it can be read: " + e.getMessage());
         }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onLogin(PlayerLoginEvent event) {
-        if (event.getResult() != PlayerLoginEvent.Result.ALLOWED) forgetLogin(event.getPlayer().getUniqueId());
+        JoinState state = read;
+        loginAttempts.computeIfPresent(uuid, (key, newest) -> {
+            if (newest != attempt) return newest;
+            if (state != null) {
+                preFetchedVanishState.put(key, state);
+                unreadJoins.remove(key);
+            } else {
+                preFetchedVanishState.remove(key);
+                unreadJoins.add(key);
+            }
+            return newest;
+        });
     }
 
     private JoinState readJoinState(UUID uuid) {
@@ -166,8 +172,12 @@ public class PlayerListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        loginAttempts.remove(uuid);
-        boolean unread = unreadJoins.remove(uuid);
+        boolean[] consumed = new boolean[1];
+        loginAttempts.compute(uuid, (key, newest) -> {
+            consumed[0] = unreadJoins.remove(key);
+            return null;
+        });
+        boolean unread = consumed[0];
         boolean proxy = plugin.getProxyBridge() != null && plugin.getProxyBridge().isConfigured();
         if (!proxy && !unread) {
             finishJoin(event);
