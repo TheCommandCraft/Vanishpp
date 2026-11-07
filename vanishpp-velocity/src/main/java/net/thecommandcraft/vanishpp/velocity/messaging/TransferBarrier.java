@@ -32,6 +32,10 @@ public final class TransferBarrier implements AutoCloseable {
 
     public synchronized void begin(ServerPreConnectEvent event, Continuation continuation) {
         ServerConnection source = event.getPlayer().getCurrentServer().orElse(null);
+        if (source == null && event.getPreviousServer() != null) {
+            event.setResult(ServerPreConnectEvent.ServerResult.denied());
+            continuation.resume(); return;
+        }
         if (closed || !event.getResult().isAllowed() || source == null
                 || event.getResult().getServer().filter(source.getServer()::equals).isPresent()) {
             continuation.resume(); return;

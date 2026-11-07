@@ -667,7 +667,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
             // Vanish state
             if (source.isVanished(uuid)) target.setVanished(uuid, true);
             // Rules
-            source.getRules(uuid).entrySet().stream()
+            source.getRecoveryRules(uuid).entrySet().stream()
                     .sorted(java.util.Comparator.comparing(e -> e.getKey().startsWith(StorageProvider.EXPIRY_PREFIX)))
                     .forEach(e -> target.setRule(uuid, e.getKey(), e.getValue()));
             // Vanish level

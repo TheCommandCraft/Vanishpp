@@ -99,6 +99,8 @@ hooks:
 # own DB configured — they receive all state from the proxy.
 # YAML state is persisted in state.yml; SQL mode also keeps this recovery snapshot.
 # Accepted network config edits are saved to this config.yml.
+# Transfers require matching Paper companions on every backend. A missing source
+# reply denies the switch after five seconds rather than exposing stale state.
 storage:
   type: "YAML"
   mysql:
