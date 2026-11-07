@@ -96,13 +96,19 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
             final String finalHeader = header;
 
             plugin.getVanishScheduler().runGlobal(() -> {
+                if (onlineUuid != null && !plugin.getPermissionManager().canSee(sender, onlineUuid)) {
+                    plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().playerNotFoundMessage);
+                    return;
+                }
+                var visibleEntries = finalEntries.stream()
+                        .filter(entry -> plugin.getPermissionManager().canSee(sender, entry.getPlayerUuid())).toList();
                 sender.sendMessage(plugin.getMessageManager().parse(finalHeader, null));
-                if (finalEntries.isEmpty()) {
+                if (visibleEntries.isEmpty()) {
                     plugin.getMessageManager().sendMessage(sender,
                             plugin.getConfigManager().getLanguageManager().getMessage("history.no-entries"));
                     return;
                 }
-                for (VanishHistoryEntry e : finalEntries) {
+                for (VanishHistoryEntry e : visibleEntries) {
                     String color = e.getAction() == VanishHistoryEntry.Action.VANISH ? "§a" : "§c";
                     String action = e.getAction() == VanishHistoryEntry.Action.VANISH ? "▲ VANISH" : "▼ UNVANISH";
                     String ts = FMT.format(e.getTimestamp());
@@ -114,7 +120,7 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
                             " §8[" + ts + "] " + color + action + " §7" + e.getPlayerName()
                                     + reason + duration));
                 }
-                if (finalEntries.size() == PER_PAGE) {
+                if (visibleEntries.size() == PER_PAGE) {
                     String nextCmd = finalPlayerName != null
                             ? "/vhistory " + finalPlayerName + " " + (finalPage + 1)
                             : "/vhistory " + (finalPage + 1);
@@ -135,9 +141,10 @@ public class VanishHistoryCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.history")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) completions.add(p.getName());
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }
         return new ArrayList<>();

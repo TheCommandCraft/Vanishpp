@@ -48,10 +48,10 @@ public class AdminDashboardGUI implements Listener {
         // /vconfig reload picks up an edited messages.yml without a server restart.
         String title = plugin.getLanguageManager().getMessage("gui.admin-dashboard.title");
         Inventory inv = Bukkit.createInventory(null, SIZE, plugin.getMessageManager().parse(title, viewer));
-        populateInventory(inv);
+        populateInventory(inv, viewer);
 
         // Info panel in last row
-        inv.setItem(49, buildInfoItem());
+        inv.setItem(49, buildInfoItem(viewer));
         inv.setItem(53, buildCloseItem());
 
         openViewers.add(viewer.getUniqueId());
@@ -88,7 +88,7 @@ public class AdminDashboardGUI implements Listener {
         catch (IllegalArgumentException e) { return; }
 
         Player target = Bukkit.getPlayer(targetUuid);
-        if (target == null) {
+        if (target == null || !plugin.getPermissionManager().canSee(viewer, target)) {
             viewer.closeInventory();
             return;
         }
@@ -116,12 +116,12 @@ public class AdminDashboardGUI implements Listener {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private void populateInventory(Inventory inv) {
+    private void populateInventory(Inventory inv, Player viewer) {
         int slot = 0;
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
             if (slot >= 45) break; // Leave last row for controls
             Player p = Bukkit.getPlayer(uuid);
-            if (p == null) continue;
+            if (p == null || !plugin.getPermissionManager().canSee(viewer, p)) continue;
             inv.setItem(slot++, buildPlayerHead(p));
         }
     }
@@ -158,11 +158,11 @@ public class AdminDashboardGUI implements Listener {
         return skull;
     }
 
-    private ItemStack buildInfoItem() {
+    private ItemStack buildInfoItem(Player viewer) {
         ItemStack item = new ItemStack(Material.PAPER);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            int count = plugin.getRawVanishedPlayers().size();
+            long count = plugin.getPermissionManager().visiblePlayers(viewer).stream().filter(plugin::isVanished).count();
             meta.displayName(guiLine("gui.admin-dashboard.vanished-count", "%count%", String.valueOf(count)));
             item.setItemMeta(meta);
         }

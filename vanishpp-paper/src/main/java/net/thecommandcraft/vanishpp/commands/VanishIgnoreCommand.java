@@ -39,7 +39,7 @@ public class VanishIgnoreCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             target = Bukkit.getPlayer(args[0]);
-            if (target == null) {
+            if (target == null || !plugin.getPermissionManager().canSee(sender, target)) {
                 plugin.getMessageManager().sendMessage(sender, "<red>Player not found.");
                 return true;
             }
@@ -69,9 +69,10 @@ public class VanishIgnoreCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.ignorewarning")) return new ArrayList<>();
         if (args.length == 1 && sender.hasPermission("vanishpp.ignorewarning.others")) {
             List<String> names = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) names.add(p.getName());
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) names.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], names, new ArrayList<>());
         }
         return new ArrayList<>();

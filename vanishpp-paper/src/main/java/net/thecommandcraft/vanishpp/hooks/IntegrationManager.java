@@ -29,6 +29,7 @@ public class IntegrationManager {
         Plugin ess = Bukkit.getPluginManager().getPlugin("Essentials");
         if (ess instanceof Essentials) {
             this.essentials = (Essentials) ess;
+            Bukkit.getPluginManager().registerEvents(new EssentialsMessageListener(plugin), plugin);
             plugin.getLogger().info("Hooked into EssentialsX.");
         }
 
@@ -167,13 +168,12 @@ public class IntegrationManager {
                 return String.valueOf(plugin.isVanished(player));
             }
             if (identifier.equalsIgnoreCase("vanished_count")) {
-                long onlineVanished = Bukkit.getOnlinePlayers().stream().filter(plugin::isVanished).count();
+                long onlineVanished = Bukkit.getOnlinePlayers().stream().filter(plugin::isVanished)
+                        .filter(target -> plugin.getPermissionManager().canSee(player, target)).count();
                 return String.valueOf(onlineVanished);
             }
             if (identifier.equalsIgnoreCase("visible_online")) {
-                long onlineVanished = Bukkit.getOnlinePlayers().stream().filter(plugin::isVanished).count();
-                int total = Bukkit.getOnlinePlayers().size();
-                return String.valueOf(Math.max(0, total - onlineVanished));
+                return String.valueOf(plugin.getPermissionManager().publicOnlineCount());
             }
             if (identifier.equalsIgnoreCase("pickup")) {
                 if (player == null)
@@ -192,6 +192,7 @@ public class IntegrationManager {
             if (identifier.equalsIgnoreCase("vanished_list")) {
                 return Bukkit.getOnlinePlayers().stream()
                         .filter(plugin::isVanished)
+                        .filter(target -> plugin.getPermissionManager().canSee(player, target))
                         .map(Player::getName)
                         .collect(Collectors.joining(", "));
             }

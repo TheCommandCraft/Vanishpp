@@ -39,7 +39,6 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.util.Vector;
 import org.bukkit.event.Event;
 
 import java.util.*;
@@ -51,7 +50,6 @@ public class PlayerListener implements Listener {
     private final ConfigManager config;
     private final RuleManager rules;
     private final Map<UUID, GameMode> silentChestViewers = new ConcurrentHashMap<>();
-    private final Map<UUID, Set<String>> silentChestBlockKeys = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Long>> ruleNotificationCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> invseeHintCooldowns = new ConcurrentHashMap<>();
     private final Set<UUID> hasSeenDisableTip = ConcurrentHashMap.newKeySet();
@@ -59,7 +57,8 @@ public class PlayerListener implements Listener {
 
     // Pre-fetched DB vanish state: populated on AsyncPlayerPreLoginEvent so
     // PlayerJoinEvent can apply vanish instantly without an async round-trip.
-    private final Map<UUID, Boolean> preFetchedVanishState = new ConcurrentHashMap<>();
+    private record JoinState(boolean vanished, boolean autoVanish) {}
+    private final Map<UUID, JoinState> preFetchedVanishState = new ConcurrentHashMap<>();
 
     // Private-message detection prevention
     private static final Set<String> MSG_COMMANDS = Set.of(
@@ -67,8 +66,6 @@ public class PlayerListener implements Listener {
             "emsg", "etell", "ewhisper",
             "pm", "dm", "message");
     private static final Set<String> REPLY_COMMANDS = Set.of("r", "reply", "er", "ereply");
-    // Tracks last vanished sender per non-seer recipient so /r can be blocked
-    private final Map<UUID, UUID> msgReplyTargets = new ConcurrentHashMap<>();
     // Holds permission attachments for OpenInv/InvSee++ sessions — removed on inventory close
     private final Map<UUID, org.bukkit.permissions.PermissionAttachment> invseeAttachments = new ConcurrentHashMap<>();
 
@@ -83,7 +80,7 @@ public class PlayerListener implements Listener {
         UUID uuid = event.getUniqueId();
         try {
             boolean dbVanished = plugin.getStorageProvider().isVanished(uuid);
-            preFetchedVanishState.put(uuid, dbVanished);
+            preFetchedVanishState.put(uuid, new JoinState(dbVanished, plugin.getStorageProvider().getAutoVanishOnJoin(uuid)));
         } catch (Exception ignored) {
             // If DB read fails, fall back to existing in-memory state at join
         }
@@ -93,14 +90,16 @@ public class PlayerListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         final UUID joinUuid = player.getUniqueId();
+        plugin.resumeVisibility(player);
 
         plugin.playerNameCache.put(player.getName().toLowerCase(), joinUuid);
 
         // Apply pre-fetched DB vanish state immediately (no async round-trip needed).
         // preFetchedVanishState is populated by AsyncPlayerPreLoginEvent before this fires.
-        Boolean prefetched = preFetchedVanishState.remove(joinUuid);
+        JoinState prefetched = preFetchedVanishState.remove(joinUuid);
         if (prefetched != null) {
-            plugin.reconcileVanishState(player, prefetched);
+            plugin.reconcileVanishState(player, prefetched.vanished()
+                    || (prefetched.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")));
         }
 
         // Immediate Vanish Logic
@@ -114,7 +113,7 @@ public class PlayerListener implements Listener {
                     .replace("%player%", player.getName());
             Component joinComp = plugin.getMessageManager().parse(joinMsg, player);
             for (Player staff : Bukkit.getOnlinePlayers()) {
-                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see"))
+                if (!staff.equals(player) && plugin.getPermissionManager().canReceiveStaffNotice(staff, player))
                     staff.sendMessage(joinComp);
             }
             Bukkit.getConsoleSender().sendMessage(joinComp);
@@ -127,10 +126,7 @@ public class PlayerListener implements Listener {
                 plugin.getVanishScheduler().runLaterGlobal(() -> {
                     if (player.isOnline() && plugin.isVanished(player)) {
                         plugin.reapplyTeamEntry(player);
-                        if (config.vanishTabPrefix != null && !config.vanishTabPrefix.isEmpty()) {
-                            player.playerListName(plugin.getMessageManager().parse(
-                                    config.vanishTabPrefix + player.getName(), player));
-                        }
+                        plugin.updatePlayerListName(player);
                         plugin.getIntegrationManager().updateHooks(player, true);
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
@@ -163,31 +159,6 @@ public class PlayerListener implements Listener {
                     if (!player.isOnline()) return;
                     plugin.reconcileVanishState(player, dbVanished);
                 });
-            });
-        }
-
-        // Auto-vanish on join: if player enabled this preference, vanish them now.
-        // Runs after join completes (async) — the same post-join moment that works
-        // reliably for the scoreboard, after TAB and other plugins have finished
-        // their join-time processing.
-        if (plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish")) {
-            plugin.getVanishScheduler().runAsync(() -> {
-                boolean autoVanish = plugin.getStorageProvider().getAutoVanishOnJoin(joinUuid);
-                if (autoVanish) {
-                    plugin.getVanishScheduler().runGlobal(() -> {
-                        if (!player.isOnline()) return;
-                        if (plugin.isVanished(player)) {
-                            // Logged off while vanished — the DB restore path already
-                            // applied vanish effects at join, but another plugin
-                            // (e.g. TAB) may have overwritten the sidebar right after
-                            // join. Force-rebuild it at this later point in time.
-                            if (plugin.getVanishScoreboard() != null)
-                                plugin.getVanishScoreboard().forceReshow(player);
-                        } else {
-                            plugin.vanishPlayerSilently(player);
-                        }
-                    });
-                }
             });
         }
 
@@ -406,30 +377,30 @@ public class PlayerListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+        plugin.retireVisibility(player);
         if (plugin.isVanished(player)) {
             if (config.hideRealQuit)
                 event.quitMessage(null);
-            Set<String> blockKeys = silentChestBlockKeys.remove(uuid);
-            if (blockKeys != null) plugin.silentlyOpenedBlocks.removeAll(blockKeys);
-            silentChestViewers.remove(uuid);
             plugin.pendingChatMessages.remove(uuid);
             // Notify staff that a vanished player silently left
             String quitMsg = config.getLanguageManager().getMessage("staff.silent-quit")
                     .replace("%player%", player.getName());
             Component quitComp = plugin.getMessageManager().parse(quitMsg, player);
             for (Player staff : Bukkit.getOnlinePlayers()) {
-                if (!staff.equals(player) && plugin.getPermissionManager().hasPermission(staff, "vanishpp.see"))
+                if (!staff.equals(player) && plugin.getPermissionManager().canReceiveStaffNotice(staff, player))
                     staff.sendMessage(quitComp);
             }
             Bukkit.getConsoleSender().sendMessage(quitComp);
         }
+        var closing = plugin.silentContainers.close(uuid);
+        if (closing != null) plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentContainers.retire(closing), 60L);
+        silentChestViewers.remove(uuid);
         ruleNotificationCooldowns.remove(uuid);
         invseeHintCooldowns.remove(uuid);
         hasSeenDisableTip.remove(uuid);
         lastSneakTime.remove(uuid);
         preFetchedVanishState.remove(uuid);
-        msgReplyTargets.remove(uuid);
-        msgReplyTargets.values().removeIf(v -> v.equals(uuid));
+        plugin.messageRecipients.forget(uuid);
         org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(uuid);
         if (att != null) att.remove();
         plugin.cleanupPlayerCache(uuid);
@@ -465,7 +436,7 @@ public class PlayerListener implements Listener {
     private void applyVanishChatFilter(AsyncChatEvent event, Player player) {
         // Remove non-seers from audience
         event.viewers().removeIf(viewer ->
-            viewer instanceof Player obs && !plugin.getPermissionManager().hasPermission(obs, "vanishpp.see")
+            viewer instanceof Player obs && !plugin.getPermissionManager().canSee(obs, player)
         );
         // Wrap whatever renderer is already installed (e.g. by LuckPerms Chat, HoverChat, or
         // another formatter that ran at a lower priority) instead of replacing it outright.
@@ -488,7 +459,6 @@ public class PlayerListener implements Listener {
         String cmd = colon >= 0 ? cmdRaw.substring(colon + 1) : cmdRaw;
 
         boolean senderVanished = plugin.isVanished(sender);
-        boolean senderCanSee = plugin.getPermissionManager().hasPermission(sender, "vanishpp.see");
 
         // ── /me — vanished player action broadcast ───────────────────────────
         if ("me".equals(cmd) && senderVanished) {
@@ -504,45 +474,51 @@ public class PlayerListener implements Listener {
             Component prefix = plugin.getMessageManager().parse(config.vanishTabPrefix, sender);
             Component meMsg = prefix.append(Component.text("* " + sender.getName() + " " + actionText));
             for (Player p : Bukkit.getOnlinePlayers()) {
-                if (plugin.getPermissionManager().hasPermission(p, "vanishpp.see"))
+                if (plugin.getPermissionManager().canSee(p, sender))
                     p.sendMessage(meMsg);
             }
             return;
         }
 
         // ── /msg, /tell, /w, /whisper, etc. ─────────────────────────────────
-        if (MSG_COMMANDS.contains(cmd) && parts.length >= 2) {
-            String targetName = parts[1];
-            Player target = Bukkit.getPlayerExact(targetName);
-            if (target == null) return;
+        var registered = Bukkit.getPluginCommand(cmdRaw);
+        if (registered != null && registered.getPlugin().getName().equalsIgnoreCase("Essentials")) return;
 
-            // Non-seer → vanished player: fake "not found" to prevent detection
-            if (!senderVanished && !senderCanSee && plugin.isVanished(target)) {
-                event.setCancelled(true);
-                plugin.getMessageManager().sendMessage(sender,
-                        config.getLanguageManager().getMessage("commands.msg-player-not-found"));
+        if (MSG_COMMANDS.contains(cmd) && parts.length >= 3) {
+            List<Player> recipients = new ArrayList<>();
+            String token = parts[1];
+            if (token.startsWith("@")) {
+                try {
+                    for (var entity : Bukkit.selectEntities(sender, token))
+                        if (entity instanceof Player player) recipients.add(player);
+                } catch (IllegalArgumentException ignored) { return; }
+            } else {
+                Player target = Bukkit.getPlayerExact(token);
+                if (target == null) {
+                    try { target = Bukkit.getPlayer(UUID.fromString(token)); }
+                    catch (IllegalArgumentException ignored) {}
+                }
+                if (target != null) recipients.add(target);
+            }
+            if (recipients.stream().anyMatch(target -> !plugin.getPermissionManager().canSee(sender, target))) {
+                denyPrivateMessage(event);
                 return;
             }
-
-            // Vanished sender → non-seer: track so /r gets blocked
-            if (senderVanished && !plugin.getPermissionManager().hasPermission(target, "vanishpp.see")) {
-                msgReplyTargets.put(target.getUniqueId(), sender.getUniqueId());
-            }
+            for (Player recipient : recipients)
+                plugin.messageRecipients.record(sender.getUniqueId(), recipient.getUniqueId());
             return;
         }
 
-        // ── /r, /reply, etc. ─────────────────────────────────────────────────
-        if (REPLY_COMMANDS.contains(cmd) && !senderCanSee) {
-            UUID replyTarget = msgReplyTargets.get(sender.getUniqueId());
-            if (replyTarget == null) return;
-            Player target = Bukkit.getPlayer(replyTarget);
-            if (target != null && plugin.isVanished(target)) {
-                event.setCancelled(true);
-                plugin.getMessageManager().sendMessage(sender,
-                        config.getLanguageManager().getMessage("commands.msg-player-not-found"));
-                msgReplyTargets.remove(sender.getUniqueId());
-            }
+        if (REPLY_COMMANDS.contains(cmd)) {
+            UUID reply = plugin.messageRecipients.reply(sender.getUniqueId());
+            if (reply != null && !plugin.getPermissionManager().canSee(sender, reply)) denyPrivateMessage(event);
         }
+    }
+
+    private void denyPrivateMessage(PlayerCommandPreprocessEvent event) {
+        event.setCancelled(true);
+        plugin.getMessageManager().sendMessage(event.getPlayer(),
+                config.getLanguageManager().getMessage("commands.msg-player-not-found"));
     }
 
     @EventHandler
@@ -580,16 +556,6 @@ public class PlayerListener implements Listener {
             return;
         if (event.getHitEntity() instanceof Player target && plugin.isVanished(target)) {
             event.setCancelled(true);
-            Projectile original = event.getEntity();
-            Vector velocity = original.getVelocity();
-            if (velocity.length() > 0.1) {
-                org.bukkit.Location spawnLoc = original.getLocation().add(velocity.normalize().multiply(1.5));
-                Projectile newProj = (Projectile) original.getWorld().spawnEntity(spawnLoc, original.getType());
-                newProj.setVelocity(velocity);
-                newProj.setShooter(original.getShooter());
-                newProj.setFireTicks(original.getFireTicks());
-            }
-            original.remove();
         }
     }
 
@@ -633,6 +599,12 @@ public class PlayerListener implements Listener {
             event.setCancelled(true);
             sendRuleDeny(player, RuleManager.CAN_PICKUP_ITEMS, "warnings.action-pickup-items");
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onExperiencePickup(com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent event) {
+        if (plugin.isVanished(event.getPlayer()) && !rules.getRule(event.getPlayer(), RuleManager.CAN_PICKUP_ITEMS))
+            event.setCancelled(true);
     }
 
     @EventHandler
@@ -758,15 +730,13 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onServerListPing(PaperServerListPingEvent event) {
         if (config.adjustServerListCount) {
-            int vanishedCount = 0;
             List<UUID> toRemove = new ArrayList<>();
             for (UUID uuid : plugin.getRawVanishedPlayers()) {
                 if (plugin.getServer().getPlayer(uuid) != null) {
-                    vanishedCount++;
                     toRemove.add(uuid);
                 }
             }
-            event.setNumPlayers(Math.max(0, event.getNumPlayers() - vanishedCount));
+            event.setNumPlayers(plugin.getPermissionManager().publicOnlineCount());
             event.getListedPlayers().removeIf(profile -> toRemove.contains(profile.id()));
         }
     }
@@ -932,34 +902,39 @@ public class PlayerListener implements Listener {
             // own block_action broadcast — both halves' positions must be registered, not just
             // the one actually clicked, or the other half's animation/sound leaks to observers.
             Set<String> blockKeys = new java.util.HashSet<>();
-            blockKeys.add(block.getX() + "," + block.getY() + "," + block.getZ());
+            blockKeys.add(net.thecommandcraft.vanishpp.utils.SilentContainerSessions.key(block));
             if (block.getState() instanceof Chest chestState
                     && chestState.getInventory().getHolder() instanceof DoubleChest doubleChest) {
                 for (InventoryHolder half : new InventoryHolder[]{doubleChest.getLeftSide(), doubleChest.getRightSide()}) {
                     if (half instanceof Chest halfChest) {
                         org.bukkit.Location loc = halfChest.getLocation();
-                        blockKeys.add(loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ());
+                        blockKeys.add(net.thecommandcraft.vanishpp.utils.SilentContainerSessions.key(loc.getWorld().getUID(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()));
                     }
                 }
             }
-            plugin.silentlyOpenedBlocks.addAll(blockKeys);
+            player.closeInventory();
+            var session = plugin.silentContainers.open(player.getUniqueId(), blockKeys, block);
             silentChestViewers.put(player.getUniqueId(), player.getGameMode());
-            silentChestBlockKeys.put(player.getUniqueId(), blockKeys);
 
             if (type == Material.ENDER_CHEST) {
                 // Each player has their own ender chest inventory — open it directly.
-                player.openInventory(player.getEnderChest());
+                if (player.openInventory(player.getEnderChest()) == null) {
+                    plugin.silentContainers.retire(session);
+                    silentChestViewers.remove(player.getUniqueId());
+                }
             } else if (block.getState() instanceof Container c) {
                 // Open the real container inventory directly.
-                // ProtocolLib suppresses the animation/sound for non-seers via silentlyOpenedBlocks.
+                // Session suppression applies to other viewers, including unrelated vanished staff.
                 // This is vanilla-correct: no snapshot, no sync-back race, hoppers/plugins see
                 // live changes immediately as they happen.
-                player.openInventory(c.getInventory());
+                if (player.openInventory(c.getInventory()) == null) {
+                    plugin.silentContainers.retire(session);
+                    silentChestViewers.remove(player.getUniqueId());
+                }
             } else {
                 // Not a recognised container state — roll back registration
-                plugin.silentlyOpenedBlocks.removeAll(blockKeys);
+                plugin.silentContainers.retire(session);
                 silentChestViewers.remove(player.getUniqueId());
-                silentChestBlockKeys.remove(player.getUniqueId());
             }
         } else {
             // No ProtocolLib: use spectator mode fallback, warn player
@@ -996,7 +971,7 @@ public class PlayerListener implements Listener {
 
         Player p = (Player) event.getPlayer();
         GameMode gm = silentChestViewers.remove(uuid);
-        Set<String> blockKeys = silentChestBlockKeys.remove(uuid);
+        var closing = plugin.silentContainers.close(uuid);
 
         // No sync-back needed: with ProtocolLib we open the real inventory directly,
         // so all changes are already live. With the spectator fallback we also open
@@ -1021,10 +996,8 @@ public class PlayerListener implements Listener {
         // re-broadcasts the same state change on a later tick too. Verified against a real
         // server that a 3-tick window (the original value) reliably misses that second
         // broadcast and leaks it; 60 ticks (3s) reliably covers it.
-        if (blockKeys != null) {
-            final Set<String> keys = blockKeys;
-            plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentlyOpenedBlocks.removeAll(keys), 60L);
-        }
+        if (closing != null)
+            plugin.getVanishScheduler().runLaterGlobal(() -> plugin.silentContainers.retire(closing), 60L);
     }
 
     private static final long RULE_NOTIFY_COOLDOWN_MS = 60000;

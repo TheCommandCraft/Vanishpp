@@ -48,7 +48,7 @@ public class VanishStatsCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             Player online = Bukkit.getPlayer(args[0]);
-            if (online != null) {
+            if (online != null && plugin.getPermissionManager().canSee(sender, online)) {
                 targetUuid = online.getUniqueId();
                 targetName = online.getName();
             } else {
@@ -80,6 +80,7 @@ public class VanishStatsCommand implements CommandExecutor, TabCompleter {
             final String name = targetName;
 
             plugin.getVanishScheduler().runGlobal(() -> {
+                if (!plugin.getPermissionManager().canSee(sender, targetUuid)) return;
                 var lm = plugin.getConfigManager().getLanguageManager();
                 plugin.getMessageManager().sendMessage(sender,
                         lm.getMessage("stats.header").replace("%player%", name));
@@ -98,9 +99,10 @@ public class VanishStatsCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.stats")) return new ArrayList<>();
         if (args.length == 1 && sender.hasPermission("vanishpp.stats.others")) {
             List<String> names = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) names.add(p.getName());
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) names.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], names, new ArrayList<>());
         }
         return new ArrayList<>();

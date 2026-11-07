@@ -35,6 +35,7 @@ public class TabPluginHook {
                 // Tab list prefix
                 TabListFormatManager formatManager = api.getTabListFormatManager();
                 if (formatManager != null) {
+                    formatManager.setName(tabPlayer, plugin.getIncognitoName(player.getUniqueId()));
                     if (isVanished) {
                         String prefix = plugin.getConfigManager().vanishTabPrefix;
                         formatManager.setPrefix(tabPlayer, prefix);

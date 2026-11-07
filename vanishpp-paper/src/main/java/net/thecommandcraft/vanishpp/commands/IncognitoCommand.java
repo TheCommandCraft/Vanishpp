@@ -65,7 +65,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
                 requestedName = "off";
             } else {
                 Player online = Bukkit.getPlayer(args[0]);
-                if (online != null && !online.equals(sender)) {
+                if (online != null && !online.equals(sender) && plugin.getPermissionManager().canSee(sender, online)) {
                     // Treat as targeting another player
                     if (!sender.hasPermission("vanishpp.incognito.others")) {
                         plugin.getMessageManager().sendMessage(sender,
@@ -92,7 +92,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             target = Bukkit.getPlayer(args[0]);
-            if (target == null) {
+            if (target == null || !plugin.getPermissionManager().canSee(sender, target)) {
                 plugin.getMessageManager().sendMessage(sender,
                         plugin.getConfigManager().playerNotFoundMessage);
                 return true;
@@ -104,7 +104,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
 
         // Explicit disable
         if ("off".equalsIgnoreCase(requestedName)) {
-            if (plugin.incognitoNames.remove(target.getUniqueId()) != null) {
+            if (plugin.setIncognitoName(target, null) != null) {
                 plugin.getMessageManager().sendMessage(sender,
                         lm.getMessage("incognito.disabled")
                                 .replace("%player%", target.getName()));
@@ -118,7 +118,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
 
         // Toggle off if already active
         if (requestedName == null && plugin.incognitoNames.containsKey(target.getUniqueId())) {
-            plugin.incognitoNames.remove(target.getUniqueId());
+            plugin.setIncognitoName(target, null);
             plugin.getMessageManager().sendMessage(sender,
                     lm.getMessage("incognito.disabled")
                             .replace("%player%", target.getName()));
@@ -140,7 +140,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        plugin.incognitoNames.put(target.getUniqueId(), fakeName);
+        plugin.setIncognitoName(target, fakeName);
         plugin.getMessageManager().sendMessage(sender,
                 lm.getMessage("incognito.enabled")
                         .replace("%player%", target.getName())
@@ -166,6 +166,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.incognito")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             // self options: off + fake names
@@ -174,7 +175,7 @@ public class IncognitoCommand implements CommandExecutor, TabCompleter {
             if (pool != null) completions.addAll(pool);
             // other-player options (if they have permission)
             if (sender.hasPermission("vanishpp.incognito.others")) {
-                for (Player p : Bukkit.getOnlinePlayers()) completions.add(p.getName());
+                for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             }
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }

@@ -107,10 +107,11 @@ public class VpermsCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
             @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.manageperms")) return new ArrayList<>();
         final List<String> completions = new ArrayList<>();
         if (args.length == 1) {
             List<String> suggestions = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers()) {
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) {
                 suggestions.add(p.getName());
             }
             suggestions.add("reload");

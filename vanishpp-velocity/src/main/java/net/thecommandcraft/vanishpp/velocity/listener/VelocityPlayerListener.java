@@ -3,6 +3,8 @@ package net.thecommandcraft.vanishpp.velocity.listener;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
+import com.velocitypowered.api.event.proxy.ProxyPingEvent;
+import net.thecommandcraft.vanishpp.common.visibility.AudiencePolicy;
 import net.thecommandcraft.vanishpp.velocity.ProxyStateManager;
 import net.thecommandcraft.vanishpp.velocity.VanishppVelocity;
 import net.thecommandcraft.vanishpp.velocity.messaging.PaperChannelDispatcher;
@@ -40,5 +42,16 @@ public class VelocityPlayerListener {
     public void onServerPostConnect(ServerPostConnectEvent event) {
         event.getPlayer().getCurrentServer().ifPresent(conn ->
                 dispatcher.flushQueue(conn.getServerInfo().getName()));
+    }
+
+    @Subscribe
+    public void onProxyPing(ProxyPingEvent event) {
+        if (!plugin.getConfigManager().getSnapshot().adjustServerListCount) return;
+        var players = event.getPing().getPlayers();
+        if (players.isEmpty()) return;
+        var sample = players.get().getSample().stream().filter(player -> !stateManager.isVanished(player.getId()))
+                .toArray(com.velocitypowered.api.proxy.server.ServerPing.SamplePlayer[]::new);
+        int count = AudiencePolicy.publicCount(plugin.getProxy().getAllPlayers(), player -> stateManager.isVanished(player.getUniqueId()));
+        event.setPing(event.getPing().asBuilder().onlinePlayers(count).clearSamplePlayers().samplePlayers(sample).build());
     }
 }

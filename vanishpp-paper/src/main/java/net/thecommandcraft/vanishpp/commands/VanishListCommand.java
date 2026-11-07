@@ -57,7 +57,7 @@ public class VanishListCommand implements CommandExecutor {
         List<Player> vanished = new ArrayList<>();
         for (UUID uuid : plugin.getRawVanishedPlayers()) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null && p.isOnline()) vanished.add(p);
+            if (p != null && p.isOnline() && plugin.getPermissionManager().canSee(sender, p)) vanished.add(p);
         }
 
         var lm = plugin.getConfigManager().getLanguageManager();
@@ -106,6 +106,7 @@ public class VanishListCommand implements CommandExecutor {
     // ── Cross-server proxy list ───────────────────────────────────────────────
 
     private void renderProxyList(CommandSender sender, List<NetworkVanishState> states) {
+        states = states.stream().filter(state -> plugin.getPermissionManager().canSee(sender, state)).toList();
         var lm = plugin.getConfigManager().getLanguageManager();
 
         if (states.isEmpty()) {

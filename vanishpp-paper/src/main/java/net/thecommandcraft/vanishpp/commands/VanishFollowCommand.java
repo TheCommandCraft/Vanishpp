@@ -85,7 +85,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
         }
 
         Player target = Bukkit.getPlayer(args[0]);
-        if (target == null || target.equals(player)) {
+        if (target == null || target.equals(player) || !plugin.getPermissionManager().canSee(player, target)) {
             plugin.getMessageManager().sendMessage(player, plugin.getConfigManager().playerNotFoundMessage);
             return true;
         }
@@ -130,7 +130,7 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
         UUID targetUuid = plugin.spectateFollowTargets.get(follower.getUniqueId());
         if (targetUuid == null) return;
         Player target = Bukkit.getPlayer(targetUuid);
-        if (target == null) {
+        if (target == null || !plugin.getPermissionManager().canSee(follower, target)) {
             stopFollow(follower);
             return;
         }
@@ -173,10 +173,11 @@ public class VanishFollowCommand implements CommandExecutor, TabCompleter, Liste
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.spectator")) return new ArrayList<>();
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
             completions.add("stop");
-            for (Player p : Bukkit.getOnlinePlayers()) completions.add(p.getName());
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }
         return new ArrayList<>();

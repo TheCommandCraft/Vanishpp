@@ -126,7 +126,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
         }
 
         Player target = Bukkit.getPlayer(args[0]);
-        if (target == null) {
+        if (target == null || !plugin.getPermissionManager().canSee(sender, target)) {
             plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().playerNotFoundMessage);
             return true;
         }
@@ -195,7 +195,7 @@ public class VanishCommand implements CommandExecutor, TabCompleter {
                 completions.add("world");
             }
             if (sender.hasPermission("vanishpp.vanish.others")) {
-                for (Player p : Bukkit.getOnlinePlayers()) completions.add(p.getName());
+                for (Player p : plugin.getPermissionManager().visiblePlayers(sender)) completions.add(p.getName());
             }
             return StringUtil.copyPartialMatches(args[0], completions, new ArrayList<>());
         }

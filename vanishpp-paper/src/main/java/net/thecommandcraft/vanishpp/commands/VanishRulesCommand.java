@@ -63,7 +63,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             target = (Player) sender;
         } else {
             target = Bukkit.getPlayer(firstArg);
-            if (target == null) {
+            if (target == null || !plugin.getPermissionManager().canSee(sender, target)) {
                 // If it looks like a rule attempt (args[1] is true/false), give a better error
                 if (args.length > 1 && (args[1].equalsIgnoreCase("true") || args[1].equalsIgnoreCase("false"))) {
                     plugin.getMessageManager().sendMessage(sender,
@@ -111,7 +111,13 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             // Allow trailing player name: /vrules all true <player>
             if (args.length > nextIdx && sender.hasPermission("vanishpp.rules.others")) {
                 Player namedTarget = Bukkit.getPlayer(args[nextIdx]);
-                if (namedTarget != null) target = namedTarget;
+                if (namedTarget != null) {
+                    if (!plugin.getPermissionManager().canSee(sender, namedTarget)) {
+                        plugin.getMessageManager().sendMessage(sender, plugin.getConfigManager().playerNotFoundMessage);
+                        return true;
+                    }
+                    target = namedTarget;
+                }
             }
             rules.setAllRules(target, value);
             if (plugin.isVanished(target)) {
@@ -195,13 +201,14 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("vanishpp.rules")) return new ArrayList<>();
         RuleManager rules = plugin.getRuleManager();
         List<String> booleans = List.of("true", "false");
         List<String> durations = List.of("30", "60", "120", "300", "600");
 
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
-            for (Player p : Bukkit.getOnlinePlayers())
+            for (Player p : plugin.getPermissionManager().visiblePlayers(sender))
                 completions.add(p.getName());
             completions.addAll(rules.getAvailableRules());
             completions.add("all");
@@ -237,7 +244,7 @@ public class VanishRulesCommand implements CommandExecutor, TabCompleter {
             } else if ((arg0IsRule || arg0IsAllNone) && arg1IsBool) {
                 List<String> completions = new ArrayList<>(durations);
                 if (arg0IsAllNone && sender.hasPermission("vanishpp.rules.others")) {
-                    for (Player p : Bukkit.getOnlinePlayers())
+                    for (Player p : plugin.getPermissionManager().visiblePlayers(sender))
                         completions.add(p.getName());
                 }
                 return StringUtil.copyPartialMatches(args[2], completions, new ArrayList<>());
