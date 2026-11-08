@@ -50,6 +50,7 @@ public class ProtocolLibManager {
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         ProtocolLibManager.this.plugin.getLogger().info("Hooked into ProtocolLib.");
         registerSilentChestListeners();
+        registerSleepStatusListener();
 
         // Each listener below is registered in its own try-catch: a single unsupported
         // PacketType on a given server/ProtocolLib version must not silently take down
@@ -562,6 +563,134 @@ public class ProtocolLibManager {
         } catch (Exception e) {
             ProtocolLibManager.this.plugin.getLogger().warning("Failed to register silent-chest sound listener: " + e.getMessage());
         }
+    }
+
+    /**
+     * Intercepts the vanilla action-bar "X/Y players are sleeping" message
+     * ({@code sleep.players_sleeping} TranslatableComponent) and corrects the displayed count so
+     * vanished players do not appear in it.
+     *
+     * <p>Background (verified against Paper/Purpur {@code ServerLevel#announceSleepStatus()}): the
+     * server broadcasts the same component to every player in the world, with args
+     * {@code [amountSleeping, sleepersNeeded]}. {@code setSleepingIgnored(true)} marks a vanished
+     * player as sleeping ({@code fauxSleeping}), so they are counted in BOTH the numerator and the
+     * denominator — yielding "2/3" for a world with one vanished player plus one real sleeper among
+     * three online, instead of the desired "1/2". Paper/Purpur offer no API to drop a player from
+     * the {@code activePlayers} denominator (only spectator or a different dimension does), so the
+     * cleanest plugin-side fix is to rewrite the broadcast component's args: subtract the count of
+     * vanished players in the world from both the numerator and the denominator.
+     *
+     * <p>This only ever affects a cosmetic action-bar message, so it fails open on error — unlike the
+     * leak-prevention listeners, leaving the original message untouched is always safe here.
+     */
+    private void registerSleepStatusListener() {
+        try {
+            if (PacketType.Play.Server.SYSTEM_CHAT.isSupported()) {
+                protocolManager.addPacketListener(
+                        new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Server.SYSTEM_CHAT) {
+                            @Override
+                            public void onPacketSending(PacketEvent event) {
+                                if (event.isCancelled())
+                                    return;
+                                try {
+                                    // Cheapest possible pre-filter: with no vanished players in the
+                                    // observer's world there is nothing to subtract, and this listener
+                                    // sees essentially every chat line on 1.19+ (all delivered as
+                                    // SYSTEM_CHAT). Bailing here keeps the common case at a couple of
+                                    // map lookups and skips all component serialisation entirely.
+                                    int vanishedHere = ProtocolLibManager.this.vanishedCountIn(event.getPlayer().getWorld());
+                                    if (vanishedHere <= 0)
+                                        return;
+
+                                    PacketContainer packet = event.getPacket();
+                                    if (packet.getChatComponents().size() == 0)
+                                        return;
+                                    WrappedChatComponent wrapped = packet.getChatComponents().read(0);
+                                    // Second pre-filter: the serialized component carries the key as
+                                    // "translate":"sleep.players_sleeping". Checking the JSON string
+                                    // first means we only build a full Adventure component tree for the
+                                    // sleep message itself. Deliberately does NOT depend on the packet's
+                                    // overlay field layout, so it can never skip the message we care about.
+                                    String json = wrapped == null ? null : wrapped.getJson();
+                                    if (json == null || !json.contains("sleep.players_sleeping"))
+                                        return;
+                                    net.kyori.adventure.text.Component component =
+                                            com.comphenix.protocol.wrappers.AdventureComponentConverter.fromWrapper(wrapped);
+                                    if (!(component instanceof net.kyori.adventure.text.TranslatableComponent tc))
+                                        return;
+                                    if (!"sleep.players_sleeping".equals(tc.key()))
+                                        return;
+                                    java.util.List<net.kyori.adventure.text.Component> args = tc.args();
+                                    if (args.size() < 2)
+                                        return;
+                                    int numerator = 0;
+                                    int denominator = 0;
+                                    try {
+                                        numerator = Integer.parseInt(adventurePlain(args.get(0)));
+                                        denominator = Integer.parseInt(adventurePlain(args.get(1)));
+                                    } catch (NumberFormatException nfe) {
+                                        return;
+                                    }
+                                    int[] newArgs = ProtocolLibManager.rewriteSleepingArgs(numerator, denominator, vanishedHere);
+                                    if (newArgs == null)
+                                        return;
+
+                                    net.kyori.adventure.text.Component fixed = net.kyori.adventure.text.Component.translatable(
+                                            tc.key(), tc.style(), java.util.Arrays.asList(
+                                                    net.kyori.adventure.text.Component.text(newArgs[0]),
+                                                    net.kyori.adventure.text.Component.text(newArgs[1])));
+                                    packet.getChatComponents().write(0,
+                                            com.comphenix.protocol.wrappers.AdventureComponentConverter.fromComponent(fixed));
+                                } catch (Exception e) {
+                                    // Fail open: this is a cosmetic message, never block it.
+                                    ProtocolLibManager.this.plugin.getLogger().fine(
+                                            "Sleep-status rewrite skipped: " + e.getMessage());
+                                }
+                            }
+                        });
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to register sleep-status display listener: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Counts how many players in the given world are currently vanished (and therefore included in
+     * that world's sleep count). Deliberately iterates the world's online players rather than the
+     * plugin's vanished-UUID set: the latter can hold many offline entries, and this runs on every
+     * SYSTEM_CHAT packet, so the cost must stay bounded by the number of online players.
+     */
+    private int vanishedCountIn(org.bukkit.World world) {
+        if (world == null)
+            return 0;
+        int count = 0;
+        for (Player p : world.getPlayers()) {
+            if (ProtocolLibManager.this.plugin.isVanished(p))
+                count++;
+        }
+        return count;
+    }
+
+    /**
+     * Pure decision logic for rewriting the {@code sleep.players_sleeping} action-bar component args,
+     * extracted out of the packet listener so it can be unit-tested without ProtocolLib. A vanished
+     * player counts in both the numerator (via {@code fauxSleeping}) and the denominator (via
+     * {@code activePlayers}), so to show e.g. "1/2" instead of "2/3" we subtract the vanished count
+     * from both. Never lets either number drop below 1, and returns null when nothing needs to change.
+     */
+    static int[] rewriteSleepingArgs(int numerator, int denominator, int vanishedCount) {
+        if (vanishedCount <= 0)
+            return null;
+        int newNum = Math.max(1, numerator - vanishedCount);
+        int newDen = Math.max(1, denominator - vanishedCount);
+        if (newNum == numerator && newDen == denominator)
+            return null;
+        return new int[]{newNum, newDen};
+    }
+
+    /** Serializes a simple adventure component (text or translatable-with-text-args) to its plain text. */
+    private static String adventurePlain(net.kyori.adventure.text.Component c) {
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(c);
     }
 
     /**

@@ -1451,13 +1451,27 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         updatePlayerListName(player);
 
-        if (configManager.preventSleeping)
-            try {
-                player.setSleepingIgnored(true);
-            } catch (Throwable ignored) {
-            }
+        // Always mark the vanished player as "sleeping-ignored" so they are treated as already
+        // asleep for the server's skip-night count. This is decoupled from preventSleeping:
+        // preventSleeping only blocks the vanished player from entering a bed, but even when it is
+        // off, a vanished player must never block other players from skipping the night (Paper/Purpur
+        // have no API to remove a player from the sleep-count denominator, so fauxSleeping is the
+        // correct lever — it counts them as a sleeper rather than an awake denominator).
+        try {
+            player.setSleepingIgnored(true);
+        } catch (Throwable ignored) {
+        }
 
         if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
+            // Snapshot any NV the player already has (from a potion, beacon, or equipment) so we can
+            // restore it exactly on unvanish. Without this, clearing the plugin's INFINITE NV on
+            // unvanish would also wipe NV the player had earned/acquired on their own.
+            PotionEffect preExisting = player.getPotionEffect(PotionEffectType.NIGHT_VISION);
+            if (preExisting != null && preExisting.getDuration() != PotionEffect.INFINITE_DURATION) {
+                player.setMetadata("vanishpp_pre_night_vision",
+                        new FixedMetadataValue(this, new int[]{preExisting.getDuration(), preExisting.getAmplifier(),
+                                preExisting.isAmbient() ? 1 : 0, preExisting.hasParticles() ? 1 : 0}));
+            }
             player.setMetadata("vanishpp_night_vision", new FixedMetadataValue(this, true));
             player.addPotionEffect(
                     new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
@@ -1581,12 +1595,40 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (player.hasMetadata("vanishpp_night_vision")) {
             player.removeMetadata("vanishpp_night_vision", this);
 
-            // Replace INFINITE NV with a 1-tick effect that expires naturally.
-            // Do NOT use removePotionEffect() — it breaks the game engine's internal
-            // equipment-effect tracking and prevents equipment from re-applying NV.
-            player.addPotionEffect(
-                    new PotionEffect(PotionEffectType.NIGHT_VISION, 1, 0, false, false), true);
+            // Snapshot of any NV the player had before vanishing (taken in applyVanishEffects), so we
+            // can restore it exactly and never destroy NV the player earned/acquired on their own.
+            int[] preNV = null;
+            if (player.hasMetadata("vanishpp_pre_night_vision")) {
+                Object v = player.getMetadata("vanishpp_pre_night_vision").get(0).value();
+                if (v instanceof int[] arr) preNV = arr;
+                player.removeMetadata("vanishpp_pre_night_vision", this);
+            }
+            final boolean restorePreNV = preNV != null && preNV.length >= 2;
+            final int preNVDuration = restorePreNV ? Math.max(preNV[0], 1) : 0;
+            final int preNVAmplifier = restorePreNV ? preNV[1] : 0;
+            final boolean preNVAmbient = restorePreNV && preNV.length >= 3 && preNV[2] != 0;
+            final boolean preNVParticles = restorePreNV && preNV.length >= 4 && preNV[3] != 0;
 
+            // Reliably remove the plugin's INFINITE NV. The earlier "1-tick soft-expiry" approach did
+            // not actually expire on Purpur 1.21.11, leaving the player with permanent night vision
+            // after unvanishing (reported in issue #2). A direct removePotionEffect() is the only
+            // deterministic way to drop the plugin's effect; we then restore the player's own NV
+            // snapshot right after, on the next tick, so their own night vision is preserved.
+            player.removePotionEffect(PotionEffectType.NIGHT_VISION);
+
+            if (restorePreNV) {
+                // Schedule the restore on the following tick so the removal has settled, then re-apply
+                // the player's own NV (potions, beacons, etc.) that existed before vanishing.
+                // Must be runLaterEntity, not runLaterGlobal: addPotionEffect has to run on the
+                // player's own region on Folia, where a global task would throw.
+                vanishScheduler.runLaterEntity(player, () -> {
+                    if (!player.isOnline()) return;
+                    if (!player.hasPotionEffect(PotionEffectType.NIGHT_VISION)) {
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION,
+                                preNVDuration, preNVAmplifier, preNVAmbient, preNVParticles), false);
+                    }
+                }, 1L);
+            }
         }
         removeLegacyInvisibility(player);
         player.setInvisible(false);
@@ -1860,13 +1902,18 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
         // Night vision
         if (configManager.enableNightVision && permissionManager.hasPermission(player, "vanishpp.nightvision")) {
+            // Must mirror the metadata flag set in applyVanishEffects. Without it, removeVanishEffects()
+            // decides whether to clear the plugin's NV based on hasMetadata("vanishpp_night_vision");
+            // a resync that re-adds INFINITE NV here without setting the flag would leave the player
+            // with permanent night vision after unvanishing (the NV is re-applied but never cleared).
+            player.setMetadata("vanishpp_night_vision", new FixedMetadataValue(this, true));
             player.addPotionEffect(
                     new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false));
         }
 
-        // Spawning / sleeping
-        if (configManager.preventSleeping)
-            try { player.setSleepingIgnored(true); } catch (Throwable ignored) {}
+        // Sleeping / ignore: vanished players are always treated as already asleep so they never
+        // block the rest of the server from skipping the night (see applyVanishEffects).
+        try { player.setSleepingIgnored(true); } catch (Throwable ignored) {}
 
         if (mobAiManager != null) mobAiManager.clearTargets(player);
 
