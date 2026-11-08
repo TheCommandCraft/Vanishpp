@@ -50,3 +50,9 @@ server-data/
 testserver_clean/
 testserver_folia/
 __pycache__/
+
+# Live bot tests
+live-tests/node_modules/
+live-tests/.cache/
+live-tests/.work/
+live-tests/helper/target/

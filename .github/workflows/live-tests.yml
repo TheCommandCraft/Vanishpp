@@ -1,0 +1,134 @@
+name: Live Tests
+
+# Boots a real Paper server with the built plugin inside the runner and checks it with bot players.
+# Everything runs on the runner itself (127.0.0.1); no external server is involved.
+# - live: every PR and push to main, against the real plugin jar.
+# - mutants: tests the tests (every mutant must be caught). Runs when the tests or the plugin code they
+#   patch change, weekly, and on demand.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      mutants:
+        description: 'Also run the mutation check'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.diff.outputs.tests }}
+    # tests=true when the tests changed or the PR touches a plugin file that a mutant patches.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null; then echo "tests=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          changed=$(git diff --name-only "$BASE" HEAD)
+          patched=$(node -e "for (const f of new Set(require('./live-tests/mutants.js').edits.map(e => e.file))) console.log(f)")
+          if echo "$changed" | grep -qE '^(live-tests/|\.github/workflows/live-tests\.yml$)' || echo "$changed" | grep -qxF -f <(echo "$patched"); then
+            echo "tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tests=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  live:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: live-tests/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: |
+            live-tests/.cache
+            live-tests/.work/server/cache
+            live-tests/.work/server/libraries
+            live-tests/.work/server/versions
+          key: live-tests-server-${{ hashFiles('live-tests/run.sh') }}
+      - name: Build plugin
+        run: mvn -B -q -DskipTests package -pl vanishpp-paper -am
+      - name: Install test dependencies
+        working-directory: live-tests
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run live tests
+        run: live-tests/run.sh
+      - name: Upload server console log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-tests-console
+          path: live-tests/.work/server/console.log
+          if-no-files-found: ignore
+
+  mutants:
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mutants) ||
+      needs.changes.outputs.tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: live-tests/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: |
+            live-tests/.cache
+            live-tests/.work/server/cache
+            live-tests/.work/server/libraries
+            live-tests/.work/server/versions
+          key: live-tests-server-${{ hashFiles('live-tests/run.sh') }}
+      - name: Install test dependencies
+        working-directory: live-tests
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run live tests and every mutant
+        run: live-tests/run.sh --mutants
+      - name: Upload server console log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-tests-mutants-console
+          path: live-tests/.work/server/console.log
+          if-no-files-found: ignore

@@ -1,0 +1,10 @@
+{
+  "name": "vanishpp-live-tests",
+  "private": true,
+  "description": "Live bot tests for Vanish++ on a real Paper server",
+  "scripts": { "test": "./run.sh" },
+  "dependencies": {
+    "minecraft-protocol": "1.68.0",
+    "mineflayer": "4.39.0"
+  }
+}

@@ -1,0 +1,14 @@
+name: LiveTestHelper
+version: '1'
+main: net.thecommandcraft.livetest.LiveTestHelper
+api-version: '1.21'
+description: Test-only helper for the Vanish++ live bot tests.
+commands:
+  ltnames:
+    description: Suggests every online player name without checking visibility, like a careless plugin.
+    permission: livetest.names
+  ltprobe:
+    description: Prints server-side facts for the tests to the console.
+permissions:
+  livetest.names:
+    default: true
