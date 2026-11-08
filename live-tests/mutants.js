@@ -29,6 +29,10 @@ const mutants = [
   { id: 'pickup-rule-ignored', what: 'can_pickup_items on still blocks pickup', tests: ['pick up items'] },
   { id: 'mob-targeting', what: 'mobs may target vanished players (damage is still cancelled)', tests: ['hostile mobs never target'] },
   { id: 'mob-damage', what: 'mob damage to vanished players is not cancelled (targeting is still blocked)', tests: ['damage a mob deals'] },
+  { id: 'join-always-vanished', what: 'a player who left visible rejoins vanished (the saved state is ignored)', tests: ['unvanished before leaving'] },
+  { id: 'join-forgets-vanish', what: 'a player who left vanished rejoins visible', tests: ['who leaves rejoins vanished'] },
+  { id: 'auto-vanish-ignored', what: 'the auto-vanish preference has no effect on join', tests: ['auto-vanish:'] },
+  { id: 'unvanish-not-saved', what: 'unvanishing is not saved, so the old vanished state comes back after a restart', tests: ['server restart'] },
   { id: 'god-mode', what: 'god mode no longer cancels damage to vanished players', tests: ['god mode:'] },
   { id: 'break-allowed', what: 'vanished players break blocks with can_break_blocks off', tests: ['can_break_blocks'] },
   { id: 'break-rule-ignored', what: 'can_break_blocks on still blocks breaking', tests: ['can_break_blocks'] },
@@ -38,6 +42,12 @@ const mutants = [
 ];
 
 const edits = [
+  { file: MAIN, find: '            provider.setVanished(uuid, hidden);\n        } catch (RuntimeException failure) {',
+    replace: `            if (hidden || !${on('unvanish-not-saved')}) provider.setVanished(uuid, hidden);\n        } catch (RuntimeException failure) {` },
+  { file: LISTENER, find: '        else plugin.reconcileVanishState(player, state.vanished());',
+    replace: `        else plugin.reconcileVanishState(player, ${on('join-always-vanished')} || (state.vanished() && !${on('join-forgets-vanish')}));` },
+  { file: LISTENER, find: '        return state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");',
+    replace: `        return !${on('auto-vanish-ignored')} && state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");` },
   { file: LISTENER, find: '        if (config.godMode && event.getEntity() instanceof Player player) {',
     replace: `        if (config.godMode && !${on('god-mode')} && event.getEntity() instanceof Player player) {` },
   { file: MAIN, find: '    public void onEnable() {\n', replace: '    public void onEnable() {\n        net.thecommandcraft.vanishpp.LiveTestMutant.start();\n' },

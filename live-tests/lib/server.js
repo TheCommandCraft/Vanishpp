@@ -43,10 +43,10 @@ class Server {
       Object.entries(props).map(([k, v]) => `${k}=${v}`).join('\n') + '\n');
   }
 
-  async start(timeoutMs = 240000) {
-    this.prepare();
+  async start(timeoutMs = 240000, { keepData = false } = {}) {
+    if (!keepData) this.prepare();
     this.proc = spawn(this.java, ['-Xms1G', '-Xmx2G', '-XX:+UseSerialGC', '-jar', 'paper.jar', 'nogui'], { cwd: this.dir });
-    this.logFile = fs.createWriteStream(path.join(this.dir, 'console.log'));
+    this.logFile = fs.createWriteStream(path.join(this.dir, 'console.log'), { flags: keepData ? 'a' : 'w' });
     let buf = '';
     const onData = chunk => {
       this.logFile.write(chunk);
@@ -91,7 +91,7 @@ class Server {
   errorsSince(from) {
     return this.lines.slice(from).filter(l =>
       /(WARN|ERROR)\]/.test(l) && /exception|error|Vanishpp|ProtocolLib|LiveTestHelper/i.test(l)
-      && !/Setup Check|NOT installed|UpdateChecker|offline mode|server is running in offline/i.test(l));
+      && !/Setup Check|NOT installed|UpdateChecker|offline mode|server is running in offline|has not yet been tested/i.test(l));
   }
 
   async stop() {
@@ -101,6 +101,13 @@ class Server {
     await this.exited;
     clearTimeout(killer);
     this.logFile.end();
+  }
+
+  /** Stops the server normally and starts it again with the same world, plugins and plugin data. */
+  async restart() {
+    await this.stop();
+    this.waiters = [];
+    await this.start(240000, { keepData: true });
   }
 }
 

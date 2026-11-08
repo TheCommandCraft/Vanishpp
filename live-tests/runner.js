@@ -61,6 +61,16 @@ class Pool {
 
   alive(bot) { return bot && !bot._client.ended && bot.entity; }
 
+  /** Disconnects a bot and connects it again under the same name, like a player leaving and rejoining. */
+  async rejoin(bot, { afterMs = 0 } = {}) {
+    const name = bot.username;
+    const gone = this.server.waitFor(new RegExp(`${name} (left the game|lost connection)`), 10000);
+    bot.quit();
+    await gone;
+    if (afterMs) await wait(afterMs);
+    return this.connect(name);
+  }
+
   /** Returns n connected bots, reconnecting any a previous test disconnected. */
   async take(n) {
     if (n > POOL_SIZE) throw new Error(`a test may use at most ${POOL_SIZE} bots`);
@@ -104,6 +114,7 @@ class Pool {
       s.cmd(`effect give ${name} minecraft:instant_health 1 10 true`);
       s.cmd(`effect give ${name} minecraft:saturation 1 10 true`);
       for (const [rule, value] of Object.entries(this.defaultRules)) s.cmd(`vrules ${name} ${rule} ${value}`);
+      s.cmd(`vautovanish ${name} off`);
       s.cmd(`tp ${name} ${LOBBY.x + 0.5} ${GROUND} ${LOBBY.z + 0.5}`);
     }
     await wait(400);
@@ -167,6 +178,21 @@ function makeContext(server, pool, area, used, configChanges) {
       server.cmd(`tp ${bot.username} ${x} ${GROUND} ${z} 0 0`);
       await until(() => bot.entity && Math.abs(bot.entity.position.x - x) < 0.6 && Math.abs(bot.entity.position.z - z) < 0.6,
         8000, `${bot.username} to arrive at ${x},${z}`);
+    },
+    /** The bot leaves and joins again; returns the new bot. Waits until the join is fully handled. */
+    async rejoin(bot, opts) {
+      const fresh = await pool.rejoin(bot, opts);
+      used.add(fresh);
+      await wait(1500); // the join applies saved state and auto-vanish in stages
+      return fresh;
+    },
+    /** Restarts the server (a normal stop, then start with the same data). Every bot is disconnected. */
+    async restartServer() {
+      await server.restart();
+      server.cmd('gamerule advance_time false');
+      server.cmd('gamerule spawn_mobs false');
+      server.cmd(`forceload add ${LOBBY.x - 8} ${LOBBY.z - 8} ${LOBBY.x + 8} ${LOBBY.z + 8}`);
+      server.cmd(`forceload add ${area.x - 16} ${area.z - 16} ${area.x + 16} ${area.z + 16}`);
     },
     async isVanished(bot) { return (await pool.state(bot.username)).vanished === 'true'; },
     /** Toggles vanish through the console and waits until the server reports the new state. */
