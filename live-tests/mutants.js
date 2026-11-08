@@ -33,6 +33,8 @@ const mutants = [
   { id: 'join-forgets-vanish', what: 'a player who left vanished rejoins visible', tests: ['who leaves rejoins vanished'] },
   { id: 'auto-vanish-ignored', what: 'the auto-vanish preference has no effect on join', tests: ['auto-vanish:'] },
   { id: 'unvanish-not-saved', what: 'unvanishing is not saved, so the old vanished state comes back after a restart', tests: ['server restart'] },
+  { id: 'auto-vanish-no-notice', what: 'the auto-vanish join notice is never sent', tests: ['auto-vanish notice on join'] },
+  { id: 'auto-vanish-notice-always', what: 'the auto-vanish notice is sent on every vanished join, ignoring [Got it] and why the player is vanished', tests: ['no auto-vanish notice', 'auto-vanish notice on join'] },
   { id: 'god-mode', what: 'god mode no longer cancels damage to vanished players', tests: ['god mode:'] },
   { id: 'break-allowed', what: 'vanished players break blocks with can_break_blocks off', tests: ['can_break_blocks'] },
   { id: 'break-rule-ignored', what: 'can_break_blocks on still blocks breaking', tests: ['can_break_blocks'] },
@@ -42,10 +44,15 @@ const mutants = [
 ];
 
 const edits = [
+  { file: LISTENER, find: '        if (plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;',
+    replace: `        if (${on('auto-vanish-no-notice')}) return;\n        if (!${on('auto-vanish-notice-always')} && plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;` },
+  { file: LISTENER, find: '                    || plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;',
+    replace: `                    || (!${on('auto-vanish-notice-always')} && plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE))) return;` },
+
   { file: MAIN, find: '            provider.setVanished(uuid, hidden);\n        } catch (RuntimeException failure) {',
     replace: `            if (hidden || !${on('unvanish-not-saved')}) provider.setVanished(uuid, hidden);\n        } catch (RuntimeException failure) {` },
-  { file: LISTENER, find: '        else plugin.reconcileVanishState(player, state.vanished());',
-    replace: `        else plugin.reconcileVanishState(player, ${on('join-always-vanished')} || (state.vanished() && !${on('join-forgets-vanish')}));` },
+  { file: LISTENER, find: '        } else plugin.reconcileVanishState(player, state.vanished());',
+    replace: `        } else {\n            plugin.reconcileVanishState(player, ${on('join-always-vanished')} || (state.vanished() && !${on('join-forgets-vanish')}));\n            if (${on('auto-vanish-notice-always')} && plugin.isVanished(player)) sendAutoVanishNotice(player);\n        }` },
   { file: LISTENER, find: '        return state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");',
     replace: `        return !${on('auto-vanish-ignored')} && state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");` },
   { file: LISTENER, find: '        if (config.godMode && event.getEntity() instanceof Player player) {',

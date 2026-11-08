@@ -41,6 +41,21 @@ public final class LiveTestHelper extends JavaPlugin {
                     + " sleepingIgnored=" + p.isSleepingIgnored());
             return true;
         }
+        // ltprobe unack <player> <id>: removes a stored Vanish++ acknowledgement so a test can be repeated.
+        // Reaches into Vanish++ by reflection on purpose: this is test-only and never shipped.
+        if (args.length == 3 && args[0].equals("unack")) {
+            try {
+                var vanishpp = Bukkit.getPluginManager().getPlugin("Vanishpp");
+                Object storage = vanishpp.getClass().getMethod("getStorageProvider").invoke(vanishpp);
+                var remove = Class.forName("net.thecommandcraft.vanishpp.storage.StorageProvider", true, vanishpp.getClass().getClassLoader())
+                        .getMethod("removeAcknowledgement", java.util.UUID.class, String.class);
+                remove.invoke(storage, Bukkit.getOfflinePlayer(args[1]).getUniqueId(), args[2]);
+                getLogger().info("LTPROBE unack " + args[1] + " " + args[2] + " done");
+            } catch (ReflectiveOperationException e) {
+                getLogger().warning("LTPROBE unack failed: " + e);
+            }
+            return true;
+        }
         return false;
     }
 

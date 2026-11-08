@@ -45,6 +45,8 @@ class Pool {
     const bot = mineflayer.createBot({ host: '127.0.0.1', port: PORT, username: name, version: VERSION, auth: 'offline' });
     bot.chatLog = []; bot.actionBars = []; bot.rawChat = [];
     bot.on('message', m => bot.chatLog.push(m.toString()));
+    bot.chatJson = [];
+    bot.on('message', m => bot.chatJson.push(m.json));
     bot.on('actionBar', m => bot.actionBars.push(JSON.stringify(m.json ?? m)));
     // Raw chat packets too: mineflayer's text drops the decoration plugins add with a renderer.
     for (const p of ['player_chat', 'system_chat', 'profileless_chat'])
@@ -115,6 +117,7 @@ class Pool {
       s.cmd(`effect give ${name} minecraft:saturation 1 10 true`);
       for (const [rule, value] of Object.entries(this.defaultRules)) s.cmd(`vrules ${name} ${rule} ${value}`);
       s.cmd(`vautovanish ${name} off`);
+      await s.ask(`ltprobe unack ${name} auto-vanish-notice`, new RegExp(`LTPROBE unack ${name} .* done`));
       s.cmd(`tp ${name} ${LOBBY.x + 0.5} ${GROUND} ${LOBBY.z + 0.5}`);
     }
     await wait(400);
@@ -130,7 +133,7 @@ class Pool {
           && x.items === '0' && x.gamemode === 'survival' && x.sleepingIgnored === 'false' && x;
       }, 5000, `${bot.username} to be reset`).catch(async () => { throw new Error(`reset left ${bot.username} in ${JSON.stringify(await this.state(bot.username))}`); });
       void st;
-      bot.chatLog.length = 0; bot.actionBars.length = 0; bot.rawChat.length = 0;
+      bot.chatLog.length = 0; bot.actionBars.length = 0; bot.rawChat.length = 0; bot.chatJson.length = 0;
     }
   }
 }

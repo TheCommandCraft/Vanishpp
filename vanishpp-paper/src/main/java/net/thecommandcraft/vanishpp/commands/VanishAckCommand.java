@@ -58,6 +58,11 @@ public class VanishAckCommand implements TabExecutor {
                         "hiding_v" + plugin.getConfigManager().getLatestVersion());
                 plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.hiding-dismissed"));
             }
+            case "auto_vanish" -> {
+                plugin.acknowledge(p.getUniqueId(),
+                        net.thecommandcraft.vanishpp.listeners.PlayerListener.AUTO_VANISH_NOTICE);
+                plugin.getMessageManager().sendMessage(p, lm.getMessage("acknowledgement.auto-vanish-dismissed"));
+            }
             case "proxy_config" -> {
                 plugin.acknowledge(p.getUniqueId(),
                         "proxy_config_v" + plugin.getConfigManager().getLatestVersion());

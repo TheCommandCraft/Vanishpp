@@ -184,6 +184,7 @@ acknowledgement:
   acknowledged: "&aNotification acknowledged."
   hiding-dismissed: "&7Notification dismissed for this version."
   hiding-visible: "&aVanish++ is now VISIBLE in the plugin list."
+  auto-vanish-dismissed: "&7You won't see the auto-vanish notice again. Auto-vanish stays on."
 
 # --- [ IGNORE WARNING ] ---
 ignore-warning:
@@ -229,6 +230,13 @@ history:
 auto-vanish:
   enabled: "&aAuto-vanish on join is now &2ENABLED &afor &e%player%&a."
   disabled: "&cAuto-vanish on join is now &4DISABLED &cfor &e%player%&c."
+  notice: "&7You joined &bvanished&7 because auto-vanish is on."
+  button-unvanish: "&a&l[Unvanish]"
+  button-unvanish-hover: "&7Become visible now. Auto-vanish stays on.\n&8Runs: /vanish"
+  button-off: "&e&l[Turn off auto-vanish]"
+  button-off-hover: "&7Join visible from now on.\n&8Runs: /vautovanish off"
+  button-dismiss: "&7&l[Got it]"
+  button-dismiss-hover: "&7Don't show this notice again. Auto-vanish stays on.\n&8Runs: /vack auto_vanish"
 
 # --- [ STATS COMMAND ] ---
 stats:

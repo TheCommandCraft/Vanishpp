@@ -25,6 +25,7 @@ This release closes several security holes, so please update soon. Thanks to @Ma
 - **Permissions are checked when they are used.** Commands follow `/vperms` grants, and the rules GUI and read-only invsee recheck permissions on every click.
 
 ### Added
+- **Auto-vanish tells you why you joined vanished.** If you left visible and auto-vanish put you back in vanish, a short notice explains it. Its buttons let you unvanish, turn auto-vanish off, or hide the notice for good (`/vack auto_vanish`).
 - **Update priorities.** A release can be marked as a feature, security or critical update. Set `update-checker.notify-level` to `security` or `critical` to be notified only about those. Security and critical updates are labeled in the notification. Skipped releases count too, so a security fix is announced even when a newer feature release followed it.
 
 ### Changed

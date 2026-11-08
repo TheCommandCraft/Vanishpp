@@ -157,10 +157,46 @@ public class PlayerListener implements Listener {
         return state.autoVanish() && plugin.getPermissionManager().hasPermission(player, "vanishpp.vanish");
     }
 
+    /**
+     * Tells a player who left visible that auto-vanish put them back in vanish, with buttons to dismiss the notice
+     * for good, turn auto-vanish off, or unvanish now. Sent after the join messages so it is not buried.
+     */
+    private void sendAutoVanishNotice(Player player) {
+        if (plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;
+        plugin.getVanishScheduler().runLaterEntity(player, () -> {
+            if (!player.isOnline() || !plugin.isVanished(player)
+                    || plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;
+            LanguageManager lm = config.getLanguageManager();
+            var mm = plugin.getMessageManager();
+            player.sendMessage(Component.text(" "));
+            mm.sendMessage(player, lm.getMessage("auto-vanish.notice"));
+            player.sendMessage(Component.text("   ")
+                    .append(button(player, lm, "auto-vanish.button-unvanish", "/vanish"))
+                    .append(Component.text("  "))
+                    .append(button(player, lm, "auto-vanish.button-off", "/vautovanish off"))
+                    .append(Component.text("  "))
+                    .append(button(player, lm, "auto-vanish.button-dismiss", "/vack auto_vanish")));
+            player.sendMessage(Component.text(" "));
+        }, 40L);
+    }
+
+    /** A chat button in the plugin's usual style: label key, a "-hover" key, and a command it runs. */
+    private Component button(Player player, LanguageManager lm, String key, String command) {
+        var mm = plugin.getMessageManager();
+        return mm.parse(lm.getMessage(key), player)
+                .clickEvent(ClickEvent.runCommand(command))
+                .hoverEvent(HoverEvent.showText(mm.parse(lm.getMessage(key + "-hover"), player)));
+    }
+
+    /** Acknowledgement key for the auto-vanish join notice ({@code /vack auto_vanish}). */
+    public static final String AUTO_VANISH_NOTICE = "auto-vanish-notice";
+
     private void applyJoinState(Player player, JoinState state) {
         if (plugin.isProxyJoinPending(player.getUniqueId())) return;
-        if (autoVanishes(player, state) && !state.vanished() && !plugin.isVanished(player)) plugin.applyVanishEffects(player);
-        else plugin.reconcileVanishState(player, state.vanished());
+        if (autoVanishes(player, state) && !state.vanished() && !plugin.isVanished(player)) {
+            plugin.applyVanishEffects(player);
+            sendAutoVanishNotice(player);
+        } else plugin.reconcileVanishState(player, state.vanished());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -205,8 +241,10 @@ public class PlayerListener implements Listener {
         UUID uuid = player.getUniqueId();
         // Auto-vanish supersedes a still-current hold before it lifts, so the player is never shown in between.
         // A choice made during the hold has already superseded it and outranks the preference.
-        if (Boolean.FALSE.equals(plugin.heldJoinDecision(uuid, hidden)) && read != null && autoVanishes(player, read))
+        if (Boolean.FALSE.equals(plugin.heldJoinDecision(uuid, hidden)) && read != null && autoVanishes(player, read)) {
             plugin.applyVanishEffects(player);
+            if (!read.vanished()) sendAutoVanishNotice(player);
+        }
         plugin.completeProxyJoin(player, hidden, persist);
         if (read != null) preFetchedVanishState.put(uuid, new JoinState(plugin.isVanished(player),
                 false, read.warningIgnored(), plugin.stateVersion(uuid)));
