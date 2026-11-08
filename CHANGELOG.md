@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-11-08
 
 **Priority:** security
 
-This release closes several security holes, so please update soon. Thanks to @Marzionz for the security, visibility, state and hardening work (PRs #40-#44) and to @kanseijo for the night vision and sleep fixes (PR #34).
+**This is a security update.** @Marzionz did a full security review of Vanish++, and this release fixes everything it found. Please update soon. It also makes vanish state more reliable and adds a few smaller features. Thanks to @Marzionz for the review and the hardening work (PRs #40-#44) and to @kanseijo for the night vision and sleep fixes (PR #34).
 
 ### Upgrade notes
 - **Proxy networks must set `proxy.enabled: true`** on every Paper backend behind Velocity, then restart. Standalone servers leave it `false`. Only enable it on backends that players cannot reach without the proxy, and use Velocity modern forwarding.
