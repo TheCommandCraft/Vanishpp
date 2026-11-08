@@ -41,6 +41,8 @@ version:
 # --- [ UPDATE CHECKER ] ---
 update:
   available: "&a&lVanish++ Update Available!"
+  priority-security: "&c&lSecurity update: &7fixes a security problem. Please update soon."
+  priority-critical: "&4&lCritical update: &7fixes a serious problem. Please update now."
   current: "&7Current: &c%version%"
   latest: "&7Latest: &a%version%"
   download: "&6&l[CLICK TO DOWNLOAD]"

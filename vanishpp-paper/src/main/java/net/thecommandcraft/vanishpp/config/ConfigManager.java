@@ -59,6 +59,9 @@ public class ConfigManager {
     // Hooks & System
     public boolean voiceChatEnabled, voiceChatIsolate, layeredPermsEnabled, updateCheckerEnabled;
     public boolean updateCheckerShowBeta, updateCheckerShowAlpha;
+    /** Lowest update priority that is announced in game and loudly in the console. */
+    public net.thecommandcraft.vanishpp.common.update.UpdatePriority updateNotifyLevel =
+            net.thecommandcraft.vanishpp.common.update.UpdatePriority.FEATURE;
     public boolean simulateEssentialsMessages;
     public boolean staffNotifyEnabled;
     public boolean scoreboardEnabled, scoreboardAutoShow;
@@ -264,6 +267,8 @@ public class ConfigManager {
         updateCheckerList = config.getStringList("update-checker.notify-list");
         updateCheckerShowBeta  = config.getBoolean("update-checker.show-beta",  true);
         updateCheckerShowAlpha = config.getBoolean("update-checker.show-alpha", true);
+        updateNotifyLevel = net.thecommandcraft.vanishpp.common.update.UpdatePriority.fromConfig(
+                config.getString("update-checker.notify-level", "feature"));
 
         scoreboardEnabled = config.getBoolean("scoreboard.enabled", true);
         scoreboardAutoShow = config.getBoolean("scoreboard.auto-show-on-vanish", true);

@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - Unreleased
+
+**Priority:** security
+
+This release closes several security holes, so please update soon. Thanks to @Marzionz for the security, visibility, state and hardening work (PRs #40-#44) and to @kanseijo for the night vision and sleep fixes (PR #34).
+
+### Upgrade notes
+- **Proxy networks must set `proxy.enabled: true`** on every Paper backend behind Velocity, then restart. Standalone servers leave it `false`. Only enable it on backends that players cannot reach without the proxy, and use Velocity modern forwarding.
+- **Upgrade the Paper and Velocity jars together.** The proxy protocol changed and older companions are not compatible.
+- **Vanish flight now needs `vanishpp.fly`.** Vanishing no longer grants flight to players without it. Flight granted by other plugins is left alone.
+- **Options that never did anything were removed** from the config and the docs.
+
+### Security
+- **Clients can no longer forge proxy messages.** A normal client could send a plugin message that unvanished staff or replaced network settings. Velocity now drops these messages, and Paper only accepts them from a confirmed proxy.
+- **`/vack apply_proxy` needs `vanishpp.config`.** Any player could push a server's settings to the whole network.
+- **`/vconfig` completion needs `vanishpp.config`** and never suggests database passwords, webhook authorization values or webhook URLs.
+- **Oversized plugin messages are rejected** before memory is allocated.
+- **Lower-rank staff no longer learn about higher-rank vanished staff.** With layered permissions, join notices, vanished chat, tab-list and team packets, lists, history and placeholders now follow the same see-level rule.
+- **Command completion and private messages respect vanish everywhere.** This covers completers, selectors, replies and EssentialsX nicknames.
+- **Simple Voice Chat no longer leaks a vanished player's voice.**
+- **Permissions are checked when they are used.** Commands follow `/vperms` grants, and the rules GUI and read-only invsee recheck permissions on every click.
+
+### Added
+- **Update priorities.** A release can be marked as a feature, security or critical update. Set `update-checker.notify-level` to `security` or `critical` to be notified only about those. Security and critical updates are labeled in the notification. Skipped releases count too, so a security fix is announced even when a newer feature release followed it.
+
+### Changed
+- **Vanish state survives failures, reloads and server switches.** A failed database read no longer unvanishes anyone, the proxy state wins when switching servers, and rapid toggles are saved in order.
+- **Folia: entity work runs on the entity's own region.**
+- **The cancellable API events now fire** before every local vanish change, and cancelling them stops the change.
+- **Mob checks do bounded work** instead of a task per mob every tick.
+- **Vanished players always count as asleep,** so they never block the night from being skipped. The sleep message also leaves them out (2/3 becomes 1/2).
+
+### Fixed
+- **Night vision stayed after unvanishing.** Your own night vision potion is kept.
+- **Barrels opened silently stay closed for others,** and a container shared by two staff members no longer closes for both when one leaves.
+- **Projectiles pass through vanished players** without being replaced or slowed down.
+- **Experience orbs follow `can_pickup_items`.**
+- **The proxy's server list leaves out vanished players,** and offline vanished players no longer lower the player count.
+- **Equipped armour is never removed on unvanish,** and a plugin-set spectator mode is restored after reconnecting.
+- **Webhooks send the configured authorization and valid JSON.**
+- **The config and rules GUIs work in every language** and show the current settings.
+- **WorldGuard deny-vanish and deny-unvanish flags are enforced.**
+
 ## [1.1.11] - 2026-11-06
 
 ### Changed

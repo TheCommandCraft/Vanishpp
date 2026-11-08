@@ -69,24 +69,58 @@ public final class UpdateSources {
         }
     }
 
+    /** The latest stable GitHub release: its version without the leading "v" and its release notes. */
+    public record GithubRelease(String version, String notes) {
+        public UpdatePriority priority() { return UpdatePriority.fromChangelog(notes); }
+    }
+
     /** Latest non-prerelease version on GitHub without the leading "v", or null if there is none. */
     public static String fetchGithubLatestVersion(String userAgent) throws IOException {
+        GithubRelease release = fetchGithubLatestRelease(userAgent);
+        return release == null ? null : release.version();
+    }
+
+    /** Latest non-prerelease GitHub release, or null if there is none. */
+    public static GithubRelease fetchGithubLatestRelease(String userAgent) throws IOException {
         HttpURLConnection connection = open(GITHUB_LATEST_RELEASE, userAgent);
         try {
             if (connection.getResponseCode() != 200)
                 throw new IOException("GitHub returned HTTP " + connection.getResponseCode());
             try (InputStreamReader reader = new InputStreamReader(connection.getInputStream())) {
-                JsonElement tag = JsonParser.parseReader(reader).getAsJsonObject().get("tag_name");
+                var release = JsonParser.parseReader(reader).getAsJsonObject();
+                JsonElement tag = release.get("tag_name");
                 if (tag == null || tag.isJsonNull())
                     return null;
                 String version = tag.getAsString();
-                return version.startsWith("v") ? version.substring(1) : version;
+                JsonElement body = release.get("body");
+                return new GithubRelease(version.startsWith("v") ? version.substring(1) : version,
+                        body == null || body.isJsonNull() ? "" : body.getAsString());
             }
         } catch (IllegalStateException e) {
             throw new IOException("Unexpected GitHub response", e);
         } finally {
             connection.disconnect();
         }
+    }
+
+    /**
+     * The highest priority among the versions in a Modrinth version list that are newer than {@code current}
+     * and accepted by {@code include}. Skipped releases count too: someone two versions behind still hears
+     * about a security fix in the older of the two.
+     */
+    public static UpdatePriority highestNewerPriority(com.google.gson.JsonArray versions, String current,
+                                                      java.util.function.Predicate<com.google.gson.JsonObject> include) {
+        UpdatePriority highest = UpdatePriority.FEATURE;
+        for (JsonElement element : versions) {
+            if (!element.isJsonObject()) continue;
+            var v = element.getAsJsonObject();
+            if (!v.has("version_number") || !include.test(v)) continue;
+            if (compareVersions(current, v.get("version_number").getAsString()) >= 0) continue;
+            JsonElement changelog = v.get("changelog");
+            highest = UpdatePriority.max(highest, UpdatePriority.fromChangelog(
+                    changelog == null || changelog.isJsonNull() ? null : changelog.getAsString()));
+        }
+        return highest;
     }
 
     /**

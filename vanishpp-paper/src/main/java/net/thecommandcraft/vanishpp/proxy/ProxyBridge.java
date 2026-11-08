@@ -70,6 +70,8 @@ public class ProxyBridge implements PluginMessageListener {
     private volatile boolean proxyUpdateAvailable = false;
     private volatile String proxyCurrentVersion;
     private volatile String proxyLatestVersion;
+    private volatile net.thecommandcraft.vanishpp.common.update.UpdatePriority proxyUpdatePriority =
+            net.thecommandcraft.vanishpp.common.update.UpdatePriority.FEATURE;
     private volatile String proxyDownloadUrl;
 
     private static final long HANDSHAKE_TIMEOUT_TICKS = 100L; // 5 seconds (20 ticks/s)
@@ -282,6 +284,9 @@ public class ProxyBridge implements PluginMessageListener {
         proxyCurrentVersion = json.has("currentVersion") ? json.get("currentVersion").getAsString() : "?";
         proxyLatestVersion  = json.has("latestVersion")  ? json.get("latestVersion").getAsString()  : "?";
         proxyDownloadUrl    = json.has("downloadUrl")    ? json.get("downloadUrl").getAsString()    : "";
+        // Proxies older than 1.2.0 send no priority, so their updates count as feature updates.
+        proxyUpdatePriority = net.thecommandcraft.vanishpp.common.update.UpdatePriority.fromConfig(
+                json.has("priority") ? json.get("priority").getAsString() : null);
         proxyUpdateAvailable = true;
 
         plugin.getLogger().warning("[Proxy] Vanish++ Velocity has an update available: "
@@ -568,4 +573,5 @@ public class ProxyBridge implements PluginMessageListener {
     public String getProxyCurrentVersion()  { return proxyCurrentVersion; }
     public String getProxyLatestVersion()   { return proxyLatestVersion; }
     public String getProxyDownloadUrl()     { return proxyDownloadUrl; }
+    public net.thecommandcraft.vanishpp.common.update.UpdatePriority getProxyUpdatePriority() { return proxyUpdatePriority; }
 }

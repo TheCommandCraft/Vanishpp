@@ -8,6 +8,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.thecommandcraft.vanishpp.Vanishpp;
+import net.thecommandcraft.vanishpp.common.update.UpdatePriority;
 import net.thecommandcraft.vanishpp.common.update.UpdateSources;
 import net.thecommandcraft.vanishpp.config.ConfigManager;
 import org.bukkit.Sound;
@@ -25,6 +26,7 @@ public class UpdateChecker {
     private String latestVersion;
     private String latestVersionId;
     private String latestVersionType;
+    private volatile UpdatePriority latestPriority = UpdatePriority.FEATURE;
     private boolean updateAvailable;
     private volatile Boolean lastCheckSucceeded; // null until the first check finishes
 
@@ -102,12 +104,12 @@ public class UpdateChecker {
                         this.latestVersion = remoteVersion;
                         this.latestVersionId = best.has("id") ? best.get("id").getAsString() : null;
                         this.latestVersionType = remoteType;
+                        this.latestPriority = UpdateSources.highestNewerPriority(versions, cleanCurrent, v -> {
+                            String t = v.has("version_type") ? v.get("version_type").getAsString() : "release";
+                            return !(t.equals("beta") && !showBeta) && !(t.equals("alpha") && !showAlpha);
+                        });
                         this.updateAvailable = true;
-                        plugin.getLogger().warning("---------------------------------------------------");
-                        plugin.getLogger().warning("A new version of Vanish++ is available: "
-                                + remoteVersion + " [" + remoteType + "]");
-                        plugin.getLogger().warning("Download: " + getDownloadUrl());
-                        plugin.getLogger().warning("---------------------------------------------------");
+                        logUpdate(remoteVersion, remoteType);
                     } else {
                         this.updateAvailable = false;
                         plugin.getLogger().info("[UpdateChecker] Vanish++ is up to date (running "
@@ -130,7 +132,8 @@ public class UpdateChecker {
      */
     private void checkGithub() {
         try {
-            String remoteVersion = UpdateSources.fetchGithubLatestVersion(userAgent());
+            UpdateSources.GithubRelease release = UpdateSources.fetchGithubLatestRelease(userAgent());
+            String remoteVersion = release == null ? null : release.version();
             if (remoteVersion == null) {
                 lastCheckSucceeded = false;
                 return;
@@ -141,11 +144,9 @@ public class UpdateChecker {
                 this.latestVersion = remoteVersion;
                 this.latestVersionId = null;
                 this.latestVersionType = "release";
+                this.latestPriority = release.priority(); // GitHub only lists the latest release
                 this.updateAvailable = true;
-                plugin.getLogger().warning("---------------------------------------------------");
-                plugin.getLogger().warning("A new version of Vanish++ is available: " + remoteVersion + " [release]");
-                plugin.getLogger().warning("Download: " + getDownloadUrl());
-                plugin.getLogger().warning("---------------------------------------------------");
+                logUpdate(remoteVersion, "release");
             } else {
                 this.updateAvailable = false;
                 plugin.getLogger().info("[UpdateChecker] Vanish++ is up to date (running " + currentVersion + ").");
@@ -154,6 +155,33 @@ public class UpdateChecker {
             lastCheckSucceeded = false;
             plugin.getLogger().warning("[UpdateChecker] Check failed on Modrinth and GitHub: " + e.getMessage());
         }
+    }
+
+    /** Logs a found update: loudly if it reaches update-checker.notify-level, as one info line otherwise. */
+    private void logUpdate(String version, String type) {
+        UpdatePriority level = plugin.getConfigManager().updateNotifyLevel;
+        String label = latestPriority == UpdatePriority.FEATURE ? "" : " (" + latestPriority.id() + " update)";
+        if (!latestPriority.atLeast(level)) {
+            plugin.getLogger().info("[UpdateChecker] Vanish++ " + version + " is available" + label
+                    + ". Not announced because update-checker.notify-level is " + level.id() + ".");
+            return;
+        }
+        plugin.getLogger().warning("---------------------------------------------------");
+        plugin.getLogger().warning("A new version of Vanish++ is available: " + version + " [" + type + "]" + label);
+        plugin.getLogger().warning("Download: " + getDownloadUrl());
+        plugin.getLogger().warning("---------------------------------------------------");
+    }
+
+    /** Highest priority among the versions newer than the running one, from the last check. */
+    public UpdatePriority getLatestPriority() {
+        return latestPriority;
+    }
+
+    /** Sends the priority line for security and critical updates. */
+    private void sendPriorityLine(Player player, UpdatePriority priority) {
+        if (priority == UpdatePriority.FEATURE) return;
+        LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+        plugin.getMessageManager().sendMessage(player, lm.getMessage("update.priority-" + priority.id()));
     }
 
     private String userAgent() {
@@ -239,6 +267,8 @@ public class UpdateChecker {
         if (plugin.getProxyBridge() == null) return;
         if (!plugin.getProxyBridge().isProxyUpdateAvailable()) return;
         if (!shouldNotify(player)) return;
+        UpdatePriority priority = plugin.getProxyBridge().getProxyUpdatePriority();
+        if (!priority.atLeast(plugin.getConfigManager().updateNotifyLevel)) return;
 
         String currentV  = plugin.getProxyBridge().getProxyCurrentVersion();
         String latestV   = plugin.getProxyBridge().getProxyLatestVersion();
@@ -248,6 +278,7 @@ public class UpdateChecker {
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 2.0f);
         player.sendMessage(Component.empty());
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.proxy-available"));
+        sendPriorityLine(player, priority);
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.proxy-note"));
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.proxy-current")
                 .replace("%version%", currentV));
@@ -275,6 +306,7 @@ public class UpdateChecker {
     public void notifyPlayer(Player player) {
         if (!updateAvailable) return;
         if (!shouldNotify(player)) return;
+        if (!latestPriority.atLeast(plugin.getConfigManager().updateNotifyLevel)) return;
 
         LanguageManager lm = plugin.getConfigManager().getLanguageManager();
         String type = latestVersionType != null ? latestVersionType : "release";
@@ -283,6 +315,7 @@ public class UpdateChecker {
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 2.0f);
         player.sendMessage(Component.empty());
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.available"));
+        sendPriorityLine(player, latestPriority);
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.current")
                 .replace("%version%", currentVersion));
         plugin.getMessageManager().sendMessage(player, lm.getMessage("update.latest")

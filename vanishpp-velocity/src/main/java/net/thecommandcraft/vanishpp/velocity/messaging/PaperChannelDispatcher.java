@@ -137,8 +137,9 @@ public class PaperChannelDispatcher {
      * Velocity proxy plugin needs updating.
      */
     public void sendProxyUpdateNotify(RegisteredServer server, String currentVersion,
-                                      String latestVersion, String downloadUrl) {
+                                      String latestVersion, String downloadUrl, String priority) {
         JsonObject payload = new JsonObject();
+        payload.addProperty("priority", priority); // feature, security or critical; Paper filters by notify-level
         payload.addProperty("currentVersion", currentVersion);
         payload.addProperty("latestVersion", latestVersion);
         payload.addProperty("downloadUrl", downloadUrl);

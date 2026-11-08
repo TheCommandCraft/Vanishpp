@@ -303,6 +303,12 @@ update-checker:
   show-beta: true
   # Notify staff about alpha builds (true = yes, false = skip alphas).
   show-alpha: true
+  # Which updates to announce, by priority:
+  #   feature  - every update (default)
+  #   security - only updates that fix a security problem, and critical ones
+  #   critical - only critical updates, for example a fix for a broken vanish
+  # Lower priorities are still noted in the console with one line.
+  notify-level: "feature"
 
 # --- [ PERMISSIONS ] ---
 permissions:

@@ -41,6 +41,8 @@ version:
 # --- [ 更新检查器 ] ---
 update:
   available: '&a&lVanish++ 有新版本可用！'
+  priority-security: '&c&l安全更新：&7修复了一个安全问题，请尽快更新。'
+  priority-critical: '&4&l重要更新：&7修复了一个严重问题，请立即更新。'
   current: '&7当前版本：&c%version%'
   latest: '&7最新版本：&a%version%'
   download: '&6&l[点击下载]'

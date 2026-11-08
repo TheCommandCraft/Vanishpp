@@ -24,6 +24,8 @@ public class ProxyUpdateChecker {
 
     private volatile String latestVersion = null;
     private volatile String downloadUrl = null;
+    private volatile net.thecommandcraft.vanishpp.common.update.UpdatePriority priority =
+            net.thecommandcraft.vanishpp.common.update.UpdatePriority.FEATURE;
     private volatile boolean updateAvailable = false;
     private final AtomicBoolean checking = new AtomicBoolean(false);
 
@@ -63,7 +65,7 @@ public class ProxyUpdateChecker {
     /** Push the current update state to a single server (called on HELLO so new servers get it immediately). */
     public void notifyServer(com.velocitypowered.api.proxy.server.RegisteredServer server) {
         if (!updateAvailable) return;
-        dispatcher.sendProxyUpdateNotify(server, currentVersion, latestVersion, downloadUrl);
+        dispatcher.sendProxyUpdateNotify(server, currentVersion, latestVersion, downloadUrl, priority.id());
     }
 
     public boolean isUpdateAvailable() { return updateAvailable; }
@@ -92,7 +94,8 @@ public class ProxyUpdateChecker {
                     JsonObject latest = versions.get(0).getAsJsonObject();
                     String remote = latest.get("version_number").getAsString();
                     String id = latest.has("id") ? latest.get("id").getAsString() : null;
-                    handleResult(remote, UpdateSources.downloadPage(id));
+                    handleResult(remote, UpdateSources.downloadPage(id),
+                            UpdateSources.highestNewerPriority(versions, currentVersion, v -> true));
                 }
             } finally {
                 conn.disconnect();
@@ -108,22 +111,24 @@ public class ProxyUpdateChecker {
     /** Fallback when Modrinth can't be reached; the download link still goes to Modrinth. */
     private void checkGithub() {
         try {
-            String remote = UpdateSources.fetchGithubLatestVersion(userAgent());
-            if (remote != null)
-                handleResult(remote, UpdateSources.downloadPage(null));
+            UpdateSources.GithubRelease release = UpdateSources.fetchGithubLatestRelease(userAgent());
+            if (release != null)
+                handleResult(release.version(), UpdateSources.downloadPage(null), release.priority());
         } catch (Exception e) {
             plugin.getLogger().warn("[UpdateChecker] Proxy update check failed on Modrinth and GitHub: {}", e.getMessage());
         }
     }
 
-    private void handleResult(String remote, String link) {
+    private void handleResult(String remote, String link, net.thecommandcraft.vanishpp.common.update.UpdatePriority priority) {
         if (UpdateSources.compareVersions(currentVersion, remote) < 0) {
             this.latestVersion = remote;
             this.downloadUrl   = link;
+            this.priority      = priority;
             this.updateAvailable = true;
 
             plugin.getLogger().warn("---------------------------------------------------");
-            plugin.getLogger().warn("A new version of Vanish++ Velocity is available: {}", remote);
+            plugin.getLogger().warn("A new version of Vanish++ Velocity is available: {}{}", remote,
+                    priority == net.thecommandcraft.vanishpp.common.update.UpdatePriority.FEATURE ? "" : " (" + priority.id() + " update)");
             plugin.getLogger().warn("Download: {}", downloadUrl);
             plugin.getLogger().warn("---------------------------------------------------");
 
