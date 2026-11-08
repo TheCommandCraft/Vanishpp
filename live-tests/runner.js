@@ -117,7 +117,8 @@ class Pool {
       s.cmd(`effect give ${name} minecraft:saturation 1 10 true`);
       for (const [rule, value] of Object.entries(this.defaultRules)) s.cmd(`vrules ${name} ${rule} ${value}`);
       s.cmd(`vautovanish ${name} off`);
-      await s.ask(`ltprobe unack ${name} auto-vanish-notice`, new RegExp(`LTPROBE unack ${name} .* done`));
+      const unack = await s.ask(`ltprobe unack ${name} auto-vanish-notice`, new RegExp(`LTPROBE unack ${name} \\S+ (done|failed)`));
+      if (/failed/.test(unack)) throw new Error('could not clear the auto-vanish acknowledgement: ' + unack);
       s.cmd(`tp ${name} ${LOBBY.x + 0.5} ${GROUND} ${LOBBY.z + 0.5}`);
     }
     await wait(400);
@@ -152,8 +153,22 @@ function defaultRulesFrom(serverDir) {
 }
 
 // ---------- test context ----------
-function makeContext(server, pool, area, used, configChanges) {
+function makeContext(server, pool, area, used, configChanges, extras) {
   const t = {
+    /** A bot outside the pool, e.g. on an older Minecraft version through ViaBackwards; it leaves after the test. */
+    async extraBot(name, version) {
+      const bot = mineflayer.createBot({ host: '127.0.0.1', port: PORT, username: name, version, auth: 'offline' });
+      bot.chatLog = [];
+      bot.on('message', m => bot.chatLog.push(m.toString()));
+      await new Promise((res, rej) => {
+        bot.once('spawn', res);
+        bot.once('error', rej);
+        bot.once('kicked', r => rej(new Error(`${name} kicked: ${JSON.stringify(r)}`)));
+      });
+      bot.on('error', () => {});
+      extras.push(bot);
+      return bot;
+    },
     server, wait, until, area, ground: GROUND,
     cmd: c => server.cmd(c),
     check(cond, msg) { if (!cond) throw new Error(msg); },
@@ -232,8 +247,9 @@ function makeContext(server, pool, area, used, configChanges) {
 async function runTest(server, pool, test, index) {
   const used = new Set();
   const configChanges = [];
+  const extras = [];
   const area = { x: (index + 1) * 200, z: 0 };
-  const t = makeContext(server, pool, area, used, configChanges);
+  const t = makeContext(server, pool, area, used, configChanges, extras);
   server.cmd(`forceload add ${area.x - 16} ${area.z - 16} ${area.x + 16} ${area.z + 16}`);
   server.cmd(`fill ${area.x - 10} ${GROUND} ${area.z - 10} ${area.x + 10} ${GROUND + 4} ${area.z + 10} minecraft:air`);
   const logFrom = server.lines.length;
@@ -253,6 +269,7 @@ async function runTest(server, pool, test, index) {
     await server.ask(`vconfig ${key} ${original} --confirm`, new RegExp(`${key.replace(/[.]/g, '\\.')}.*${original}`), 5000)
       .catch(e => { err = (err ? err + '\n      ' : '') + 'cleanup: could not restore ' + key + ': ' + e.message; });
   }
+  for (const bot of extras) { try { bot.quit(); } catch {} }
   server.cmd('kill @e[type=!player]');
   server.cmd('difficulty peaceful');
   server.cmd('time set 1000');

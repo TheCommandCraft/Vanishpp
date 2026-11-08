@@ -56,3 +56,4 @@ live-tests/node_modules/
 live-tests/.cache/
 live-tests/.work/
 live-tests/helper/target/
+live-tests/helper-paper/target/

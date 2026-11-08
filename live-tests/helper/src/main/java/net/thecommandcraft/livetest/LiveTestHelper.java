@@ -52,7 +52,7 @@ public final class LiveTestHelper extends JavaPlugin {
                 remove.invoke(storage, Bukkit.getOfflinePlayer(args[1]).getUniqueId(), args[2]);
                 getLogger().info("LTPROBE unack " + args[1] + " " + args[2] + " done");
             } catch (ReflectiveOperationException e) {
-                getLogger().warning("LTPROBE unack failed: " + e);
+                getLogger().warning("LTPROBE unack " + args[1] + " " + args[2] + " failed: " + e);
             }
             return true;
         }

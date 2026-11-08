@@ -36,6 +36,7 @@ This release closes several security holes, so please update soon. Thanks to @Ma
 - **Vanished players always count as asleep,** so they never block the night from being skipped. The sleep message also leaves them out (2/3 becomes 1/2).
 
 ### Fixed
+- **`/plugins` looked different while Vanish++ was hidden.** It lost the hover texts, the Paper plugins group, the order and the colours. It now matches the server's own list, minus Vanish++. (#38)
 - **Night vision stayed after unvanishing.** Your own night vision potion is kept.
 - **Barrels opened silently stay closed for others,** and a container shared by two staff members no longer closes for both when one leaves.
 - **Projectiles pass through vanished players** without being replaced or slowed down.

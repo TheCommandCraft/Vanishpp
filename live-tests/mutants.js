@@ -8,11 +8,12 @@ const P = 'vanishpp-paper/src/main/java/net/thecommandcraft/vanishpp/';
 const MAIN = P + 'Vanishpp.java';
 const LISTENER = P + 'listeners/PlayerListener.java';
 const PLM = P + 'hooks/ProtocolLibManager.java';
+const HIDER = P + 'utils/PluginHider.java';
 const PERMS = P + 'config/PermissionManager.java';
 const on = id => `net.thecommandcraft.vanishpp.LiveTestMutant.on("${id}")`;
 
 const mutants = [
-  { id: 'everyone-sees', what: 'every player is allowed to see vanished players', tests: ['disappears from the world'] },
+  { id: 'everyone-sees', what: 'every player is allowed to see vanished players', tests: ['disappears from the world', 'does not see a vanished player'] },
   { id: 'staff-blind', what: 'staff can no longer see vanished players', tests: ['staff with vanishpp.see'] },
   { id: 'fake-messages', what: 'fake join/quit messages are never sent', tests: ['fake quit and fake join'] },
   { id: 'tab-complete-scrub', what: "the tab-complete scrubber keeps every name, also in other plugins' commands", tests: ['tab-complete'] },
@@ -35,6 +36,10 @@ const mutants = [
   { id: 'unvanish-not-saved', what: 'unvanishing is not saved, so the old vanished state comes back after a restart', tests: ['server restart'] },
   { id: 'auto-vanish-no-notice', what: 'the auto-vanish join notice is never sent', tests: ['auto-vanish notice on join'] },
   { id: 'auto-vanish-notice-always', what: 'the auto-vanish notice is sent on every vanished join, ignoring [Got it] and why the player is vanished', tests: ['no auto-vanish notice', 'auto-vanish notice on join'] },
+  { id: 'plugin-list-old-format', what: 'the hidden /plugins goes back to the old one-line list', tests: ['/plugins with Vanish++ hidden'] },
+  { id: 'plugin-list-no-hover', what: 'the hidden /plugins loses the hover text on its info icon', tests: ['/plugins with Vanish++ hidden'] },
+  { id: 'plugin-list-shows-vanishpp', what: 'the hidden /plugins still lists Vanish++', tests: ['/plugins with Vanish++ hidden'] },
+  { id: 'plugin-list-no-paper-group', what: 'Paper plugins are listed as Bukkit plugins', tests: ['/plugins with Vanish++ hidden'] },
   { id: 'god-mode', what: 'god mode no longer cancels damage to vanished players', tests: ['god mode:'] },
   { id: 'break-allowed', what: 'vanished players break blocks with can_break_blocks off', tests: ['can_break_blocks'] },
   { id: 'break-rule-ignored', what: 'can_break_blocks on still blocks breaking', tests: ['can_break_blocks'] },
@@ -44,6 +49,14 @@ const mutants = [
 ];
 
 const edits = [
+  { file: HIDER, find: '            if (!p.getName().equalsIgnoreCase("Vanishpp"))',
+    replace: `            if (${on('plugin-list-shows-vanishpp')} || !p.getName().equalsIgnoreCase("Vanishpp"))` },
+  { file: HIDER, find: '        for (Component line : buildPluginList(filtered))\n            player.sendMessage(line);',
+    replace: `        if (${on('plugin-list-old-format')}) player.sendMessage(Component.text("Plugins (" + filtered.size() + "): ", NamedTextColor.WHITE)\n                .append(Component.join(JoinConfiguration.separator(Component.text(", ", NamedTextColor.WHITE)),\n                        filtered.stream().map(x -> (Component) Component.text(x.getName(), NamedTextColor.GREEN)).toList())));\n        else for (Component line : buildPluginList(filtered))\n            player.sendMessage(line);` },
+  { file: HIDER, find: '        lines.add(Component.text().append(INFO_ICON)',
+    replace: `        lines.add(Component.text().append(${on('plugin-list-no-hover')} ? INFO_ICON.hoverEvent(null) : INFO_ICON)` },
+  { file: HIDER, find: '        return cl != null && cl.getClass().getName().contains("PaperPluginClassLoader");',
+    replace: `        return !${on('plugin-list-no-paper-group')} && cl != null && cl.getClass().getName().contains("PaperPluginClassLoader");` },
   { file: LISTENER, find: '        if (plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;',
     replace: `        if (${on('auto-vanish-no-notice')}) return;\n        if (!${on('auto-vanish-notice-always')} && plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;` },
   { file: LISTENER, find: '                    || plugin.getPlayerData().acknowledged(player.getUniqueId(), AUTO_VANISH_NOTICE)) return;',
