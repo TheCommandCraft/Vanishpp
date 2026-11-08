@@ -112,4 +112,70 @@ class LocalizationTest {
                 org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(userFile);
         assertTrue(after.contains(probeKey), "self-heal should restore the dropped key on disk");
     }
+
+    @Test
+    void testVanishAlwaysSetsSleepingIgnored_whenPreventSleepingOff() {
+        // Issue #2: a vanished player must never block the server from skipping the night. Even when
+        // prevent-sleeping is OFF, vanishing should mark the player sleeping-ignored (fauxSleeping)
+        // so they count as a sleeper rather than an awake denominator in the skip-night percentage.
+        //
+        // SleepRecordingPlayer, not a plain PlayerMock: MockBukkit's isSleepingIgnored() throws
+        // UnimplementedOperationException, which JUnit counts as skipped, so the assertions below
+        // would never actually run.
+        SleepRecordingPlayer sleeper = new SleepRecordingPlayer(server, "Sleepy");
+        server.addPlayer(sleeper);
+
+        plugin.getConfigManager().preventSleeping = false;
+        plugin.applyVanishEffects(sleeper);
+        assertTrue(sleeper.isSleepingIgnored(),
+                "vanished player should be sleeping-ignored even when prevent-sleeping=false");
+
+        // And unvanishing clears it.
+        plugin.removeVanishEffects(sleeper);
+        assertFalse(sleeper.isSleepingIgnored(),
+                "unvanished player should no longer be sleeping-ignored");
+    }
+
+    /** PlayerMock that actually stores the sleeping-ignored flag (MockBukkit leaves it unimplemented). */
+    private static class SleepRecordingPlayer extends PlayerMock {
+        private boolean sleepingIgnored;
+
+        SleepRecordingPlayer(ServerMock server, String name) {
+            super(server, name);
+        }
+
+        @Override
+        public void setSleepingIgnored(boolean ignored) {
+            this.sleepingIgnored = ignored;
+        }
+
+        @Override
+        public boolean isSleepingIgnored() {
+            return sleepingIgnored;
+        }
+    }
+
+    @Test
+    void testVersionKeysResolveInBothLanguages() {
+        // Upstream v1.1.9.1 added the nested version.* keys used by /vanish version. The
+        // LanguageManager flattens them to messages.version.*, so the flat lookup must resolve
+        // for the active language rather than falling back to a [Missing: ...] marker.
+        var lm = plugin.getConfigManager().getLanguageManager();
+
+        // en-us
+        plugin.getConfig().set("language", "en-us");
+        plugin.reloadPluginConfig();
+        assertFalse(lm.getMessage("version.header").contains("[Missing"),
+                "version.header must resolve (en-us)");
+        assertFalse(lm.getMessage("version.up-to-date").contains("[Missing"),
+                "version.up-to-date must resolve (en-us)");
+
+        // zh-cn — upstream ships a translated version.* block, so this must not fall back either.
+        plugin.getConfig().set("language", "zh-cn");
+        plugin.reloadPluginConfig();
+        assertFalse(lm.getMessage("version.header").contains("[Missing"),
+                "version.header must resolve (zh-cn)");
+        assertFalse(lm.getMessage("version.modrinth").contains("[Missing"),
+                "version.modrinth must resolve (zh-cn)");
+    }
 }

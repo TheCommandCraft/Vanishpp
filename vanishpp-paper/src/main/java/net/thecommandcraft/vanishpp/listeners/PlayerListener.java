@@ -263,10 +263,12 @@ public class PlayerListener implements Listener {
                         plugin.getIntegrationManager().updateHooks(player, true);
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
-                        // Rebuild the scoreboard from scratch at these later points too:
-                        // a player restored as vanished via reconciliation (not just auto-vanish)
-                        // is equally exposed to TAB overwriting the sidebar after join.
-                        if (plugin.getVanishScoreboard() != null)
+                        // Rebuild the scoreboard from scratch at the final stage only, so TAB has
+                        // settled: a player restored as vanished via reconciliation (not just
+                        // auto-vanish) is equally exposed to TAB overwriting the sidebar after join.
+                        // Rebuilding at every stage races TAB's async pipeline and causes the
+                        // sidebar to flicker or get re-overwritten.
+                        if (delay == 60L && plugin.getVanishScoreboard() != null)
                             plugin.getVanishScoreboard().forceReshow(player);
                     }
                 }, delay);
