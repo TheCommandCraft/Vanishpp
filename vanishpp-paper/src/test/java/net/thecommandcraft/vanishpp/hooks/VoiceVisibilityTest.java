@@ -62,6 +62,35 @@ class VoiceVisibilityTest {
     }
 
     @Test
+    void vanishedCanHearOthersIsOneWay() {
+        PlayerMock vanished = server.addPlayer("Vanished");
+        PlayerMock visible = server.addPlayer("Visible");
+        plugin.applyVanishEffects(vanished);
+        plugin.getConfigManager().voiceChatIsolate = true;
+        plugin.getConfigManager().voiceChatVanishedHearOthers = false;
+        Map<Class<?>, Consumer<Object>> handlers = register();
+
+        LocationalSoundPacketEvent isolated = packet(visible, vanished);
+        dispatch(handlers, isolated);
+        verify(isolated).cancel(); // default: a vanished listener only hears players who can see them
+
+        plugin.getConfigManager().voiceChatVanishedHearOthers = true;
+        plugin.voiceAudience.refresh();
+        LocationalSoundPacketEvent heard = packet(visible, vanished);
+        dispatch(handlers, heard);
+        verify(heard, never()).cancel();
+        LocationalSoundPacketEvent leaked = packet(vanished, visible);
+        dispatch(handlers, leaked);
+        verify(leaked).cancel(); // the visible player still never hears the vanished one
+
+        plugin.getConfigManager().voiceChatIsolate = false;
+        plugin.voiceAudience.refresh();
+        LocationalSoundPacketEvent off = packet(vanished, visible);
+        dispatch(handlers, off);
+        verify(off, never()).cancel();
+    }
+
+    @Test
     void audioThreadUsesPublishedAudienceAndPermissionRevocationInvalidatesIt() throws Exception {
         GuardedPlayer speaker = new GuardedPlayer(server, "Speaker");
         GuardedPlayer listener = new GuardedPlayer(server, "Listener");

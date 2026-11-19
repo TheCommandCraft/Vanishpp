@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0.1] - Unreleased
+
+**Priority:** feature
+
+### Added
+- **Vanished players can hear everyone nearby in Simple Voice Chat.** Set `hooks.simple-voice-chat.vanished-can-hear-others` to `true` to let vanished players hear visible players. Visible players still cannot hear vanished ones. The default is `false`, which keeps vanished players isolated as before.
+
 ## [1.2.0] - 2026-11-08
 
 **Priority:** security

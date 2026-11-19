@@ -91,6 +91,7 @@ hooks:
   simple-voice-chat:
     enabled: true
     isolate-vanished-players: true
+    vanished-can-hear-others: false
   essentials:
     simulate-join-leave: false
 

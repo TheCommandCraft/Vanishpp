@@ -11,18 +11,18 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Async and cross-region callbacks read immutable facts published from player-owned tasks. */
 public final class VoiceAudience {
     public record Facts(boolean permission, int seeLevel, int vanishLevel) {}
-    private record Settings(boolean enabled, boolean layered) {}
+    private record Settings(boolean enabled, boolean layered, boolean vanishedHearOthers) {}
     private final Vanishpp plugin;
     private final Map<UUID, Facts> players = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> departing = ConcurrentHashMap.newKeySet();
-    private volatile Settings settings = new Settings(false, true);
+    private volatile Settings settings = new Settings(false, true, false);
     private volatile long generation;
 
     public VoiceAudience(Vanishpp plugin) { this.plugin = plugin; }
 
     public void refresh() {
         var config = plugin.getConfigManager();
-        settings = new Settings(config.voiceChatIsolate, config.layeredPermsEnabled);
+        settings = new Settings(config.voiceChatIsolate, config.layeredPermsEnabled, config.voiceChatVanishedHearOthers);
         java.util.Set<UUID> online = new java.util.HashSet<>();
         plugin.getServer().getOnlinePlayers().forEach(player -> online.add(player.getUniqueId()));
         departing.removeIf(uuid -> !online.contains(uuid));
@@ -52,15 +52,19 @@ public final class VoiceAudience {
 
     public synchronized void close() {
         generation++;
-        settings = new Settings(false, true);
+        settings = new Settings(false, true, false);
         players.clear();
         departing.clear();
     }
 
+    /**
+     * The listener must be allowed to see the speaker. Unless vanished-can-hear-others is on, the speaker must also be
+     * allowed to see the listener, so vanished players only hear players who can see them.
+     */
     public boolean canHear(UUID receiver, UUID sender) {
         Settings current = settings;
         return !current.enabled() || (canSee(receiver, sender, current.layered())
-                && (receiver == null || canSee(sender, receiver, current.layered())));
+                && (receiver == null || current.vanishedHearOthers() || canSee(sender, receiver, current.layered())));
     }
 
     private boolean canSee(UUID viewer, UUID subject, boolean layered) {

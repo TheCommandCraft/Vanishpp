@@ -190,6 +190,8 @@ hooks:
     enabled: true
     # Filter actual voice packets; authorized seers can still hear vanished speakers.
     isolate-vanished-players: true
+    # Vanished players also hear visible players near them. Visible players still can't hear vanished ones.
+    vanished-can-hear-others: false
   essentials:
     # Use EssentialsX custom join/quit messages if configured.
     simulate-join-leave: false
