@@ -48,9 +48,10 @@ public class ProtocolLibManager {
      * to every player (movement, teleport, metadata, ...), on ProtocolLib's network threads. Resolving
      * the entity through {@code ProtocolManager#getEntityFromID} on each of them walks the world's
      * entities off the main thread, which is both slow and not thread-safe. This map is a lock-free
-     * lookup instead. It is filled at join/respawn, and re-learned from every player SPAWN_ENTITY
-     * packet, so an id that changed (respawn, dimension change) heals itself before any other packet
-     * about that entity is sent.
+     * lookup instead. It is filled at join/respawn, and also from the SPAWN_ENTITY packet of an
+     * online player, so a spawn packet that goes out before the join handler has run (or an id that
+     * changed) is still learned before the other packets about that entity. Only online players are
+     * stored, never NPCs.
      */
     private final Map<Integer, UUID> playerEntityIds = new ConcurrentHashMap<>();
 
@@ -350,7 +351,10 @@ public class ProtocolLibManager {
                     try {
                         if (packet.getEntityTypeModifier().read(0) == org.bukkit.entity.EntityType.PLAYER) {
                             targetId = packet.getUUIDs().read(0);
-                            if (targetId != null)
+                            // Only remember ids of real online players. Player-type NPCs
+                            // (Citizens etc.) get a new id on every respawn and never quit,
+                            // so storing them would grow the map without bound.
+                            if (targetId != null && Bukkit.getPlayer(targetId) != null)
                                 ProtocolLibManager.this.playerEntityIds.put(entityId, targetId);
                         }
                     } catch (Exception ignored) {
