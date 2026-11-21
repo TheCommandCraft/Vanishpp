@@ -570,8 +570,10 @@ public class PlayerListener implements Listener {
         org.bukkit.permissions.PermissionAttachment att = invseeAttachments.remove(uuid);
         if (att != null) att.remove();
         plugin.cleanupPlayerCache(uuid);
-        if (plugin.getProtocolLibManager() != null)
+        if (plugin.getProtocolLibManager() != null) {
             plugin.getProtocolLibManager().clearObserverKnowledge(uuid);
+            plugin.getProtocolLibManager().uncachePlayer(event.getPlayer());
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -977,6 +979,11 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
+        // The respawned player may carry a new entity id; refresh the packet-listener cache.
+        plugin.getVanishScheduler().runLaterEntity(player, () -> {
+            if (player.isOnline() && plugin.getProtocolLibManager() != null)
+                plugin.getProtocolLibManager().cachePlayer(player);
+        }, 1L);
         if (!plugin.isVanished(player)) return;
         plugin.getVanishScheduler().runLaterEntity(player, () -> {
             if (player.isOnline() && plugin.isVanished(player))
