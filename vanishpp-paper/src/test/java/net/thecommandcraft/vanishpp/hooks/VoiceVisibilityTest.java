@@ -91,6 +91,30 @@ class VoiceVisibilityTest {
     }
 
     @Test
+    void vconfigToggleAppliesWithoutRestartAndNeverAffectsTwoVanishedPlayers() {
+        PlayerMock vanished = server.addPlayer("Vanished");
+        PlayerMock otherVanished = server.addPlayer("OtherVanished");
+        PlayerMock visible = server.addPlayer("Visible");
+        vanished.setOp(true);
+        otherVanished.setOp(true);
+        plugin.applyVanishEffects(vanished);
+        plugin.applyVanishEffects(otherVanished);
+        server.dispatchCommand(server.getConsoleSender(), "vconfig hooks.simple-voice-chat.vanished-can-hear-others true");
+        server.getScheduler().performTicks(20);
+        assertTrue(plugin.voiceAudience.canHear(vanished.getUniqueId(), visible.getUniqueId()));
+        assertTrue(plugin.voiceAudience.canHear(vanished.getUniqueId(), otherVanished.getUniqueId()));
+        assertFalse(plugin.voiceAudience.canHear(visible.getUniqueId(), vanished.getUniqueId()));
+
+        server.dispatchCommand(server.getConsoleSender(), "vconfig hooks.simple-voice-chat.vanished-can-hear-others false");
+        server.getScheduler().performTicks(20);
+        assertFalse(plugin.voiceAudience.canHear(vanished.getUniqueId(), visible.getUniqueId()),
+                "after /vconfig ... false a vanished player must stop hearing visible players");
+        assertTrue(plugin.voiceAudience.canHear(vanished.getUniqueId(), otherVanished.getUniqueId()),
+                "two vanished staff who can see each other always hear each other");
+        assertFalse(plugin.voiceAudience.canHear(visible.getUniqueId(), vanished.getUniqueId()));
+    }
+
+    @Test
     void audioThreadUsesPublishedAudienceAndPermissionRevocationInvalidatesIt() throws Exception {
         GuardedPlayer speaker = new GuardedPlayer(server, "Speaker");
         GuardedPlayer listener = new GuardedPlayer(server, "Listener");
