@@ -373,6 +373,53 @@ class CommandTest {
     }
 
     @Test
+    void vanishconfig_treeArgumentsSetTheValue() {
+        player.setOp(true);
+        player.performCommand("vconfig invisibility-features god-mode false");
+        assertFalse(plugin.getConfigManager().godMode, "one argument per level must set the option");
+        player.performCommand("vconfig hooks simple-voice-chat vanished-can-hear-others true");
+        assertTrue(plugin.getConfigManager().voiceChatVanishedHearOthers);
+    }
+
+    @Test
+    void vanishconfig_tabCompletesOneLevelAtATime() {
+        player.setOp(true);
+        var command = plugin.getCommand("vanishconfig");
+        var completer = (org.bukkit.command.TabCompleter) command.getExecutor();
+        java.util.function.Function<String[], java.util.List<String>> tab =
+                a -> completer.onTabComplete(player, command, "vconfig", a);
+
+        java.util.List<String> root = tab.apply(new String[]{""});
+        assertTrue(root.contains("hooks") && root.contains("invisibility-features") && root.contains("gui"), "root: " + root);
+        assertTrue(root.stream().noneMatch(k -> k.contains(".")), "the first level must not list dotted paths: " + root);
+        assertFalse(root.contains("config-version"));
+
+        assertEquals(java.util.List.of("hooks"), tab.apply(new String[]{"hoo"}));
+        java.util.List<String> hooks = tab.apply(new String[]{"hooks", ""});
+        assertTrue(hooks.contains("simple-voice-chat") && hooks.contains("essentials"), "hooks: " + hooks);
+        assertEquals(java.util.List.of("enabled", "isolate-vanished-players", "vanished-can-hear-others"),
+                tab.apply(new String[]{"hooks", "simple-voice-chat", ""}));
+        assertEquals(java.util.List.of("true", "false"),
+                tab.apply(new String[]{"hooks", "simple-voice-chat", "enabled", ""}));
+        assertTrue(tab.apply(new String[]{"hooks", "simple-voice-chat", "enabled", "true", ""}).isEmpty(),
+                "nothing is suggested after the value");
+        assertTrue(tab.apply(new String[]{"nope", ""}).isEmpty());
+        // A dotted path in one argument still works, so existing buttons keep working.
+        assertEquals(java.util.List.of("true", "false"), tab.apply(new String[]{"hooks.simple-voice-chat.enabled", ""}));
+    }
+
+    @Test
+    void vanishconfig_sectionListsItsOptionsAndChangesNothing() {
+        player.setOp(true);
+        boolean before = plugin.getConfigManager().voiceChatEnabled;
+        player.performCommand("vconfig hooks simple-voice-chat");
+        String shown = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(player.nextComponentMessage());
+        assertTrue(shown.contains("enabled") && shown.contains("vanished-can-hear-others"), shown);
+        assertEquals(before, plugin.getConfigManager().voiceChatEnabled);
+    }
+
+    @Test
     void vanishconfig_deniedWithoutPermission() {
         player.setOp(false);
         plugin.getConfigManager().godMode = true;

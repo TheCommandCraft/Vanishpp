@@ -11,6 +11,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.util.StringUtil;
 import org.jetbrains.annotations.NotNull;
@@ -37,6 +38,39 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     public VanishConfigCommand(Vanishpp plugin) {
         this.plugin = plugin;
         this.configGUI = new ConfigGUI(plugin);
+    }
+
+    /** Top-level keys that are internal and never offered for browsing. */
+    private static boolean hiddenRootKey(String key) {
+        return key.equals("config-version") || key.startsWith("data");
+    }
+
+    /**
+     * Where the first {@code count} arguments point. Each argument is one level of the config tree
+     * ({@code hooks simple-voice-chat enabled}); a dotted path in one argument ({@code hooks.simple-voice-chat.enabled})
+     * still works, so older buttons and habits keep working. Returns null for a path that does not exist.
+     */
+    private record Target(String path, int next, boolean leaf) {}
+
+    private static Target resolve(ConfigurationSection cfg, String[] args, int count) {
+        String path = "";
+        for (int i = 0; i < count; i++) {
+            String candidate = path.isEmpty() ? args[i] : path + "." + args[i];
+            if (args[i].isEmpty() || candidate.endsWith(".")) return null;
+            if (cfg.isConfigurationSection(candidate)) { path = candidate; continue; }
+            if (cfg.contains(candidate)) return new Target(candidate, i + 1, true);
+            return null;
+        }
+        return new Target(path, count, false);
+    }
+
+    /** The keys directly inside a section; the root leaves out internal keys. */
+    private static List<String> children(ConfigurationSection cfg, String path) {
+        ConfigurationSection section = path.isEmpty() ? cfg : cfg.getConfigurationSection(path);
+        if (section == null) return new ArrayList<>();
+        List<String> keys = new ArrayList<>(section.getKeys(false));
+        if (path.isEmpty()) keys.removeIf(VanishConfigCommand::hiddenRootKey);
+        return keys;
     }
 
     private boolean isSensitive(String path) {
@@ -72,14 +106,23 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        String path = args[0];
         var lm = plugin.getConfigManager().getLanguageManager();
-        if (!plugin.getConfigManager().getConfig().contains(path)) {
+        var cfg = plugin.getConfigManager().getConfig();
+        Target target = resolve(cfg, args, args.length);
+        if (target == null || (!target.leaf() && target.path().isEmpty())) {
             plugin.getMessageManager().sendMessage(sender, lm.getMessage("config.invalid-path"));
             return true;
         }
+        String path = target.path();
+        if (!target.leaf()) {
+            // A section: list what is inside, so staff can browse one level at a time.
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("config.section-contents")
+                    .replace("%path%", path.replace('.', ' '))
+                    .replace("%keys%", String.join(", ", children(cfg, path))));
+            return true;
+        }
 
-        if (args.length == 1) {
+        if (target.next() == args.length) {
             Object val = plugin.getConfigManager().getConfig().get(path);
             String valStr = val != null ? String.valueOf(val) : "<not set>";
             plugin.getMessageManager().sendMessage(sender,
@@ -89,7 +132,7 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
 
         // Check for --confirm flag
         boolean confirmed = args[args.length - 1].equals("--confirm");
-        String valInput = args[1];
+        String valInput = args[target.next()];
 
         // Sensitive path protection
         if (isSensitive(path) && !confirmed) {
@@ -133,25 +176,22 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
             @NotNull String label, @NotNull String[] args) {
         if (!plugin.getPermissionManager().hasPermission(sender, "vanishpp.config")) return new ArrayList<>();
-        if (args.length == 1) {
-            var cfg = plugin.getConfigManager().getConfig();
-            List<String> keys = new ArrayList<>(cfg.getKeys(true));
-            keys.removeIf(k -> cfg.isConfigurationSection(k) || k.equals("config-version") || k.startsWith("data"));
-            return StringUtil.copyPartialMatches(args[0], keys, new ArrayList<>());
+        var cfg = plugin.getConfigManager().getConfig();
+        String typed = args[args.length - 1];
+        Target target = resolve(cfg, args, args.length - 1);
+        if (target == null) return new ArrayList<>();
+        if (!target.leaf()) {
+            // One level of the tree at a time: hooks -> simple-voice-chat -> enabled.
+            List<String> options = children(cfg, target.path());
+            if (args.length == 1) options.add("gui");
+            return StringUtil.copyPartialMatches(typed, options, new ArrayList<>());
         }
-        if (args.length == 2) {
-            if (SECRET_PATHS.contains(args[0])) return new ArrayList<>();
-            var cfg = plugin.getConfigManager().getConfig();
-            if (cfg.contains(args[0])) {
-                Object current = cfg.get(args[0]);
-                if (current instanceof Boolean) {
-                    return StringUtil.copyPartialMatches(args[1], Arrays.asList("true", "false"), new ArrayList<>());
-                } else if (current != null) {
-                    return StringUtil.copyPartialMatches(args[1], List.of(current.toString()), new ArrayList<>());
-                }
-            }
-            return Arrays.asList("true", "false");
-        }
+        if (target.next() != args.length - 1 || SECRET_PATHS.contains(target.path())) return new ArrayList<>();
+        Object current = cfg.get(target.path());
+        if (current instanceof Boolean)
+            return StringUtil.copyPartialMatches(typed, Arrays.asList("true", "false"), new ArrayList<>());
+        if (current != null)
+            return StringUtil.copyPartialMatches(typed, List.of(current.toString()), new ArrayList<>());
         // Do NOT suggest --confirm in tab completion
         return new ArrayList<>();
     }

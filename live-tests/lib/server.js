@@ -45,7 +45,7 @@ class Server {
 
   async start(timeoutMs = 240000, { keepData = false } = {}) {
     if (!keepData) this.prepare();
-    this.proc = spawn(this.java, ['-Xms1G', '-Xmx2G', '-XX:+UseSerialGC', '-jar', 'paper.jar', 'nogui'], { cwd: this.dir });
+    this.proc = spawn(this.java, ['-Xms512M', `-Xmx${process.env.LT_XMX || '2G'}`, '-XX:+UseSerialGC', '-jar', 'paper.jar', 'nogui'], { cwd: this.dir });
     this.logFile = fs.createWriteStream(path.join(this.dir, 'console.log'), { flags: keepData ? 'a' : 'w' });
     let buf = '';
     const onData = chunk => {

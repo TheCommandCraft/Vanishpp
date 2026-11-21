@@ -10,6 +10,7 @@ const LISTENER = P + 'listeners/PlayerListener.java';
 const PLM = P + 'hooks/ProtocolLibManager.java';
 const HIDER = P + 'utils/PluginHider.java';
 const PERMS = P + 'config/PermissionManager.java';
+const VCONFIG = P + 'commands/VanishConfigCommand.java';
 const on = id => `net.thecommandcraft.vanishpp.LiveTestMutant.on("${id}")`;
 
 const mutants = [
@@ -46,9 +47,16 @@ const mutants = [
   { id: 'chat-not-held', what: 'chat is not held when can_chat is off', tests: ['can_chat'] },
   { id: 'chat-everyone', what: 'chat from a vanished player reaches everyone, not only staff', tests: ['can_chat'] },
   { id: 'chat-no-prefix', what: 'the vanished prefix is missing from chat that staff see', tests: ['can_chat'] },
+  { id: 'vconfig-flat-tab', what: '/vconfig tab-complete lists every dotted path at once again', tests: ['/vconfig:'] },
+  { id: 'vconfig-tree-ignored', what: '/vconfig only accepts dotted paths, not one argument per level', tests: ['/vconfig:'] },
+  { id: 'vconfig-tab-deeper', what: '/vconfig tab-complete skips a level and lists the options below it', tests: ['/vconfig:'] },
 ];
 
 const edits = [
+  { file: VCONFIG, find: '            List<String> options = children(cfg, target.path());',
+    replace: `            List<String> options = ${on('vconfig-flat-tab')} ? new ArrayList<>(cfg.getKeys(true))\n                    : ${on('vconfig-tab-deeper')} ? children(cfg, target.path()).stream().flatMap(k -> cfg.isConfigurationSection((target.path().isEmpty() ? "" : target.path() + ".") + k) ? children(cfg, (target.path().isEmpty() ? "" : target.path() + ".") + k).stream() : java.util.stream.Stream.of(k)).collect(java.util.stream.Collectors.toCollection(ArrayList::new))\n                    : children(cfg, target.path());` },
+  { file: VCONFIG, find: '        Target target = resolve(cfg, args, args.length);',
+    replace: `        Target target = ${on('vconfig-tree-ignored')} && !args[0].contains(".") ? null : resolve(cfg, args, args.length);` },
   { file: HIDER, find: '            if (!p.getName().equalsIgnoreCase("Vanishpp"))',
     replace: `            if (${on('plugin-list-shows-vanishpp')} || !p.getName().equalsIgnoreCase("Vanishpp"))` },
   { file: HIDER, find: '        for (Component line : buildPluginList(filtered))\n            player.sendMessage(line);',

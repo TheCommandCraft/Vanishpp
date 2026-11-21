@@ -155,7 +155,8 @@ config:
   updated: '&a已成功将 &e%path% &a更新为 &f%value%'
   invalid-path: '&c无效的配置路径！'
   current-value: '&6%path% &7当前值为：&f%value%'
-  usage: '&c用法：/vconfig <键> [值]'
+  usage: '&c用法：/vconfig <分类> ... <选项> [值]  &7（按 Tab 逐级显示）'
+  section-contents: '&6%path% &7包含：&f%keys%'
   sensitive-warning: '&c⚠ 警告：&e%path% &c是敏感设置。更改它可能影响服务器稳定性。请再次运行命令并添加 &b--confirm
     &c以应用。'
   proxy-mismatch-title: 检测到代理配置不匹配

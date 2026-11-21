@@ -32,8 +32,8 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
             }),
             Map.entry("vanishconfig", new String[]{
                     "View or change plugin settings in-game.",
-                    "/vconfig <key> [value]",
-                    "Sensitive settings (storage, permissions) require re-entering with --confirm. Changes apply immediately."
+                    "/vconfig <section> ... <option> [value]",
+                    "Each argument is one level, e.g. /vconfig hooks simple-voice-chat enabled false. Tab shows the options of each level. Sensitive settings (storage, permissions) require re-entering with --confirm. Changes apply immediately."
             }),
             Map.entry("vanishlist", new String[]{
                     "Lists all currently vanished players.",

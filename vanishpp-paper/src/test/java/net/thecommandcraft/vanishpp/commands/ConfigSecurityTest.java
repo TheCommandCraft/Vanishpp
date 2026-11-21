@@ -95,6 +95,10 @@ class ConfigSecurityTest {
                 if (!completer.onTabComplete(player, command, "vconfig", new String[]{path, ""}).isEmpty()) {
                     leakedPaths.add(path + " (permission=" + permitted + ")");
                 }
+                String[] tree = (path.replace('.', ' ') + " ").split(" ", -1); // one level per argument, then the value
+                if (!completer.onTabComplete(player, command, "vconfig", tree).isEmpty()) {
+                    leakedPaths.add(String.join(" ", tree) + "(tree, permission=" + permitted + ")");
+                }
             }
         }
         assertEquals(List.of("7"), completer.onTabComplete(player, command, "vconfig",

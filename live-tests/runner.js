@@ -171,6 +171,8 @@ function makeContext(server, pool, area, used, configChanges, extras) {
     },
     server, wait, until, area, ground: GROUND,
     cmd: c => server.cmd(c),
+    /** Runs a console command and resolves with the first console line matching re that follows it. */
+    ask: (c, re, ms) => server.ask(c, re, ms),
     check(cond, msg) { if (!cond) throw new Error(msg); },
     /** n clean bots from the pool, all standing in this test's area. */
     async bots(n) {
