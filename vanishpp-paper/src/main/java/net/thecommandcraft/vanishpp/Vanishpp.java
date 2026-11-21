@@ -1172,6 +1172,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     public void resumeVisibility(Player player) {
+        if (protocolLibManager != null) protocolLibManager.cachePlayer(player);
         viewerTeams.joined(player.getUniqueId());
         voiceAudience.joined(player.getUniqueId());
         voiceAudience.refresh();

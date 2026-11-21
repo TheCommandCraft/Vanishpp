@@ -43,12 +43,49 @@ public class ProtocolLibManager {
         knownVanishTeamMembers.remove(observerId);
     }
 
+    /**
+     * Player entity id -> player UUID. The packet listeners below run for every entity packet sent
+     * to every player (movement, teleport, metadata, ...), on ProtocolLib's network threads. Resolving
+     * the entity through {@code ProtocolManager#getEntityFromID} on each of them walks the world's
+     * entities off the main thread, which is both slow and not thread-safe. This map is a lock-free
+     * lookup instead. It is filled at join/respawn, and also from the SPAWN_ENTITY packet of an
+     * online player, so a spawn packet that goes out before the join handler has run (or an id that
+     * changed) is still learned before the other packets about that entity. Only online players are
+     * stored, never NPCs.
+     */
+    private final Map<Integer, UUID> playerEntityIds = new ConcurrentHashMap<>();
+
+    /** Records a player's current entity id. Safe to call repeatedly. */
+    public void cachePlayer(Player player) {
+        if (player != null) playerEntityIds.put(player.getEntityId(), player.getUniqueId());
+    }
+
+    /** Forgets every entity id ever recorded for a quitting player. */
+    public void uncachePlayer(Player player) {
+        if (player == null) return;
+        UUID uuid = player.getUniqueId();
+        playerEntityIds.values().removeIf(uuid::equals);
+    }
+
+    /** The UUID of the player owning this entity id, or null if it is not a known player entity. */
+    private UUID playerIdFor(int entityId) {
+        return playerEntityIds.get(entityId);
+    }
+
+    /** True when the packet is about a vanished player that {@code observer} must not see. */
+    private boolean mustHide(Player observer, UUID subject) {
+        return subject != null
+                && plugin.isVanished(subject)
+                && !plugin.getPermissionManager().canSee(observer, subject);
+    }
+
     public void load() {
         if (Bukkit.getPluginManager().getPlugin("ProtocolLib") == null)
             return;
 
         this.protocolManager = ProtocolLibrary.getProtocolManager();
         ProtocolLibManager.this.plugin.getLogger().info("Hooked into ProtocolLib.");
+        for (Player online : Bukkit.getOnlinePlayers()) cachePlayer(online);
         registerSilentChestListeners();
         registerSleepStatusListener();
 
@@ -147,17 +184,16 @@ public class ProtocolLibManager {
 
                     // Handle packets where index 0 is the primary entity
                     int entityId = packet.getIntegers().read(0);
-                    Entity entity = protocolManager.getEntityFromID(observer.getWorld(), entityId);
+                    UUID targetId = ProtocolLibManager.this.playerIdFor(entityId);
 
-                    if (entity instanceof Player target
-                            && ProtocolLibManager.this.plugin.isVanished(target.getUniqueId())) {
+                    if (targetId != null && ProtocolLibManager.this.plugin.isVanished(targetId)) {
                         // Never block packets about the player themselves — this includes
                         // ENTITY_STATUS (OP level updates needed for F3+F4 game mode switcher)
                         // and other self-referencing packets that the client needs.
                         if (observer.getEntityId() == entityId) {
                             return;
                         }
-                        if (!ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, target)) {
+                        if (ProtocolLibManager.this.mustHide(observer, targetId)) {
                             event.setCancelled(true);
                             return;
                         }
@@ -173,9 +209,8 @@ public class ProtocolLibManager {
                         if (type == PacketType.Play.Server.COLLECT) {
                             // Index 1 is the collector ID
                             int collectorId = packet.getIntegers().read(1);
-                            Entity collector = protocolManager.getEntityFromID(observer.getWorld(), collectorId);
-                            if (collector instanceof Player p
-                                    && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, p)) {
+                            if (ProtocolLibManager.this.mustHide(observer,
+                                    ProtocolLibManager.this.playerIdFor(collectorId))) {
                                 event.setCancelled(true);
                             }
                         } else if (type == PacketType.Play.Server.MOUNT) {
@@ -185,9 +220,8 @@ public class ProtocolLibManager {
                                 boolean hasVanished = false;
                                 List<Integer> filtered = new ArrayList<>();
                                 for (int id : passengers) {
-                                    Entity e = protocolManager.getEntityFromID(observer.getWorld(), id);
-                                    if (e instanceof Player p
-                                            && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(observer, p)) {
+                                    if (ProtocolLibManager.this.mustHide(observer,
+                                            ProtocolLibManager.this.playerIdFor(id))) {
                                         hasVanished = true;
                                     } else {
                                         filtered.add(id);
@@ -307,11 +341,27 @@ public class ProtocolLibManager {
                     return;
 
                 try {
-                    int entityId = event.getPacket().getIntegers().read(0);
-                    Entity entity = protocolManager.getEntityFromID(event.getPlayer().getWorld(), entityId);
+                    PacketContainer packet = event.getPacket();
+                    int entityId = packet.getIntegers().read(0);
 
-                    if (entity instanceof Player target
-                            && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(event.getPlayer(), target)) {
+                    // A SPAWN_ENTITY packet carries the entity's own UUID and type, so learn
+                    // player id -> uuid here: it keeps the cache correct across respawns and
+                    // dimension changes without ever touching the world from this thread.
+                    UUID targetId = null;
+                    try {
+                        if (packet.getEntityTypeModifier().read(0) == org.bukkit.entity.EntityType.PLAYER) {
+                            targetId = packet.getUUIDs().read(0);
+                            // Only remember ids of real online players. Player-type NPCs
+                            // (Citizens etc.) get a new id on every respawn and never quit,
+                            // so storing them would grow the map without bound.
+                            if (targetId != null && Bukkit.getPlayer(targetId) != null)
+                                ProtocolLibManager.this.playerEntityIds.put(entityId, targetId);
+                        }
+                    } catch (Exception ignored) {
+                        targetId = ProtocolLibManager.this.playerIdFor(entityId);
+                    }
+
+                    if (ProtocolLibManager.this.mustHide(event.getPlayer(), targetId)) {
                         event.setCancelled(true);
                     }
                 } catch (Exception ignored) {
