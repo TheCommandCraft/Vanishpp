@@ -179,7 +179,6 @@ public class VelocityConfigManager {
 
         // Hooks
         s.voiceChatEnabled = bool("hooks.simple-voice-chat.enabled", true);
-        s.voiceChatIsolate = bool("hooks.simple-voice-chat.isolate-vanished-players", true);
         s.voiceChatVanishedHearOthers = bool("hooks.simple-voice-chat.vanished-can-hear-others", false);
 
         // Permissions / Layered

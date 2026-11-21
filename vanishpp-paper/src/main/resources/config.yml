@@ -187,9 +187,9 @@ default-rules:
 # --- [ HOOKS ] ---
 hooks:
   simple-voice-chat:
+    # Only players who can see a vanished player hear them, in proximity chat and in groups.
+    # false turns the hook off. Turning it back on needs a restart.
     enabled: true
-    # Filter actual voice packets; authorized seers can still hear vanished speakers.
-    isolate-vanished-players: true
     # Vanished players also hear visible players near them. Visible players still can't hear vanished ones.
     vanished-can-hear-others: false
   essentials:

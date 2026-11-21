@@ -89,14 +89,8 @@ class PermissionManagerTest {
         perms.addPermission(uuid, "vanishpp.abilities");
         assertTrue(perms.hasPermission(uuid, "vanishpp.silentchest"));
         assertTrue(perms.hasPermission(uuid, "vanishpp.chat"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.notarget"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.nohunger"));
         assertTrue(perms.hasPermission(uuid, "vanishpp.nightvision"));
         assertTrue(perms.hasPermission(uuid, "vanishpp.fly"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.no-raid"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.no-sculk"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.no-trample"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.join-vanished"));
     }
 
     @Test
@@ -117,8 +111,6 @@ class PermissionManagerTest {
         assertTrue(perms.hasPermission(uuid, "vanishpp.ignorewarning"));
         assertTrue(perms.hasPermission(uuid, "vanishpp.rules"));
         assertTrue(perms.hasPermission(uuid, "vanishpp.rules.others"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.pickup"));
-        assertTrue(perms.hasPermission(uuid, "vanishpp.pickup.others"));
     }
 
     @Test

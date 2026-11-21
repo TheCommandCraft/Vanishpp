@@ -295,6 +295,9 @@ commands:
 # --- [ HELP MENU ] ---
 help:
   header: "\n&6&l      Vanish++ Help Menu      "
+  button-wiki: "&b&l[Wiki]"
+  button-wiki-hover: "&7Open the Vanish++ wiki: guides for every command and feature."
+  button-wiki-page-hover: "&7Open the wiki page for this command."
   subheader: "&7Click a command to see details:"
   footer: "&7-------------------------------"
   unknown-command: "&cUnknown command '&f%command%&c'. Showing full list:"

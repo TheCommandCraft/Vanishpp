@@ -300,6 +300,9 @@ commands:
 # --- [ 帮助菜单 ] ---
 help:
   header: "\n&6&l      Vanish++ 帮助菜单      "
+  button-wiki: '&b&l[Wiki]'
+  button-wiki-hover: '&7打开 Vanish++ Wiki：每个命令和功能的说明。'
+  button-wiki-page-hover: '&7打开此命令的 Wiki 页面。'
   subheader: '&7点击命令查看详情：'
   footer: '&7-------------------------------'
   unknown-command: '&c未知命令 ''&f%command%&c''。显示完整列表：'

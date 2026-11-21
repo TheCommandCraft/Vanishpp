@@ -42,7 +42,7 @@ class VoiceVisibilityTest {
         PlayerMock speaker = server.addPlayer("Speaker");
         PlayerMock listener = server.addPlayer("Listener");
         plugin.applyVanishEffects(speaker);
-        plugin.getConfigManager().voiceChatIsolate = true;
+        plugin.getConfigManager().voiceChatEnabled = true;
         Map<Class<?>, Consumer<Object>> handlers = register();
 
         LocationalSoundPacketEvent hidden = packet(speaker, listener);
@@ -66,7 +66,7 @@ class VoiceVisibilityTest {
         PlayerMock vanished = server.addPlayer("Vanished");
         PlayerMock visible = server.addPlayer("Visible");
         plugin.applyVanishEffects(vanished);
-        plugin.getConfigManager().voiceChatIsolate = true;
+        plugin.getConfigManager().voiceChatEnabled = true;
         plugin.getConfigManager().voiceChatVanishedHearOthers = false;
         Map<Class<?>, Consumer<Object>> handlers = register();
 
@@ -83,7 +83,7 @@ class VoiceVisibilityTest {
         dispatch(handlers, leaked);
         verify(leaked).cancel(); // the visible player still never hears the vanished one
 
-        plugin.getConfigManager().voiceChatIsolate = false;
+        plugin.getConfigManager().voiceChatEnabled = false;
         plugin.voiceAudience.refresh();
         LocationalSoundPacketEvent off = packet(vanished, visible);
         dispatch(handlers, off);
@@ -121,7 +121,7 @@ class VoiceVisibilityTest {
         server.addPlayer(speaker);
         server.addPlayer(listener);
         plugin.applyVanishEffects(speaker);
-        plugin.getConfigManager().voiceChatIsolate = true;
+        plugin.getConfigManager().voiceChatEnabled = true;
         Map<Class<?>, Consumer<Object>> handlers = register();
         plugin.updateVanishVisibility(speaker);
         LocationalSoundPacketEvent hidden = packet(speaker, listener);
@@ -166,7 +166,7 @@ class VoiceVisibilityTest {
         server.addPlayer(listener);
         listener.setOp(true);
         plugin.applyVanishEffects(speaker);
-        plugin.getConfigManager().voiceChatIsolate = true;
+        plugin.getConfigManager().voiceChatEnabled = true;
         plugin.getConfigManager().layeredPermsEnabled = false;
         Map<Class<?>, Consumer<Object>> handlers = register();
         List<Runnable> queued = new ArrayList<>();
@@ -216,7 +216,7 @@ class VoiceVisibilityTest {
         PlayerMock listener = server.addPlayer("Listener");
         listener.setOp(true);
         plugin.applyVanishEffects(speaker);
-        plugin.getConfigManager().voiceChatIsolate = true;
+        plugin.getConfigManager().voiceChatEnabled = true;
         plugin.voiceAudience.refresh();
         assertTrue(plugin.voiceAudience.canHear(listener.getUniqueId(), speaker.getUniqueId()));
         LuckPerms api = mock(LuckPerms.class, RETURNS_DEEP_STUBS);

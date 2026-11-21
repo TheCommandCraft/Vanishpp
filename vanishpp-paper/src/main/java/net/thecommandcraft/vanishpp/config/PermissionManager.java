@@ -30,14 +30,8 @@ public class PermissionManager {
         Set<String> abilities = new HashSet<>();
         abilities.add("vanishpp.silentchest");
         abilities.add("vanishpp.chat");
-        abilities.add("vanishpp.notarget");
-        abilities.add("vanishpp.nohunger");
         abilities.add("vanishpp.nightvision");
         abilities.add("vanishpp.fly");
-        abilities.add("vanishpp.no-raid");
-        abilities.add("vanishpp.no-sculk");
-        abilities.add("vanishpp.no-trample");
-        abilities.add("vanishpp.join-vanished");
         CUSTOM_GROUPS.put("vanishpp.abilities", abilities);
 
         // Group: vanishpp.management
@@ -46,8 +40,6 @@ public class PermissionManager {
         management.add("vanishpp.ignorewarning");
         management.add("vanishpp.rules");
         management.add("vanishpp.rules.others");
-        management.add("vanishpp.pickup");
-        management.add("vanishpp.pickup.others");
         CUSTOM_GROUPS.put("vanishpp.management", management);
 
         // Group: vanishpp.core

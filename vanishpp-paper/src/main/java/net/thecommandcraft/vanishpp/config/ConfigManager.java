@@ -57,7 +57,7 @@ public class ConfigManager {
     public boolean defaultSpectatorOnVanish;
 
     // Hooks & System
-    public boolean voiceChatEnabled, voiceChatIsolate, voiceChatVanishedHearOthers, layeredPermsEnabled, updateCheckerEnabled;
+    public boolean voiceChatEnabled, voiceChatVanishedHearOthers, layeredPermsEnabled, updateCheckerEnabled;
     public boolean updateCheckerShowBeta, updateCheckerShowAlpha;
     /** Lowest update priority that is announced in game and loudly in the console. */
     public net.thecommandcraft.vanishpp.common.update.UpdatePriority updateNotifyLevel =
@@ -255,7 +255,6 @@ public class ConfigManager {
         preventPotions = config.getBoolean("invisibility-features.prevent-potion-effects", false);
         invseeShiftClick = config.getBoolean("invisibility-features.invsee-shift-click", true);
         voiceChatEnabled = config.getBoolean("hooks.simple-voice-chat.enabled", true);
-        voiceChatIsolate = config.getBoolean("hooks.simple-voice-chat.isolate-vanished-players", true);
         voiceChatVanishedHearOthers = config.getBoolean("hooks.simple-voice-chat.vanished-can-hear-others", false);
         simulateEssentialsMessages = config.getBoolean("hooks.essentials.simulate-join-leave", false);
         layeredPermsEnabled = config.getBoolean("permissions.layered-permissions-enabled", true);
@@ -382,7 +381,6 @@ public class ConfigManager {
 
         // Hooks
         voiceChatEnabled     = s.voiceChatEnabled;
-        voiceChatIsolate     = s.voiceChatIsolate;
         voiceChatVanishedHearOthers = s.voiceChatVanishedHearOthers;
 
         // Permissions / Layered

@@ -1,5 +1,8 @@
 package net.thecommandcraft.vanishpp.commands;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import net.thecommandcraft.vanishpp.utils.LanguageManager;
 import org.bukkit.command.Command;
@@ -17,6 +20,28 @@ import java.util.Map;
 public class VanishHelpCommand implements CommandExecutor, TabCompleter {
 
     private final Vanishpp plugin;
+
+    static final String WIKI = "https://github.com/TheCommandCraft/Vanishpp/wiki";
+    /** Where each command is documented: a feature page, or its section on the Commands page. */
+    static final Map<String, String> WIKI_PAGES = Map.of(
+            "vanish", "Vanish-Basics",
+            "vanishrules", "Personal-Rules-%28VRules%29",
+            "vanishconfig", "Commands#vconfig",
+            "vanishlist", "Commands#vlist",
+            "vperms", "Commands#vperms",
+            "vanishignore", "Commands#vignore",
+            "vanishchat", "Commands#vchat",
+            "vanishreload", "Commands#vreload",
+            "vanishhelp", "Commands#vhelp");
+
+    /** The [Wiki] button: opens the wiki, or the page for one command. */
+    private Component wikiButton(String page) {
+        LanguageManager lm = plugin.getConfigManager().getLanguageManager();
+        return plugin.getMessageManager().parse(lm.getMessage("help.button-wiki"), null)
+                .clickEvent(ClickEvent.openUrl(page == null ? WIKI : WIKI + "/" + page))
+                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                        lm.getMessage(page == null ? "help.button-wiki-hover" : "help.button-wiki-page-hover"), null)));
+    }
 
     // Detailed help info: command -> {description, usage, notes}
     private static final Map<String, String[]> DETAILED_HELP = Map.ofEntries(
@@ -113,6 +138,7 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
         addHelpLine(sender, "vanishignore", "/vignore", lm.getMessage("help.cmd-vignore"));
         addHelpLine(sender, "vanishchat", "/vchat", lm.getMessage("help.cmd-vchat"));
         addHelpLine(sender, "vanishreload", "/vreload", lm.getMessage("help.cmd-vreload"));
+        sender.sendMessage(Component.text(" ").append(wikiButton(null)));
 
         plugin.getMessageManager().sendMessage(sender, lm.getMessage("help.footer"));
         return true;
@@ -149,7 +175,8 @@ public class VanishHelpCommand implements CommandExecutor, TabCompleter {
                 + "<click:suggest_command:/" + cmdShortName
                 + "><hover:show_text:'<green>Fill in chat box'><green><bold>[USE COMMAND]</bold></green></hover></click>";
 
-        plugin.getMessageManager().sendMessage(sender, buttons);
+        sender.sendMessage(plugin.getMessageManager().parse(buttons, null)
+                .append(Component.text("   ")).append(wikiButton(WIKI_PAGES.get(cmdName))));
         plugin.getMessageManager().sendMessage(sender, lm.getMessage("help.footer"));
         return true;
     }

@@ -20,7 +20,8 @@ module.exports = [
       t.check(hooks.includes('"simple-voice-chat"') && hooks.includes('"essentials"'), `hooks level, got ${hooks}`);
       t.check(!hooks.includes('"enabled"'), `hooks level must not list deeper options, got ${hooks}`);
       const svc = await names(s, '/vconfig hooks simple-voice-chat ');
-      t.check(svc.includes('"vanished-can-hear-others"') && svc.includes('"isolate-vanished-players"'), `simple-voice-chat level, got ${svc}`);
+      t.check(svc.includes('"vanished-can-hear-others"') && svc.includes('"enabled"'), `simple-voice-chat level, got ${svc}`);
+      t.check(!svc.includes('isolate-vanished-players'), `the removed isolate setting must not be offered, got ${svc}`);
       const values = await names(s, '/vconfig hooks simple-voice-chat vanished-can-hear-others ');
       t.check(values.includes('"true"') && values.includes('"false"'), `value level, got ${values}`);
 

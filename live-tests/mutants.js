@@ -11,6 +11,7 @@ const PLM = P + 'hooks/ProtocolLibManager.java';
 const HIDER = P + 'utils/PluginHider.java';
 const PERMS = P + 'config/PermissionManager.java';
 const VCONFIG = P + 'commands/VanishConfigCommand.java';
+const HELP = P + 'commands/VanishHelpCommand.java';
 const on = id => `net.thecommandcraft.vanishpp.LiveTestMutant.on("${id}")`;
 
 const mutants = [
@@ -49,10 +50,16 @@ const mutants = [
   { id: 'chat-no-prefix', what: 'the vanished prefix is missing from chat that staff see', tests: ['can_chat'] },
   { id: 'vconfig-flat-tab', what: '/vconfig tab-complete lists every dotted path at once again', tests: ['/vconfig:'] },
   { id: 'vconfig-tree-ignored', what: '/vconfig only accepts dotted paths, not one argument per level', tests: ['/vconfig:'] },
+  { id: 'help-no-wiki', what: '/vhelp has no [Wiki] button', tests: ['/vhelp:'] },
+  { id: 'help-wiki-root', what: "a command's /vhelp page links to the wiki home instead of its own page", tests: ['/vhelp:'] },
   { id: 'vconfig-tab-deeper', what: '/vconfig tab-complete skips a level and lists the options below it', tests: ['/vconfig:'] },
 ];
 
 const edits = [
+  { file: HELP, find: '        sender.sendMessage(Component.text(" ").append(wikiButton(null)));',
+    replace: `        if (!${on('help-no-wiki')}) sender.sendMessage(Component.text(" ").append(wikiButton(null)));` },
+  { file: HELP, find: '.append(wikiButton(WIKI_PAGES.get(cmdName)))',
+    replace: `.append(wikiButton(${on('help-wiki-root')} ? null : WIKI_PAGES.get(cmdName)))` },
   { file: VCONFIG, find: '            List<String> options = children(cfg, target.path());',
     replace: `            List<String> options = ${on('vconfig-flat-tab')} ? new ArrayList<>(cfg.getKeys(true))\n                    : ${on('vconfig-tab-deeper')} ? children(cfg, target.path()).stream().flatMap(k -> cfg.isConfigurationSection((target.path().isEmpty() ? "" : target.path() + ".") + k) ? children(cfg, (target.path().isEmpty() ? "" : target.path() + ".") + k).stream() : java.util.stream.Stream.of(k)).collect(java.util.stream.Collectors.toCollection(ArrayList::new))\n                    : children(cfg, target.path());` },
   { file: VCONFIG, find: '        Target target = resolve(cfg, args, args.length);',

@@ -130,9 +130,17 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Check for --confirm flag
+        // Check for --confirm flag. The value is everything in between, so text values may contain spaces;
+        // surrounding quotes are dropped ("&c[ADMIN] " keeps its trailing space).
         boolean confirmed = args[args.length - 1].equals("--confirm");
-        String valInput = args[target.next()];
+        int valueEnd = confirmed ? args.length - 1 : args.length;
+        if (valueEnd <= target.next()) {
+            plugin.getMessageManager().sendMessage(sender, lm.getMessage("config.usage"));
+            return true;
+        }
+        String valInput = String.join(" ", Arrays.copyOfRange(args, target.next(), valueEnd));
+        if (valInput.length() >= 2 && valInput.startsWith("\"") && valInput.endsWith("\""))
+            valInput = valInput.substring(1, valInput.length() - 1);
 
         // Sensitive path protection
         if (isSensitive(path) && !confirmed) {
@@ -140,7 +148,8 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
                     .replace("%path%", path));
             Component confirmBtn = plugin.getMessageManager().parse(
                     lm.getMessage("config.button-confirm-change"), null)
-                    .clickEvent(ClickEvent.runCommand("/vconfig " + path + " " + valInput + " --confirm"))
+                    .clickEvent(ClickEvent.runCommand("/vconfig " + path + " "
+                            + (valInput.contains(" ") ? "\"" + valInput + "\"" : valInput) + " --confirm"))
                     .hoverEvent(HoverEvent.showText(
                             plugin.getMessageManager().parse(
                                     lm.getMessage("config.button-confirm-change-hover")

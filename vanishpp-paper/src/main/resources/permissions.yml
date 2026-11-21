@@ -15,7 +15,7 @@
 # --- WILDCARDS (Groups) ---
 # - 'vanishpp.*'             : Grants EVERYTHING.
 # - 'vanishpp.core'          : Grants vanish, vanish.others, see.
-# - 'vanishpp.abilities'     : Grants all passive abilities (fly, nightvision, nohunger, etc.).
+# - 'vanishpp.abilities'     : Grants all passive abilities (fly, nightvision, silent chests, vanished chat).
 # - 'vanishpp.management'    : Grants all admin tools (vperms, vrules, vignore, etc.).
 #
 # --- Core Commands ---
@@ -35,14 +35,8 @@
 # --- Abilities (Bypass Restrictions) ---
 # - 'vanishpp.silentchest'   : Open chests silently (no animation).
 # - 'vanishpp.chat'          : Chat while vanished (bypasses confirmation).
-# - 'vanishpp.notarget'      : Mobs will not target you.
-# - 'vanishpp.nohunger'      : You will not lose hunger.
 # - 'vanishpp.nightvision'   : You get Night Vision automatically.
 # - 'vanishpp.fly'           : You can fly automatically.
-# - 'vanishpp.no-raid'       : You won't trigger Raids.
-# - 'vanishpp.no-sculk'      : You won't trigger Sculk Sensors.
-# - 'vanishpp.no-trample'    : You won't trample Crops/Turtle Eggs.
-# - 'vanishpp.join-vanished' : Join the server vanished automatically.
 #
 # ========================= EXAMPLE =========================
 # permissions:

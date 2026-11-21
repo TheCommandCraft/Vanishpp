@@ -29,6 +29,15 @@ public class ConfigUpdater {
             List<String> outputLines = new ArrayList<>(currentLines);
             boolean modified = false;
 
+            for (String key : REMOVED_KEYS) {
+                if (!currentYaml.contains(key) || templateYaml.contains(key) || currentYaml.isConfigurationSection(key)) continue;
+                if (removeKeyLine(key, outputLines)) {
+                    modified = true;
+                    currentYaml = loadFromLines(outputLines);
+                    plugin.getLogger().info("Removed the setting " + key + " from " + configFile.getName() + ": it no longer exists.");
+                }
+            }
+
             // Use a list of all keys from template
             Set<String> templateKeys = templateYaml.getKeys(true);
             
@@ -127,6 +136,24 @@ public class ConfigUpdater {
             }
             return false;
         }
+    }
+
+    /** Settings that earlier versions wrote and nothing reads anymore; they are removed so /vconfig stops offering them. */
+    private static final List<String> REMOVED_KEYS = List.of(
+            "hooks.simple-voice-chat.isolate-vanished-players"); // 1.2.0.1: voice filtering is always on while the hook is enabled
+
+    /** Removes a single-line key and the comment lines directly above it. */
+    private boolean removeKeyLine(String fullPath, List<String> lines) {
+        int idx = findLineForKey(fullPath, lines);
+        if (idx < 0) return false;
+        int indent = getIndent(lines.get(idx));
+        int next = idx + 1;
+        while (next < lines.size() && (lines.get(next).trim().isEmpty() ? false : getIndent(lines.get(next)) > indent)) next++;
+        if (next != idx + 1) return false; // the key has nested lines (a block value); leave it alone
+        int start = idx;
+        while (start > 0 && lines.get(start - 1).trim().startsWith("#") && getIndent(lines.get(start - 1)) == indent) start--;
+        lines.subList(start, idx + 1).clear();
+        return true;
     }
 
     private int findLineForKey(String fullPath, List<String> lines) {

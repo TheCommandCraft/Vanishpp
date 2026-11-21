@@ -293,4 +293,27 @@ class MigrationTest {
         File backup = new File(plugin.getDataFolder(), "config_backup_v5.yml");
         assertTrue(backup.exists(), "Migration must create a backup of the pre-migration config");
     }
+
+    @Test
+    void configUpdaterRemovesTheIsolateSettingAndItsComment(@TempDir Path tempDir) throws IOException {
+        File configFile = tempDir.resolve("config.yml").toFile();
+        java.nio.file.Files.writeString(configFile.toPath(), String.join("\n",
+                "config-version: 9",
+                "hooks:",
+                "  simple-voice-chat:",
+                "    enabled: true",
+                "    # Filter actual voice packets; authorized seers can still hear vanished speakers.",
+                "    isolate-vanished-players: false",
+                "  essentials:",
+                "    simulate-join-leave: true",
+                ""));
+        new ConfigUpdater(plugin).update(configFile, "config.yml");
+        String text = java.nio.file.Files.readString(configFile.toPath());
+        YamlConfiguration result = YamlConfiguration.loadConfiguration(configFile);
+        assertFalse(result.contains("hooks.simple-voice-chat.isolate-vanished-players"), text);
+        assertFalse(text.contains("Filter actual voice packets"), "the removed setting's comment goes too:\n" + text);
+        assertTrue(result.getBoolean("hooks.simple-voice-chat.enabled"));
+        assertTrue(result.getBoolean("hooks.essentials.simulate-join-leave"), "other settings are kept");
+        assertFalse(result.getBoolean("hooks.simple-voice-chat.vanished-can-hear-others", true), "new settings are still added");
+    }
 }

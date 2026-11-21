@@ -68,7 +68,6 @@ public class ProxyConfigSnapshot {
 
     // ── Hooks ────────────────────────────────────────────────────────────────
     public boolean voiceChatEnabled = true;
-    public boolean voiceChatIsolate = true;
     public boolean voiceChatVanishedHearOthers = false;
 
     // ── Permissions / Layered ────────────────────────────────────────────────
@@ -211,7 +210,6 @@ public class ProxyConfigSnapshot {
             case "messages.staff-notify.enabled"                    -> s.staffNotifyEnabled = bool(val);
             // Hooks
             case "hooks.simple-voice-chat.enabled"                  -> s.voiceChatEnabled = bool(val);
-            case "hooks.simple-voice-chat.isolate-vanished-players" -> s.voiceChatIsolate = bool(val);
             case "hooks.simple-voice-chat.vanished-can-hear-others" -> s.voiceChatVanishedHearOthers = bool(val);
             case "hooks.essentials.simulate-join-leave"             -> s.simulateEssentialsMessages = bool(val);
             // Permissions

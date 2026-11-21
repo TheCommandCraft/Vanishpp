@@ -8,6 +8,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - **Vanished players can hear everyone nearby in Simple Voice Chat.** Set `hooks.simple-voice-chat.vanished-can-hear-others` to `true` to let vanished players hear visible players. Visible players still cannot hear vanished ones. The default is `false`, which keeps vanished players isolated as before.
+- **`/vconfig` can be browsed level by level.** Each argument is one level of the config, for example `/vconfig hooks simple-voice-chat enabled false`, and tab completion only offers the options of the current level. A section on its own lists its options. Dotted paths still work.
+- **`/vhelp` links to the wiki.** The help list has a [Wiki] button, and each command's help page opens that command's wiki page.
+
+### Changed
+- **`/vconfig` text values may contain spaces.** Everything after the option is the value, and surrounding quotes are dropped, so `/vconfig vanish-appearance tab-prefix "&c[ADMIN] "` works.
+- **Permissions that never did anything are removed:** `vanishpp.pickup`, `vanishpp.pickup.others`, `vanishpp.nohunger`, `vanishpp.notarget`, `vanishpp.no-raid`, `vanishpp.no-sculk`, `vanishpp.no-trample` and `vanishpp.join-vanished`. Nothing checked them. These behaviours are set with the `invisibility-features` options and the personal rules, and vanished players always rejoin vanished.
+- **Voice chat isolation is always on while the Simple Voice Chat hook is enabled.** The `isolate-vanished-players` setting is removed, and Vanish++ removes it from existing configs. Turning it off could only reveal vanished players in voice chat groups. `hooks.simple-voice-chat.enabled: false` still turns the hook off, and now takes effect immediately.
 
 ## [1.2.0] - 2026-11-08
 

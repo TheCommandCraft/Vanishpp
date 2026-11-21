@@ -382,6 +382,16 @@ class CommandTest {
     }
 
     @Test
+    void vanishconfig_textValuesMayContainSpaces() {
+        player.setOp(true);
+        player.performCommand("vconfig vanish-appearance tab-prefix \"&c[ADMIN] \"");
+        assertEquals("&c[ADMIN] ", plugin.getConfigManager().getConfig().getString("vanish-appearance.tab-prefix"),
+                "quoted text keeps its spaces");
+        player.performCommand("vconfig vanish-appearance.action-bar.text You are hidden");
+        assertEquals("You are hidden", plugin.getConfigManager().getConfig().getString("vanish-appearance.action-bar.text"));
+    }
+
+    @Test
     void vanishconfig_tabCompletesOneLevelAtATime() {
         player.setOp(true);
         var command = plugin.getCommand("vanishconfig");
@@ -397,7 +407,7 @@ class CommandTest {
         assertEquals(java.util.List.of("hooks"), tab.apply(new String[]{"hoo"}));
         java.util.List<String> hooks = tab.apply(new String[]{"hooks", ""});
         assertTrue(hooks.contains("simple-voice-chat") && hooks.contains("essentials"), "hooks: " + hooks);
-        assertEquals(java.util.List.of("enabled", "isolate-vanished-players", "vanished-can-hear-others"),
+        assertEquals(java.util.List.of("enabled", "vanished-can-hear-others"),
                 tab.apply(new String[]{"hooks", "simple-voice-chat", ""}));
         assertEquals(java.util.List.of("true", "false"),
                 tab.apply(new String[]{"hooks", "simple-voice-chat", "enabled", ""}));

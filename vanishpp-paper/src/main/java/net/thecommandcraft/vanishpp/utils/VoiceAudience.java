@@ -22,7 +22,7 @@ public final class VoiceAudience {
 
     public void refresh() {
         var config = plugin.getConfigManager();
-        settings = new Settings(config.voiceChatIsolate, config.layeredPermsEnabled, config.voiceChatVanishedHearOthers);
+        settings = new Settings(config.voiceChatEnabled, config.layeredPermsEnabled, config.voiceChatVanishedHearOthers);
         java.util.Set<UUID> online = new java.util.HashSet<>();
         plugin.getServer().getOnlinePlayers().forEach(player -> online.add(player.getUniqueId()));
         departing.removeIf(uuid -> !online.contains(uuid));
