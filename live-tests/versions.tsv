@@ -13,4 +13,6 @@
 1.21.11  132  5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba  21  1.21.11
 26.1.2   74   1d70b1dab9cf4a6de615209a536f3a45a2186240253c428213ce2188ab95e5f7  25  26.1
 26.2     135  ef3dbc68b013deafdbbee3bebf1ba351671ebcda94a8f136809b7532d5ba2fe1  25  26.1
-26.3     257  64a5bd44910cb982b2648e9a35036cc95a6de4d561e15812aecf5411f84f7b01  25  26.1
+# 26.3: off for now. mineflayer can't join 26.3 yet, and 26.1 bots through ViaVersion/ViaBackwards 5.12.1-5.12.2 get kicked
+# for invalid movement after a teleport, even without Vanish++. Turn it back on with a newer mineflayer or ViaVersion.
+#26.3     257  64a5bd44910cb982b2648e9a35036cc95a6de4d561e15812aecf5411f84f7b01  25  26.1

@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 **Priority:** feature
 
-Vanish++ no longer touches your scoreboard teams or tab names, and staff prefixes now sit in front of the prefixes from your other plugins. This release also brings a few small features, fixes from the community, and testing on every supported Paper version from 1.20.6 to 26.3. Thanks to @Bastion-F for #46 and #48, and to BramvanZijp for the team report.
+Vanish++ no longer touches your scoreboard teams or tab names, and staff prefixes now sit in front of the prefixes from your other plugins. This release also brings a few small features, fixes from the community, and automated testing on every Paper version from 1.20.6 to 26.2. 26.3 was checked by hand. Thanks to @Bastion-F for #46 and #48, and to BramvanZijp for the team report.
 
 ### Added
 - **Vanished players can hear everyone nearby in Simple Voice Chat.** Set `hooks.simple-voice-chat.vanished-can-hear-others` to `true` to let vanished players hear visible players. Visible players still cannot hear vanished ones. The default is `false`, which keeps vanished players isolated as before.
