@@ -91,7 +91,7 @@ class Server {
   errorsSince(from) {
     return this.lines.slice(from).filter(l =>
       /(WARN|ERROR)\]/.test(l) && /exception|error|Vanishpp|ProtocolLib|LiveTestHelper/i.test(l)
-      && !/Setup Check|NOT installed|ProtocolLib NOT found|UpdateChecker|offline mode|server is running in offline|has not yet been tested/i.test(l));
+      && !/Setup Check|NOT installed|ProtocolLib NOT found|\*\*\*|UpdateChecker|offline mode|server is running in offline|has not yet been tested/i.test(l));
   }
 
   async stop() {

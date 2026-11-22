@@ -2,7 +2,7 @@ name: Live Tests
 
 # Boots a real Paper server with the built plugin inside the runner and checks it with bot players.
 # Everything runs on the runner itself (127.0.0.1); no external server is involved.
-# - live: every PR and push to main, against the real plugin jar.
+# - live: every PR and push to main, against the real plugin jar, on every Paper version in live-tests/versions.tsv.
 # - mutants: tests the tests (every mutant must be caught). Runs when the tests or the plugin code they
 #   patch change, weekly, and on demand.
 on:
@@ -30,12 +30,15 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tests: ${{ steps.diff.outputs.tests }}
+      versions: ${{ steps.versions.outputs.list }}
     # tests=true when the tests changed or the PR touches a plugin file that a mutant patches.
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - id: versions
+        run: echo "list=$(awk '!/^#/ && NF {print $1}' live-tests/versions.tsv | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
       - id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -50,16 +53,24 @@ jobs:
           fi
 
   live:
+    needs: changes
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ${{ fromJSON(needs.changes.outputs.versions) }}
+    name: live (${{ matrix.mc }})
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: |
+            25
+            21
           distribution: 'temurin'
           cache: maven
       - uses: actions/setup-node@v4
@@ -71,23 +82,23 @@ jobs:
         with:
           path: |
             live-tests/.cache
-            live-tests/.work/server/cache
-            live-tests/.work/server/libraries
-            live-tests/.work/server/versions
-          key: live-tests-server-${{ hashFiles('live-tests/run.sh') }}
+            live-tests/.work/server-${{ matrix.mc }}/cache
+            live-tests/.work/server-${{ matrix.mc }}/libraries
+            live-tests/.work/server-${{ matrix.mc }}/versions
+          key: live-tests-server-${{ matrix.mc }}-${{ hashFiles('live-tests/run.sh', 'live-tests/versions.tsv') }}
       - name: Build plugin
         run: mvn -B -q -DskipTests package -pl vanishpp-paper -am
       - name: Install test dependencies
         working-directory: live-tests
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Run live tests
-        run: live-tests/run.sh
+        run: JAVA="$JAVA_HOME_21_X64/bin/java" JAVA25="$JAVA_HOME_25_X64/bin/java" live-tests/run.sh --mc "${{ matrix.mc }}"
       - name: Upload server console log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: live-tests-console
-          path: live-tests/.work/server/console.log
+          name: live-tests-console-${{ matrix.mc }}
+          path: live-tests/.work/server-${{ matrix.mc }}/console.log
           if-no-files-found: ignore
 
   mutants:
@@ -104,7 +115,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: |
+            25
+            21
           distribution: 'temurin'
           cache: maven
       - uses: actions/setup-node@v4
@@ -116,19 +129,19 @@ jobs:
         with:
           path: |
             live-tests/.cache
-            live-tests/.work/server/cache
-            live-tests/.work/server/libraries
-            live-tests/.work/server/versions
-          key: live-tests-server-${{ hashFiles('live-tests/run.sh') }}
+            live-tests/.work/server-1.21.11/cache
+            live-tests/.work/server-1.21.11/libraries
+            live-tests/.work/server-1.21.11/versions
+          key: live-tests-server-1.21.11-${{ hashFiles('live-tests/run.sh', 'live-tests/versions.tsv') }}
       - name: Install test dependencies
         working-directory: live-tests
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Run live tests and every mutant
-        run: live-tests/run.sh --mutants
+        run: JAVA="$JAVA_HOME_21_X64/bin/java" live-tests/run.sh --mutants
       - name: Upload server console log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: live-tests-mutants-console
-          path: live-tests/.work/server/console.log
+          path: live-tests/.work/server-1.21.11/console.log
           if-no-files-found: ignore

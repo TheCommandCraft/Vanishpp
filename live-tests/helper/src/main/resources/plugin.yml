@@ -1,7 +1,7 @@
 name: LiveTestHelper
 version: '1'
 main: net.thecommandcraft.livetest.LiveTestHelper
-api-version: '1.21'
+api-version: '1.20.6'
 description: Test-only helper for the Vanish++ live bot tests.
 commands:
   ltnames:

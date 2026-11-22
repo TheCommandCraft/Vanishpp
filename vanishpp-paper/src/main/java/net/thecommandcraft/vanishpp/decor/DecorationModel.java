@@ -142,6 +142,16 @@ public final class DecorationModel<P, C> {
         }
     }
 
+    /**
+     * A team the client already has from before this model existed (Vanish++ was reloaded while the viewer stayed
+     * online). Read from the viewer's scoreboard, which the client mirrors.
+     */
+    public synchronized void seedTeam(String team, P teamParams, Collection<String> entries) {
+        clientTeams.add(team);
+        params.put(team, teamParams);
+        for (String entry : entries) { intended.put(entry, team); actual.put(entry, team); }
+    }
+
     /** A tab entry the client is told about (player info "add"). */
     public synchronized void onListed(UUID subject) { listed.add(subject); }
 
@@ -236,15 +246,27 @@ public final class DecorationModel<P, C> {
         return out;
     }
 
-    /** Undoes every change on the client (used when Vanish++ disables). */
+    /**
+     * Undoes every change on the client (used when Vanish++ disables): private teams go, and every entry is put on the
+     * team the server wants, including team changes a hidden player made, so the client ends up exactly as it would
+     * be without Vanish++.
+     */
     public synchronized List<Object> clear() {
         List<Object> out = new ArrayList<>();
-        for (String entry : List.copyOf(privateTeams.keySet())) {
-            dropPrivate(entry, out);
+        for (String entry : List.copyOf(privateTeams.keySet())) dropPrivate(entry, out);
+        Set<String> entries = new TreeSet<>(intended.keySet());
+        entries.addAll(actual.keySet());
+        for (String entry : entries) {
             String want = intended.get(entry);
-            if (want != null && clientTeams.contains(want)) {
+            if (want != null && !clientTeams.contains(want)) want = null;
+            String has = actual.get(entry);
+            if (Objects.equals(want, has)) continue;
+            if (want != null) {
                 actual.put(entry, want);
                 out.add(new TeamOp<>(want, JOIN, null, List.of(entry)));
+            } else {
+                actual.remove(entry);
+                out.add(new TeamOp<>(has, LEAVE, null, List.of(entry)));
             }
         }
         for (UUID id : List.copyOf(decorated)) {

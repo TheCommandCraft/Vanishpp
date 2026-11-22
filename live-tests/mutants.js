@@ -56,19 +56,28 @@ const mutants = [
   { id: 'team-server-change', what: 'vanishing takes the player off their own team on the server', tests: ['10-teams: /team: vanishing never changes'] },
   { id: 'tab-server-change', what: 'vanishing overwrites the server tab name', tests: ['10-teams: tab list:'] },
   { id: 'team-no-tag', what: 'staff never get the [V] nametag', tests: ['10-teams: /team: staff see the [V]', '10-teams: /team: staff who lose'] },
-  { id: 'team-tag-replaces-prefix', what: "the [V] nametag replaces the team's own prefix instead of going in front of it", tests: ['10-teams: /team: staff see the [V]'] },
+  { id: 'team-tag-replaces-prefix', what: "the [V] nametag replaces the team's own prefix instead of going in front of it", tests: ['10-teams: /team: staff see the [V]', '07-old-clients: a 1.16.5 client (through ViaBackwards) sees teams'] },
   { id: 'team-no-restore', what: 'clients never get the real team back after a vanished or hidden period', tests: ['10-teams: /team: staff see the [V]', '10-teams: /team: players who cannot see'] },
-  { id: 'team-leak-hidden', what: "team changes of a vanished player reach players who can't see them", tests: ['10-teams: /team: players who cannot see'] },
+  { id: 'team-leak-hidden', what: "team changes of a vanished player reach players who can't see them", tests: ['10-teams: /team: players who cannot see', '07-old-clients: a 1.20.4 client (through ViaBackwards) sees teams'] },
   { id: 'team-unsafe-leave', what: 'leave packets reach clients that have the player on another team (a real client crashes)', tests: ['10-teams: /team: players who cannot see'] },
   { id: 'team-tag-ignores-permission', what: 'the [V] nametag ignores who may see the vanished player', tests: ['10-teams: /team: staff who lose'] },
   { id: 'tab-no-prefix', what: 'staff never get the [VANISHED] tab prefix', tests: ['10-teams: tab list:'] },
   { id: 'tab-prefix-replaces-name', what: "the [VANISHED] tab prefix replaces another plugin's tab name", tests: ['10-teams: tab list:'] },
+  { id: 'uninstall-leaves-prefixes', what: 'disabling Vanish++ leaves [V] and [VANISHED] on staff clients', tests: ['13-uninstall: uninstall:'] },
+  { id: 'reload-forgets-teams', what: "a reloaded Vanish++ doesn't know the teams clients already have", tests: ['13-uninstall: reload:'] },
+  { id: 'reenable-skips-online', what: 'a reloaded Vanish++ skips players who are already online', tests: ['13-uninstall: reload:'] },
   { id: 'help-no-wiki', what: '/vhelp has no [Wiki] button', tests: ['/vhelp:'] },
   { id: 'help-wiki-root', what: "a command's /vhelp page links to the wiki home instead of its own page", tests: ['/vhelp:'] },
   { id: 'vconfig-tab-deeper', what: '/vconfig tab-complete skips a level and lists the options below it', tests: ['/vconfig:'] },
 ];
 
 const edits = [
+  { file: DECOR, find: '                        handler.model.seedTeam(team.getName(), nms.paramsOf(team), team.getEntries());',
+    replace: `                        if (!${on('reload-forgets-teams')}) handler.model.seedTeam(team.getName(), nms.paramsOf(team), team.getEntries());` },
+  { file: DECOR, find: '            h.send(h.model.clear());',
+    replace: `            if (!${on('uninstall-leaves-prefixes')}) h.send(h.model.clear());` },
+  { file: DECOR, find: '        for (Player player : Bukkit.getOnlinePlayers()) {\n            Channel channel = nms.channelOf(player);',
+    replace: `        for (Player player : ${on('reenable-skips-online')} ? java.util.List.<Player>of() : Bukkit.getOnlinePlayers()) {\n            Channel channel = nms.channelOf(player);` },
   { file: MAIN, find: '        player.setMetadata("vanished", new FixedMetadataValue(this, true));\n        refreshDecorations();\n',
     replace: `        player.setMetadata("vanished", new FixedMetadataValue(this, true));\n        refreshDecorations();\n`
       + `        if (${on('team-server-change')}) { var lt = Bukkit.getScoreboardManager().getMainScoreboard().getEntryTeam(player.getName()); if (lt != null) lt.removeEntry(player.getName()); }\n`

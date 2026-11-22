@@ -41,6 +41,15 @@ public final class LiveTestHelper extends JavaPlugin {
                     + " sleepingIgnored=" + p.isSleepingIgnored());
             return true;
         }
+        // ltprobe plugin <disable|enable> <name>: what /reload and plugin managers do to one plugin at runtime.
+        if (args.length == 3 && args[0].equals("plugin")) {
+            var target = Bukkit.getPluginManager().getPlugin(args[2]);
+            if (target == null) { getLogger().info("LTPROBE plugin " + args[2] + " missing"); return true; }
+            if (args[1].equals("disable")) Bukkit.getPluginManager().disablePlugin(target);
+            else Bukkit.getPluginManager().enablePlugin(target);
+            getLogger().info("LTPROBE plugin " + args[2] + " enabled=" + target.isEnabled());
+            return true;
+        }
         // ltprobe listname <player> [text|reset]: sets the tab-list name like another plugin would (EssentialsX
         // nicknames, tab plugins), or prints the server's current one.
         if (args.length >= 2 && args[0].equals("listname")) {

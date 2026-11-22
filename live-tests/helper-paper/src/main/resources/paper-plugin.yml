@@ -1,5 +1,5 @@
 name: LiveTestPaperPlugin
 version: '1'
 main: net.thecommandcraft.livetest.paper.LiveTestPaperPlugin
-api-version: '1.21'
+api-version: '1.20.6'
 description: Test-only Paper plugin for the Vanish++ live bot tests.

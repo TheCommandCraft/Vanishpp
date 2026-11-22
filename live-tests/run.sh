@@ -2,14 +2,13 @@
 # Live bot tests for Vanish++. One Paper server and one pool of bots serve the whole run.
 #   live-tests/run.sh [path/to/vanishpp.jar] [--only <text>] [--verbose]   test the built plugin
 #   live-tests/run.sh --mutants [--only <text>]                            test the tests (see README)
-# Needs Java 21+ (JAVA=/path/to/java), Maven (MVN=/path/to/mvn) and Node 20+. Downloads are checksum-pinned.
+#   add --mc <version> for another Paper version (versions.tsv), or --all-versions for every one in turn
+# Needs Java 21+ (JAVA=/path/to/java; JAVA25=... for Minecraft 26.x), Maven (MVN=/path/to/mvn) and Node 20+. Downloads are checksum-pinned.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PAPER_VERSION=1.21.11
-PAPER_BUILD=132
-PAPER_SHA256=5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba
-PAPER_URL="https://fill-data.papermc.io/v1/objects/$PAPER_SHA256/paper-$PAPER_VERSION-$PAPER_BUILD.jar"
+# Paper versions: see versions.tsv. --mc <version> picks one (default below), --all-versions runs them all in turn.
+DEFAULT_MC=1.21.11
 PL_VERSION=5.4.0
 PL_SHA256=ee2e7ab9b5386f2d103081c4d108e61b1035df2ca692b53d6e2409fb1f5caccf
 PL_URL="https://github.com/dmulloy2/ProtocolLib/releases/download/$PL_VERSION/ProtocolLib.jar"
@@ -24,20 +23,43 @@ TAB_VERSION=6.2.1
 TAB_SHA256=0b6a21af6fd3b113c05821daaed00ff92234a84ca94b29b3aec0ef1bd313b8a9
 TAB_URL="https://cdn.modrinth.com/data/gG7VFbG0/versions/Bu3K2CAM/TAB%20v6.2.1.jar"
 JAVA=${JAVA:-java}
+JAVA25=${JAVA25:-$JAVA} # Minecraft 26.x needs Java 25
 MVN=${MVN:-mvn}
 
 MUTANTS=false
 PLUGIN=""
+MC=$DEFAULT_MC
+ALL=false
 pass=()
+orig_args=("$@")
 while [[ $# -gt 0 ]]; do
   case $1 in
     --mutants) MUTANTS=true ;;
+    --mc) MC=$2; shift ;;
+    --all-versions) ALL=true ;;
     --only) pass+=(--only "$2"); shift ;;
     --verbose) pass+=(--verbose) ;;
     *) PLUGIN=$1 ;;
   esac
   shift
 done
+
+if $ALL; then # every version in turn, one server at a time; stops at the first failing version
+  for v in $(awk '!/^#/ && NF {print $1}' versions.tsv); do
+    rest=(); skip=false
+    for a in "${orig_args[@]}"; do
+      if $skip; then skip=false; continue; fi
+      case $a in --all-versions) ;; --mc) skip=true ;; *) rest+=("$a") ;; esac
+    done
+    echo "=== Paper $v ==="
+    "$PWD/run.sh" --mc "$v" "${rest[@]}" || { echo "=== Paper $v failed ==="; exit 1; }
+  done
+  exit 0
+fi
+read -r PAPER_VERSION PAPER_BUILD PAPER_SHA256 JAVA_MAJOR BOT_VERSION < <(awk -v v="$MC" '$1 == v' versions.tsv)
+[[ -n ${PAPER_VERSION:-} ]] || { echo "Unknown Minecraft version $MC (see versions.tsv)" >&2; exit 2; }
+PAPER_URL="https://fill-data.papermc.io/v1/objects/$PAPER_SHA256/paper-$PAPER_VERSION-$PAPER_BUILD.jar"
+[[ $JAVA_MAJOR == 25 ]] && JAVA=$JAVA25
 
 fetch() { # url sha256 file
   if [[ -f $3 ]] && echo "$2  $3" | sha256sum -c --quiet - 2>/dev/null; then return; fi
@@ -70,6 +92,6 @@ elif [[ -z $PLUGIN ]]; then
 fi
 [[ -f $PLUGIN ]] || { echo "Vanish++ jar not found; build it first (mvn -DskipTests package) or pass its path" >&2; exit 2; }
 
-exec node runner.js --java "$JAVA" --paper ".cache/paper-$PAPER_VERSION-$PAPER_BUILD.jar" \
+exec node runner.js --java "$JAVA" --mc "$PAPER_VERSION" --bot-version "$BOT_VERSION" --paper ".cache/paper-$PAPER_VERSION-$PAPER_BUILD.jar" \
   --plugin ".cache/ProtocolLib-$PL_VERSION.jar" --plugin ".cache/ViaVersion-$VIA_VERSION.jar" \
   --plugin ".cache/ViaBackwards-$VIA_VERSION.jar" --plugin "$PAPER_HELPER" --plugin "$PLUGIN" --helper "$HELPER" "${pass[@]}"

@@ -122,6 +122,27 @@ class DecorationModelTest {
     }
 
     @Test
+    void afterAReloadTheTeamsTheClientAlreadyHasAreKnown() {
+        model.seedTeam("red", "R-", List.of("V"));
+        states.put("V", State.TAGGED);
+        assertEquals(List.of(op("vanishpp.V", ADD, "[V]R-", "V")), model.refresh(online), "the copy has the real prefix");
+        states.put("V", State.NORMAL);
+        assertEquals(List.of(op("vanishpp.V", REMOVE, null), op("red", JOIN, null, "V")), model.refresh(online),
+                "the client gets the real team back, not no team");
+    }
+
+    @Test
+    void clearAlsoShowsTeamChangesAHiddenPlayerMade() {
+        model.onTeamPacket(op("red", ADD, "R-", "V"));
+        model.onTeamPacket(op("blue", ADD, "B-"));
+        states.put("V", State.HIDDEN);
+        model.onTeamPacket(op("blue", JOIN, null, "V"));
+        assertEquals(List.of(op("blue", JOIN, null, "V")), model.clear());
+        model.onTeamPacket(op("blue", LEAVE, null, "V"));
+        assertEquals(List.of(op("blue", LEAVE, null, "V")), model.clear());
+    }
+
+    @Test
     void clearUndoesEverything() {
         model.onTeamPacket(op("red", ADD, "R-", "V"));
         model.onListed(vId);

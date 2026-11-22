@@ -12,7 +12,14 @@ const { Server } = require('./lib/server');
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; };
 const plugins = args.flatMap((a, i) => (a === '--plugin' ? [args[i + 1]] : []));
-const VERSION = '1.21.11';
+const VERSION = opt('mc', '1.21.11');          // the Paper server's Minecraft version
+const BOT_VERSION = opt('bot-version', VERSION); // the client version the bots join with
+/** Minecraft version at least `v` (versions compare part by part: 1.21.11 > 1.21.9, 26.1 > 1.21.11). */
+const atLeast = v => { const a = VERSION.split('.').map(Number), b = v.split('.').map(Number);
+  for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0); } return true; };
+/** Gamerule names: 1.21.11 renamed them to snake_case. */
+const RULES = { advance_time: 'doDaylightCycle', spawn_mobs: 'doMobSpawning', players_sleeping_percentage: 'playersSleepingPercentage' };
+const rule = name => (atLeast('1.21.11') ? name : RULES[name] || name);
 const PORT = Number(opt('port', '25599'));
 const only = opt('only', '');
 const verbose = args.includes('--verbose');
@@ -42,7 +49,7 @@ class Pool {
   }
 
   async connect(name) {
-    const bot = mineflayer.createBot({ host: '127.0.0.1', port: PORT, username: name, version: VERSION, auth: 'offline' });
+    const bot = mineflayer.createBot({ host: '127.0.0.1', port: PORT, username: name, version: BOT_VERSION, auth: 'offline' });
     bot.chatLog = []; bot.actionBars = []; bot.rawChat = [];
     bot.on('message', m => bot.chatLog.push(m.toString()));
     bot.chatJson = [];
@@ -181,7 +188,7 @@ function makeContext(server, pool, area, used, configChanges, extras) {
       return bots;
     },
     async op(bot) {
-      await server.ask(`op ${bot.username}`, new RegExp(`Made ${bot.username} a server operator|${bot.username} is already`, 'i'));
+      await server.ask(`op ${bot.username}`, new RegExp(`Made ${bot.username} a server operator|${bot.username} is already|already is an operator`, "i"));
       // Vanish++ answers async checks (chat, voice) from a permission cache it refreshes every 10 ticks.
       // Waiting past one refresh keeps the tests about real behaviour instead of that short window.
       await wait(700);
@@ -212,8 +219,8 @@ function makeContext(server, pool, area, used, configChanges, extras) {
      */
     async restartServer(opts) {
       await server.restart(opts);
-      server.cmd('gamerule advance_time false');
-      server.cmd('gamerule spawn_mobs false');
+      server.cmd(`gamerule ${rule('advance_time')} false`);
+      server.cmd(`gamerule ${rule('spawn_mobs')} false`);
       server.cmd(`forceload add ${LOBBY.x - 8} ${LOBBY.z - 8} ${LOBBY.x + 8} ${LOBBY.z + 8}`);
       server.cmd(`forceload add ${area.x - 16} ${area.z - 16} ${area.x + 16} ${area.z + 16}`);
     },
@@ -225,8 +232,8 @@ function makeContext(server, pool, area, used, configChanges, extras) {
       await wait(300); // let the visibility packets reach the clients
     },
     /** Sets a gamerule and fails the test if the server does not confirm it (rule names change between versions). */
-    async gamerule(rule, value) {
-      await server.ask(`gamerule ${rule} ${value}`, new RegExp(`Gamerule ${rule} is now set to: ${value}`));
+    async gamerule(name, value) {
+      await server.ask(`gamerule ${rule(name)} ${value}`, new RegExp(`Gamerule ${rule(name)} is now set to: ${value}`));
     },
     /** Changes a Vanish++ config value for this test; the runner puts `original` back afterwards. */
     async config(key, value, original) {
@@ -278,8 +285,8 @@ async function runTest(server, pool, test, index) {
   server.cmd('kill @e[type=!player]');
   server.cmd('difficulty peaceful');
   server.cmd('time set 1000');
-  server.cmd('gamerule players_sleeping_percentage 100');
-  server.cmd('gamerule advance_time false');
+  server.cmd(`gamerule ${rule('players_sleeping_percentage')} 100`);
+  server.cmd(`gamerule ${rule('advance_time')} false`);
   try { await pool.reset([...used]); } catch (e) { err = (err ? err + '\n      ' : '') + 'cleanup: ' + e.message; }
   return { name: label(test), err, secs: ((Date.now() - started) / 1000).toFixed(1) };
 }
@@ -293,7 +300,7 @@ async function main() {
   const tests = all.filter(t => !only || label(t).includes(only));
 
   const server = new Server({
-    dir: path.join(__dirname, '.work', 'server'), java: opt('java', 'java'), paperJar: paper,
+    dir: path.join(__dirname, '.work', 'server-' + VERSION), java: opt('java', 'java'), paperJar: paper,
     plugins: [...plugins, helper], port: PORT, log: verbose ? l => console.log('  [server] ' + l) : null,
   });
   const t0 = Date.now();
@@ -303,8 +310,8 @@ async function main() {
   const plHooked = server.lines.some(l => /\[Vanishpp\] Hooked into ProtocolLib/.test(l));
   console.log(`Server up in ${((Date.now() - t0) / 1000).toFixed(1)}s. Vanish++ enabled: ${vanishLoaded}, ProtocolLib hooked: ${plHooked}\n`);
   if (!vanishLoaded) throw new Error('Vanish++ did not enable');
-  server.cmd('gamerule advance_time false');
-  server.cmd('gamerule spawn_mobs false');
+  server.cmd(`gamerule ${rule('advance_time')} false`);
+  server.cmd(`gamerule ${rule('spawn_mobs')} false`);
   server.cmd(`forceload add ${LOBBY.x - 8} ${LOBBY.z - 8} ${LOBBY.x + 8} ${LOBBY.z + 8}`);
   const defaultRules = defaultRulesFrom(server.dir);
   if (Object.keys(defaultRules).length < 5) throw new Error('could not read default-rules from the Vanish++ config: ' + JSON.stringify(defaultRules));

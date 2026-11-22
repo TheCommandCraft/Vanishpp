@@ -69,16 +69,30 @@ public final class StaffDecorations {
         });
         holder.getMethod("addListener", Key.class, listener).invoke(null, LISTENER, proxy);
         active = true;
-        // Players already online (plugin reload): hook into their connections now.
+        // Players already online (plugin reload): hook into their connections now. Their clients already have the
+        // teams of their scoreboard, so the model starts from that instead of from nothing.
         for (Player player : Bukkit.getOnlinePlayers()) {
             Channel channel = nms.channelOf(player);
-            if (channel != null) inject(channel);
+            if (channel != null) inject(channel, player);
         }
     }
 
-    private void inject(Channel channel) {
+    private void inject(Channel channel) { inject(channel, null); }
+
+    private void inject(Channel channel, Player online) {
         if (!active || handlers.containsKey(channel)) return;
         Handler handler = new Handler();
+        if (online != null) {
+            handler.viewer = online.getUniqueId();
+            if (plugin.getVanishScheduler().supportsScoreboards()) {
+                try {
+                    for (org.bukkit.scoreboard.Team team : online.getScoreboard().getTeams())
+                        handler.model.seedTeam(team.getName(), nms.paramsOf(team), team.getEntries());
+                } catch (ReflectiveOperationException | RuntimeException e) {
+                    warn("could not read the teams of a player who was already online", e);
+                }
+            }
+        }
         channel.eventLoop().execute(() -> {
             try {
                 if (channel.pipeline().get(HANDLER) != null || !channel.isOpen()) return;

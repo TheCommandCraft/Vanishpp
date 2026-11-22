@@ -175,6 +175,17 @@ final class NmsPackets {
         return paramsCtor.newInstance(team);
     }
 
+    /** The packet parameters of a Bukkit team, read from the server's own team object. */
+    Object paramsOf(org.bukkit.scoreboard.Team team) throws ReflectiveOperationException {
+        for (Class<?> c = team.getClass(); c != null; c = c.getSuperclass())
+            for (Field f : c.getDeclaredFields())
+                if (paramsCtor.getParameterTypes()[0].isAssignableFrom(f.getType())) {
+                    f.setAccessible(true);
+                    return paramsCtor.newInstance(f.get(team));
+                }
+        throw new NoSuchFieldException(team.getClass().getName() + " has no team handle");
+    }
+
     boolean sameParams(Object a, Object b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
