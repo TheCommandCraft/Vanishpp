@@ -140,7 +140,7 @@ public class ConfigUpdater {
 
     /** Settings that earlier versions wrote and nothing reads anymore; they are removed so /vconfig stops offering them. */
     private static final List<String> REMOVED_KEYS = List.of(
-            "hooks.simple-voice-chat.isolate-vanished-players"); // 1.2.0.1: voice filtering is always on while the hook is enabled
+            "hooks.simple-voice-chat.isolate-vanished-players"); // 1.2.1: voice filtering is always on while the hook is enabled
 
     /** Removes a single-line key and the comment lines directly above it. */
     private boolean removeKeyLine(String fullPath, List<String> lines) {

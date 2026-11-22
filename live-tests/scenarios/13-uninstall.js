@@ -64,7 +64,9 @@ module.exports = [
     name: 'reload: after /reload the new Vanish++ gives staff the prefixes back for players who stayed online',
     timeout: 300000,
     async run(t) {
-      // ViaVersion kicks every player on a reload, so nobody would stay online: this test runs without it.
+      // ViaVersion kicks every player on a reload, so nobody would stay online: this test runs without it, which
+      // only works where the bots join with the server's own version.
+      if (t.botsNeedVia) t.skip(`the bots need ViaVersion to join ${t.mc}, and ViaVersion kicks everyone on a reload`);
       await t.restartServer({ without: ['ViaVersion', 'ViaBackwards'] });
       const [v, s] = await t.bots(2);
       await t.op(s);

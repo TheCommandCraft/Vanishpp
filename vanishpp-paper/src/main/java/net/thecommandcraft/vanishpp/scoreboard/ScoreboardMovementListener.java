@@ -32,6 +32,9 @@ class ScoreboardMovementListener {
                 PacketType.Play.Client.POSITION_LOOK) {
             @Override
             public void onPacketReceiving(PacketEvent event) {
+                // During login ProtocolLib only has a temporary player, which has no UUID yet (1.20.6 sends
+                // movement packets that early); nobody has a vanish scoreboard at that point anyway.
+                if (event.isPlayerTemporary()) return;
                 UUID uuid = event.getPlayer().getUniqueId();
                 if (!boards.containsKey(uuid)) return;
 

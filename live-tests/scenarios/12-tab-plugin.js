@@ -7,6 +7,9 @@
 const path = require('path');
 const fs = require('fs');
 const TAB_JAR = path.join(__dirname, '..', '.cache', 'TAB-6.2.1.jar');
+// Minecraft versions TAB 6.2.1 supports (its Modrinth page); on the others the TAB tests are skipped.
+const TAB_SUPPORTS = ['1.21.5', '1.21.6', '1.21.7', '1.21.8', '1.21.9', '1.21.10', '1.21.11', '26.1', '26.1.1', '26.1.2', '26.2', '26.3'];
+const needsTab = t => { if (!TAB_SUPPORTS.includes(t.mc)) t.skip(`TAB 6.2.1 doesn't support ${t.mc}`); };
 const GROUPS = '_DEFAULT_:\n  tabprefix: "&bTAB "\n  tagprefix: "&bTAB "\n  customtabname: "%player%"\n  tabsuffix: ""\n  tagsuffix: ""\n';
 
 module.exports = [
@@ -15,6 +18,7 @@ module.exports = [
     guard: true, // setup step; its control is the check that TAB really loaded
     timeout: 300000,
     async run(t) {
+      needsTab(t);
       await t.restartServer({ extra: [TAB_JAR], files: { 'plugins/TAB/groups.yml': GROUPS } });
       const since = t.server.lines.slice(t.server.startedAt);
       t.check(since.some(l => /\[TAB\] Enabled in/.test(l) || /\[TAB\].*(Enabling|enabled)/i.test(l)), 'TAB did not load');
@@ -24,6 +28,7 @@ module.exports = [
     name: 'TAB plugin: staff see [V] and [VANISHED] in front of TAB\'s prefixes, which come back unchanged; others learn nothing',
     guard: true, // integration check; the rules it relies on are mutation-tested in 10-teams. Control: TAB's prefixes before vanishing.
     async run(t) {
+      needsTab(t);
       const { clientTeams } = require('./10-teams.js');
       const [v, s, n] = await t.bots(3);
       await t.op(s);
@@ -52,6 +57,7 @@ module.exports = [
     guard: true,
     timeout: 300000,
     async run(t) {
+      needsTab(t);
       await t.restartServer();
       const since = t.server.lines.slice(t.server.startedAt);
       t.check(!since.some(l => /\[TAB\]/.test(l)), 'TAB is still loaded');

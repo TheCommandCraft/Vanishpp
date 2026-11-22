@@ -13,7 +13,10 @@ const PROPERTIES = {
   'generate-structures': 'false',
   'allow-nether': 'false',
   'spawn-protection': '0',
-  'spawn-monsters': 'false',
+  // Natural spawning is off through the gamerule; this property must stay on, because before 1.21.9 it also
+  // removed monsters the tests summon. 26.x turns the whitelist on by default.
+  'spawn-monsters': 'true',
+  'white-list': 'false',
   'spawn-animals': 'false',
   'difficulty': 'peaceful',
   'view-distance': '4',
@@ -38,6 +41,10 @@ class Server {
     for (const jar of this.plugins) fs.copyFileSync(jar, path.join(this.dir, 'plugins', path.basename(jar)));
     fs.writeFileSync(path.join(this.dir, 'eula.txt'), 'eula=true\n');
     fs.writeFileSync(path.join(this.dir, 'bukkit.yml'), 'settings:\n  allow-end: false\n');
+    // mineflayer sends its position before confirming a teleport on older servers; Spigot's movement check then
+    // keeps pulling the bot back until Paper kicks it for too many packets. Real clients don't do this.
+    fs.writeFileSync(path.join(this.dir, 'spigot.yml'),
+      'settings:\n  moved-wrongly-threshold: 1000.0\n  moved-too-quickly-multiplier: 1000.0\n');
     const props = { ...PROPERTIES, 'server-port': String(this.port) };
     fs.writeFileSync(path.join(this.dir, 'server.properties'),
       Object.entries(props).map(([k, v]) => `${k}=${v}`).join('\n') + '\n');
@@ -89,7 +96,9 @@ class Server {
 
   /** Lines logged since index `from` that look like plugin errors. */
   errorsSince(from) {
-    return this.lines.slice(from).filter(l =>
+    // Paper's own async command builder races a /reload (no plugin code in its trace); that line pair is skipped.
+    const paperReloadRace = /Caught previously unhandled exception :$|Paper Async Command Builder Thread Pool/;
+    return this.lines.slice(from).filter(l => !paperReloadRace.test(l) &&
       /(WARN|ERROR)\]/.test(l) && /exception|error|Vanishpp|ProtocolLib|LiveTestHelper/i.test(l)
       && !/Setup Check|NOT installed|ProtocolLib NOT found|\*\*\*|UpdateChecker|offline mode|server is running in offline|has not yet been tested/i.test(l));
   }

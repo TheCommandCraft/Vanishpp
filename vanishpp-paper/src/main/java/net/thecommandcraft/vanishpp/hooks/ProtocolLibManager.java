@@ -360,8 +360,10 @@ public class ProtocolLibManager {
 
         // 5. Teams and tab names: handled without ProtocolLib by decor.StaffDecorations, the same on every server.
 
-        // 6. Server List Ping
+        // 6. Server List Ping (a fallback: PaperServerListPingEvent already adjusts the list). Some ProtocolLib and
+        // server version pairs (5.4.0 on 1.20.6) don't know this packet; registering then only logs a warning.
         try {
+        if (PacketType.Status.Server.SERVER_INFO.isSupported())
         protocolManager.addPacketListener(
                 new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Status.Server.SERVER_INFO) {
                     @Override

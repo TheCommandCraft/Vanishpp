@@ -1,7 +1,9 @@
 # Paper versions the live suite runs on: one per network protocol from the oldest supported (1.20.6) to the newest.
+# mineflayer misreads a large packet on 1.20.6 and 1.21.1 (the bots then get kicked), so the bots join those as
+# 1.21.3 clients through ViaVersion.
 # version  build  sha256                                                            java  bot (mineflayer client version)
-1.20.6   151  4b011f5adb5f6c72007686a223174fce82f31aeb4b34faf4652abc840b47e640  21  1.20.6
-1.21.1   133  39bd8c00b9e18de91dcabd3cc3dcfa5328685a53b7187a2f63280c22e2d287b9  21  1.21.1
+1.20.6   151  4b011f5adb5f6c72007686a223174fce82f31aeb4b34faf4652abc840b47e640  21  1.21.3
+1.21.1   133  39bd8c00b9e18de91dcabd3cc3dcfa5328685a53b7187a2f63280c22e2d287b9  21  1.21.3
 1.21.3   83   87e973e1d338e869e7fdbc4b8fadc1579d7bb0246a0e0cf6e5700ace6c8bc17e  21  1.21.3
 1.21.4   232  5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc  21  1.21.4
 1.21.5   114  2ae6ae22adf417699746e0f89fc2ef6cb6ee050a5f6608cee58f0535d60b509e  21  1.21.5

@@ -106,6 +106,26 @@ public class PluginHider implements Listener {
             .clickEvent(ClickEvent.openUrl("https://docs.papermc.io/paper/adding-plugins"));
     private static final Component PLUGIN_TICK = Component.text("- ", NamedTextColor.DARK_GRAY);
 
+    /**
+     * Paper 1.21.4 added the info icon in front of "Server Plugins" and the group sizes ("Paper Plugins (2):").
+     * Older Paper prints neither. Detected from Paper's own command, which got a header(...) method with that change;
+     * without Paper's command (Spigot, tests) the current layout is used.
+     */
+    static final boolean CURRENT_LAYOUT = detectLayout();
+
+    private static boolean detectLayout() {
+        try {
+            Class<?> paper = Class.forName("io.papermc.paper.command.PaperPluginsCommand", false,
+                    Bukkit.getServer() == null ? PluginHider.class.getClassLoader() : Bukkit.getServer().getClass().getClassLoader());
+            paper.getDeclaredMethod("header", String.class, int.class, int.class, boolean.class);
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return true;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
+    }
+
     /** The lines Paper's own /plugins prints for these plugins. */
     public static List<Component> buildPluginList(List<Plugin> plugins) {
         TreeMap<String, Plugin> paper = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -115,8 +135,8 @@ public class PluginHider implements Listener {
 
         boolean both = !paper.isEmpty() && !bukkit.isEmpty();
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.text().append(INFO_ICON)
-                .append(Component.text("Server Plugins (" + plugins.size() + "):", NamedTextColor.WHITE)).build());
+        Component title = Component.text("Server Plugins (" + plugins.size() + "):", NamedTextColor.WHITE);
+        lines.add(CURRENT_LAYOUT ? Component.text().append(INFO_ICON).append(title).build() : title);
         if (!paper.isEmpty())
             lines.add(header("Paper Plugins", 0x0288D1, paper.size(), both));
         lines.addAll(format(paper));
@@ -149,7 +169,7 @@ public class PluginHider implements Listener {
 
     private static Component header(String text, int color, int count, boolean showSize) {
         TextComponent.Builder b = Component.text().color(TextColor.color(color)).append(Component.text(text));
-        if (showSize)
+        if (showSize && CURRENT_LAYOUT)
             b.appendSpace().append(Component.text("(" + count + ")"));
         return b.append(Component.text(":")).build();
     }

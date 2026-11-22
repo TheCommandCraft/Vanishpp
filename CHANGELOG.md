@@ -2,9 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.0.1] - Unreleased
+## [1.2.1] - 2026-11-22
 
 **Priority:** feature
+
+Vanish++ no longer touches your scoreboard teams or tab names, and staff prefixes now sit in front of the prefixes from your other plugins. This release also brings a few small features, fixes from the community, and testing on every supported Paper version from 1.20.6 to 26.3. Thanks to @Bastion-F for #46 and #48, and to BramvanZijp for the team report.
 
 ### Added
 - **Vanished players can hear everyone nearby in Simple Voice Chat.** Set `hooks.simple-voice-chat.vanished-can-hear-others` to `true` to let vanished players hear visible players. Visible players still cannot hear vanished ones. The default is `false`, which keeps vanished players isolated as before.
@@ -17,9 +19,12 @@ All notable changes to this project will be documented in this file.
 - **Voice chat isolation is always on while the Simple Voice Chat hook is enabled.** The `isolate-vanished-players` setting is removed, and Vanish++ removes it from existing configs. Turning it off could only reveal vanished players in voice chat groups. `hooks.simple-voice-chat.enabled: false` still turns the hook off, and now takes effect immediately.
 
 ### Fixed
-- **Vanishing no longer takes players off their scoreboard team** (`/team`, minigames, team chat). Vanish++ never changes the server's teams, scoreboards or tab names anymore. The `[V]` nametag and `[VANISHED]` tab prefix staff see are added only to what staff receive, in front of the player's own prefixes from teams, TAB or other plugins, and they work the same with or without ProtocolLib. Players who can't see a vanished player learn nothing about them from team updates. The old `Vanishpp_Vanished` team is removed from the main scoreboard automatically. Reported by BramvanZijp.
+- **Vanishing no longer takes players off their scoreboard team** (`/team`, minigames, team chat). Vanish++ never changes the server's teams, scoreboards or tab names anymore. The old `Vanishpp_Vanished` team is removed automatically.
+- **The `[V]` nametag and `[VANISHED]` tab prefix go in front of existing prefixes** instead of replacing them, also with TAB or LuckPerms-based formats. Only staff receive them, and they work the same with or without ProtocolLib. Players who can't see a vanished player learn nothing about them from team updates. Reloading or removing Vanish++ leaves every client clean.
 - **Players could flicker or disappear for each other with ProtocolLib installed,** even with nobody vanished. Entity packets no longer look up the world on ProtocolLib's network threads; a cache of player entity ids is used instead. (#45, fixed by @Bastion-F in #46)
 - **The sleep message no longer throws an error on newer servers** such as Purpur 26.2, so vanished players are left out of the count there again. (#47, fixed by @Bastion-F in #48)
+- **Joining no longer logs an error on Paper 1.20.6** with ProtocolLib installed.
+- **The hidden `/plugins` list matches older Paper versions too.** Paper 1.20.6 to 1.21.3 use a slightly different layout, which Vanish++ now copies.
 
 ## [1.2.0] - 2026-11-08
 

@@ -14,6 +14,11 @@ const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 
 const plugins = args.flatMap((a, i) => (a === '--plugin' ? [args[i + 1]] : []));
 const VERSION = opt('mc', '1.21.11');          // the Paper server's Minecraft version
 const BOT_VERSION = opt('bot-version', VERSION); // the client version the bots join with
+/** True when the bots speak another protocol than the server, so they only get in through ViaVersion. */
+const BOTS_NEED_VIA = (() => {
+  const md = require('minecraft-data'), server = md(VERSION), bot = md(BOT_VERSION);
+  return !server || !bot || server.version.version !== bot.version.version;
+})();
 /** Minecraft version at least `v` (versions compare part by part: 1.21.11 > 1.21.9, 26.1 > 1.21.11). */
 const atLeast = v => { const a = VERSION.split('.').map(Number), b = v.split('.').map(Number);
   for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0); } return true; };
@@ -181,6 +186,10 @@ function makeContext(server, pool, area, used, configChanges, extras) {
     /** Runs a console command and resolves with the first console line matching re that follows it. */
     ask: (c, re, ms) => server.ask(c, re, ms),
     check(cond, msg) { if (!cond) throw new Error(msg); },
+    /** The server's Minecraft version, and a check against another version. */
+    mc: VERSION, botVersion: BOT_VERSION, botsNeedVia: BOTS_NEED_VIA, atLeast,
+    /** Ends the test as skipped (for example a plugin that doesn't support this Minecraft version). */
+    skip(reason) { throw Object.assign(new Error(reason), { skip: true }); },
     /** n clean bots from the pool, all standing in this test's area. */
     async bots(n) {
       const bots = await pool.take(n);
@@ -266,14 +275,14 @@ async function runTest(server, pool, test, index) {
   server.cmd(`fill ${area.x - 10} ${GROUND} ${area.z - 10} ${area.x + 10} ${GROUND + 4} ${area.z + 10} minecraft:air`);
   const logFrom = server.lines.length;
   const started = Date.now();
-  let err = null;
+  let err = null, skipped = null;
   let timer;
   try {
     await Promise.race([test.run(t), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('test timed out')), test.timeout || 60000); })]);
     const errors = server.errorsSince(logFrom);
     if (errors.length) throw new Error('server logged errors:\n      ' + errors.slice(0, 5).join('\n      '));
   } catch (e) {
-    err = e.message || String(e);
+    if (e && e.skip) skipped = e.message; else err = e.message || String(e);
   } finally {
     clearTimeout(timer);
   }
@@ -288,7 +297,7 @@ async function runTest(server, pool, test, index) {
   server.cmd(`gamerule ${rule('players_sleeping_percentage')} 100`);
   server.cmd(`gamerule ${rule('advance_time')} false`);
   try { await pool.reset([...used]); } catch (e) { err = (err ? err + '\n      ' : '') + 'cleanup: ' + e.message; }
-  return { name: label(test), err, secs: ((Date.now() - started) / 1000).toFixed(1) };
+  return { name: label(test), err, skipped, secs: ((Date.now() - started) / 1000).toFixed(1) };
 }
 
 async function main() {
@@ -321,10 +330,11 @@ async function main() {
   for (let i = 0; i < tests.length; i++) {
     const r = await runTest(server, pool, tests[i], i);
     results.push(r);
-    console.log(`${r.err ? 'FAIL' : 'PASS'}  ${r.name} (${r.secs}s)${r.err ? '\n      ' + r.err : ''}`);
+    console.log(`${r.err ? 'FAIL' : r.skipped ? 'SKIP' : 'PASS'}  ${r.name} (${r.secs}s)${r.err ? '\n      ' + r.err : r.skipped ? '\n      ' + r.skipped : ''}`);
   }
   const failed = results.filter(r => r.err);
-  console.log(`\n${results.length - failed.length} passed, ${failed.length} failed`);
+  const skippedCount = results.filter(r => r.skipped && !r.err).length;
+  console.log(`\n${results.length - failed.length - skippedCount} passed, ${failed.length} failed${skippedCount ? `, ${skippedCount} skipped` : ''}`);
 
   // ---------- mutation phase ----------
   const mutantResults = [];
@@ -366,7 +376,7 @@ async function main() {
   const summary = process.env.GITHUB_STEP_SUMMARY;
   if (summary) {
     let md = `### Live bot tests\n\n| | Test | Time |\n|---|---|---|\n` +
-      results.map(r => `| ${r.err ? '❌' : '✅'} | ${r.name}${r.err ? `<br>\`${String(r.err).split('\n')[0]}\`` : ''} | ${r.secs}s |`).join('\n') + '\n';
+      results.map(r => `| ${r.err ? '❌' : r.skipped ? '⏭️' : '✅'} | ${r.name}${r.err ? `<br>\`${String(r.err).split('\n')[0]}\`` : ''} | ${r.secs}s |`).join('\n') + '\n';
     if (mutantResults.length) md += `\n### Mutants\n\n| | Mutant | Breaks |\n|---|---|---|\n` +
       mutantResults.map(r => `| ${r.verdict === 'KILLED' ? '✅' : '❌'} ${r.verdict} | ${r.m.id} | ${r.m.what} |`).join('\n') + '\n';
     fs.appendFileSync(summary, md);
