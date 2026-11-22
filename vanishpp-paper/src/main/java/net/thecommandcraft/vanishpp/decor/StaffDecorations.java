@@ -51,7 +51,7 @@ public final class StaffDecorations {
             return d;
         } catch (Throwable t) {
             plugin.getLogger().info("Staff nametag and tab prefixes are off: this server has no Paper connection hook ("
-                    + t.getClass().getSimpleName() + "). Vanishing works as usual.");
+                    + t.getClass().getSimpleName() + ": " + t.getMessage() + "). Vanishing works as usual.");
             return null;
         }
     }

@@ -17,6 +17,10 @@ final class NmsPackets {
     private final Constructor<?> teamCtor, paramsCtor, scoreboardCtor, infoCtor, entryCtor, bundleCtor;
     private final Field method;
     private final Method teamName, teamPlayers, teamParams, addPlayerTeam;
+    // Team parameters: a class with getters up to 1.21.x, a record from 26.x (copied with only the prefix swapped).
+    private final boolean paramsRecord;
+    private final RecordComponent[] paramParts;
+    private final Constructor<?> paramsCanonical;
     private final Method pDisplay, pOptions, pColor, pVisibility, pCollision, pPrefix, pSuffix;
     private final Method tDisplay, tPrefix, tSuffix, tVisibility, tCollision, tColor, tOptions;
     private final Method infoActions, infoEntries, removeIds, subPackets;
@@ -50,20 +54,32 @@ final class NmsPackets {
         paramsCtor = params.getConstructor(playerTeam);
         scoreboardCtor = scoreboard.getConstructor();
         addPlayerTeam = scoreboard.getMethod("addPlayerTeam", String.class);
-        pDisplay = params.getMethod("getDisplayName");
-        pOptions = params.getMethod("getOptions");
-        pColor = params.getMethod("getColor");
-        pVisibility = params.getMethod("getNametagVisibility");
-        pCollision = params.getMethod("getCollisionRule");
-        pPrefix = params.getMethod("getPlayerPrefix");
-        pSuffix = params.getMethod("getPlayerSuffix");
-        tDisplay = playerTeam.getMethod("setDisplayName", componentClass);
         tPrefix = playerTeam.getMethod("setPlayerPrefix", componentClass);
-        tSuffix = playerTeam.getMethod("setPlayerSuffix", componentClass);
-        tVisibility = single(playerTeam, "setNameTagVisibility");
-        tCollision = single(playerTeam, "setCollisionRule");
-        tColor = single(playerTeam, "setColor");
-        tOptions = playerTeam.getMethod("unpackOptions", int.class);
+        paramsRecord = params.isRecord();
+        if (paramsRecord) {
+            paramParts = params.getRecordComponents();
+            paramsCanonical = params.getDeclaredConstructor(Arrays.stream(paramParts).map(RecordComponent::getType).toArray(Class<?>[]::new));
+            paramsCanonical.setAccessible(true);
+            pPrefix = params.getMethod("playerPrefix");
+            pDisplay = pOptions = pColor = pVisibility = pCollision = pSuffix = null;
+            tDisplay = tSuffix = tVisibility = tCollision = tColor = tOptions = null;
+        } else {
+            paramParts = null;
+            paramsCanonical = null;
+            pDisplay = params.getMethod("getDisplayName");
+            pOptions = params.getMethod("getOptions");
+            pColor = params.getMethod("getColor");
+            pVisibility = params.getMethod("getNametagVisibility");
+            pCollision = params.getMethod("getCollisionRule");
+            pPrefix = params.getMethod("getPlayerPrefix");
+            pSuffix = params.getMethod("getPlayerSuffix");
+            tDisplay = playerTeam.getMethod("setDisplayName", componentClass);
+            tSuffix = playerTeam.getMethod("setPlayerSuffix", componentClass);
+            tVisibility = single(playerTeam, "setNameTagVisibility");
+            tCollision = single(playerTeam, "setCollisionRule");
+            tColor = single(playerTeam, "setColor");
+            tOptions = single(playerTeam, "unpackOptions"); // int up to 1.21.x
+        }
 
         infoCtor = infoUpdate.getConstructor(EnumSet.class, List.class);
         infoActions = infoUpdate.getMethod("actions");
@@ -134,6 +150,14 @@ final class NmsPackets {
 
     /** The real team's parameters with {@code tag} in front of the prefix (or a plain tag when there is no team). */
     Object tag(Object real, Component tag) throws ReflectiveOperationException {
+        if (real != null && paramsRecord) {
+            Object old = pPrefix.invoke(real);
+            Object prefix = vanilla(old == null ? tag : Component.text().append(tag).append(adventure(old)).build());
+            Object[] values = new Object[paramParts.length];
+            for (int i = 0; i < paramParts.length; i++)
+                values[i] = paramParts[i].getName().equals("playerPrefix") ? prefix : paramParts[i].getAccessor().invoke(real);
+            return paramsCanonical.newInstance(values);
+        }
         Object team = addPlayerTeam.invoke(scoreboardCtor.newInstance(), "vanishpp");
         Component prefix = tag;
         if (real != null) {
@@ -142,7 +166,8 @@ final class NmsPackets {
             tVisibility.invoke(team, coerce(pVisibility.invoke(real), tVisibility.getParameterTypes()[0]));
             tCollision.invoke(team, coerce(pCollision.invoke(real), tCollision.getParameterTypes()[0]));
             tColor.invoke(team, pColor.invoke(real));
-            tOptions.invoke(team, (int) pOptions.invoke(real));
+            Number options = (Number) pOptions.invoke(real);
+            tOptions.invoke(team, tOptions.getParameterTypes()[0] == byte.class ? (Object) options.byteValue() : (Object) options.intValue());
             Object old = pPrefix.invoke(real);
             if (old != null) prefix = Component.text().append(tag).append(adventure(old)).build();
         }
@@ -153,6 +178,7 @@ final class NmsPackets {
     boolean sameParams(Object a, Object b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
+        if (paramsRecord) return a.equals(b);
         try {
             for (Method m : new Method[]{pDisplay, pOptions, pColor, pVisibility, pCollision, pPrefix, pSuffix})
                 if (!Objects.equals(m.invoke(a), m.invoke(b))) return false;
