@@ -21,7 +21,7 @@ const PROPERTIES = {
   'max-players': '30',
   'sync-chunk-writes': 'false',
 };
-const WIPE = ['world', 'world_nether', 'world_the_end', 'plugins', 'logs', 'ops.json', 'usercache.json', 'console.log'];
+const WIPE = ['world', 'world_nether', 'world_the_end', 'plugins', 'held-plugins', 'logs', 'ops.json', 'usercache.json', 'console.log'];
 
 class Server {
   constructor({ dir, java, paperJar, plugins, port, log }) {
@@ -91,7 +91,7 @@ class Server {
   errorsSince(from) {
     return this.lines.slice(from).filter(l =>
       /(WARN|ERROR)\]/.test(l) && /exception|error|Vanishpp|ProtocolLib|LiveTestHelper/i.test(l)
-      && !/Setup Check|NOT installed|UpdateChecker|offline mode|server is running in offline|has not yet been tested/i.test(l));
+      && !/Setup Check|NOT installed|ProtocolLib NOT found|UpdateChecker|offline mode|server is running in offline|has not yet been tested/i.test(l));
   }
 
   async stop() {
@@ -103,10 +103,27 @@ class Server {
     this.logFile.end();
   }
 
-  /** Stops the server normally and starts it again with the same world, plugins and plugin data. */
-  async restart() {
+  /**
+   * Stops the server normally and starts it again with the same world, plugins and plugin data. Plugin jars whose
+   * name matches one of `without` are left out of this start; a later restart without them brings them back.
+   */
+  async restart({ without = [], extra = [], files = {} } = {}) {
     await this.stop();
     this.waiters = [];
+    const pluginsDir = path.join(this.dir, 'plugins'), held = path.join(this.dir, 'held-plugins');
+    fs.mkdirSync(held, { recursive: true });
+    for (const jar of fs.readdirSync(held)) fs.renameSync(path.join(held, jar), path.join(pluginsDir, jar));
+    for (const jar of fs.readdirSync(pluginsDir).filter(f => f.endsWith('.jar')))
+      if (without.some(w => jar.includes(w))) fs.renameSync(path.join(pluginsDir, jar), path.join(held, jar));
+    // Extra plugins are only there for this start: the next restart removes them again.
+    for (const jar of this.extraJars || []) fs.rmSync(path.join(pluginsDir, jar), { force: true });
+    this.extraJars = extra.map(jar => path.basename(jar));
+    for (const jar of extra) fs.copyFileSync(jar, path.join(pluginsDir, path.basename(jar)));
+    for (const [rel, content] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(this.dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(this.dir, rel), content);
+    }
+    this.startedAt = this.lines.length;
     await this.start(240000, { keepData: true });
   }
 }

@@ -19,6 +19,10 @@ VIA_SHA256=551265afd892e78bb869162e08b4fdd151c518e245fce60af36b0603ad695d76
 VIA_URL="https://cdn.modrinth.com/data/P1OZGk5p/versions/cc7QiCYw/ViaVersion-$VIA_VERSION.jar"
 VIAB_SHA256=dd72f7a459cbf1ea7862781dac92ed0ba738aa3cb3b7955e716ba379889d612a
 VIAB_URL="https://cdn.modrinth.com/data/NpvuJQoq/versions/GXuG4GNJ/ViaBackwards-$VIA_VERSION.jar"
+# TAB (NEZNAMY): only for the scenario that checks the combination (12-tab-plugin); the server starts without it.
+TAB_VERSION=6.2.1
+TAB_SHA256=0b6a21af6fd3b113c05821daaed00ff92234a84ca94b29b3aec0ef1bd313b8a9
+TAB_URL="https://cdn.modrinth.com/data/gG7VFbG0/versions/Bu3K2CAM/TAB%20v6.2.1.jar"
 JAVA=${JAVA:-java}
 MVN=${MVN:-mvn}
 
@@ -47,6 +51,7 @@ fetch "$PAPER_URL" "$PAPER_SHA256" ".cache/paper-$PAPER_VERSION-$PAPER_BUILD.jar
 fetch "$PL_URL" "$PL_SHA256" ".cache/ProtocolLib-$PL_VERSION.jar"
 fetch "$VIA_URL" "$VIA_SHA256" ".cache/ViaVersion-$VIA_VERSION.jar"
 fetch "$VIAB_URL" "$VIAB_SHA256" ".cache/ViaBackwards-$VIA_VERSION.jar"
+fetch "$TAB_URL" "$TAB_SHA256" ".cache/TAB-$TAB_VERSION.jar"
 [[ -d node_modules ]] || npm ci --ignore-scripts --no-audit --no-fund
 
 build_helper() { # dir jar

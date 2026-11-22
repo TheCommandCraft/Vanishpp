@@ -199,13 +199,15 @@
             <version>5.1.0</version>
         </dependency>
 
-        <!-- Testing -->
+        <!-- Netty ships with the server; used for the per-connection packet layer (decor package). Never shaded. -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
             <version>4.1.115.Final</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
+
+        <!-- Testing -->
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>

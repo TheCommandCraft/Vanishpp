@@ -206,9 +206,12 @@ function makeContext(server, pool, area, used, configChanges, extras) {
       await wait(1500); // the join applies saved state and auto-vanish in stages
       return fresh;
     },
-    /** Restarts the server (a normal stop, then start with the same data). Every bot is disconnected. */
-    async restartServer() {
-      await server.restart();
+    /**
+     * Restarts the server (a normal stop, then start with the same data). Every bot is disconnected.
+     * `without: ['ProtocolLib']` leaves those plugin jars out until the next restart.
+     */
+    async restartServer(opts) {
+      await server.restart(opts);
       server.cmd('gamerule advance_time false');
       server.cmd('gamerule spawn_mobs false');
       server.cmd(`forceload add ${LOBBY.x - 8} ${LOBBY.z - 8} ${LOBBY.x + 8} ${LOBBY.z + 8}`);

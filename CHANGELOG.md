@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - **Voice chat isolation is always on while the Simple Voice Chat hook is enabled.** The `isolate-vanished-players` setting is removed, and Vanish++ removes it from existing configs. Turning it off could only reveal vanished players in voice chat groups. `hooks.simple-voice-chat.enabled: false` still turns the hook off, and now takes effect immediately.
 
 ### Fixed
+- **Vanishing no longer takes players off their scoreboard team** (`/team`, minigames, team chat). Vanish++ never changes the server's teams, scoreboards or tab names anymore. The `[V]` nametag and `[VANISHED]` tab prefix staff see are added only to what staff receive, in front of the player's own prefixes from teams, TAB or other plugins, and they work the same with or without ProtocolLib. Players who can't see a vanished player learn nothing about them from team updates. The old `Vanishpp_Vanished` team is removed from the main scoreboard automatically. Reported by BramvanZijp.
 - **Players could flicker or disappear for each other with ProtocolLib installed,** even with nobody vanished. Entity packets no longer look up the world on ProtocolLib's network threads; a cache of player entity ids is used instead. (#45, fixed by @Bastion-F in #46)
 - **The sleep message no longer throws an error on newer servers** such as Purpur 26.2, so vanished players are left out of the count there again. (#47, fixed by @Bastion-F in #48)
 

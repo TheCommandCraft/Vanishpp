@@ -72,15 +72,32 @@ class VisibilityTest {
     }
 
     @Test
-    void sharedScoreboardNeverContainsHiddenNames() {
+    void vanishingNeverChangesScoreboardsTeamsOrTabNames() {
         viewer.setOp(true);
+        var main = server.getScoreboardManager().getMainScoreboard();
+        Team own = main.registerNewTeam("red");
+        own.addEntry(subject.getName());
+        var tabName = net.kyori.adventure.text.Component.text("Custom " + subject.getName());
+        subject.playerListName(tabName);
         plugin.applyVanishEffects(subject);
-        plugin.reapplyTeamEntry(subject);
-        Team shared = server.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished");
-        assertFalse(shared != null && shared.hasEntry(subject.getName()),
-                "shared scoreboard must not broadcast a vanished name without packet filtering");
-        Team staff = viewer.getScoreboard().getTeam("Vanishpp_Vanished");
-        assertTrue(staff != null && staff.hasEntry(subject.getName()), "authorized staff need a private team");
+        plugin.refreshDecorations();
+        assertTrue(own.hasEntry(subject.getName()), "a vanished player must stay on their own team");
+        assertNull(main.getTeam("Vanishpp_Vanished"), "Vanish++ must not register a team on the server");
+        assertSame(main, viewer.getScoreboard(), "staff keep their own scoreboard: no private copies");
+        assertEquals(tabName, subject.playerListName(), "the server's tab name must not change");
+        plugin.removeVanishEffects(subject);
+        assertTrue(own.hasEntry(subject.getName()));
+        assertEquals(tabName, subject.playerListName());
+    }
+
+    @Test
+    void theOldVanishTeamIsRemovedFromTheMainScoreboard() throws Exception {
+        var main = server.getScoreboardManager().getMainScoreboard();
+        main.registerNewTeam("Vanishpp_Vanished").addEntry(subject.getName());
+        var cleanup = Vanishpp.class.getDeclaredMethod("removeLegacyVanishTeam");
+        cleanup.setAccessible(true);
+        cleanup.invoke(plugin);
+        assertNull(main.getTeam("Vanishpp_Vanished"));
     }
 
     @Test

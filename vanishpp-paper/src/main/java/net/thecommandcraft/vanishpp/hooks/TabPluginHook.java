@@ -2,7 +2,6 @@ package net.thecommandcraft.vanishpp.hooks;
 
 import me.neznamy.tab.api.TabAPI;
 import me.neznamy.tab.api.TabPlayer;
-import me.neznamy.tab.api.nametag.NameTagManager;
 import me.neznamy.tab.api.tablist.TabListFormatManager;
 import net.thecommandcraft.vanishpp.Vanishpp;
 import org.bukkit.Bukkit;
@@ -30,31 +29,12 @@ public class TabPluginHook {
         try {
             TabAPI api = TabAPI.getInstance();
             TabPlayer tabPlayer = api.getPlayer(player.getUniqueId());
-
-            if (tabPlayer != null) {
-                // Tab list prefix
-                TabListFormatManager formatManager = api.getTabListFormatManager();
-                if (formatManager != null) {
-                    formatManager.setName(tabPlayer, plugin.getIncognitoName(player.getUniqueId()));
-                    if (isVanished) {
-                        String prefix = plugin.getConfigManager().vanishTabPrefix;
-                        formatManager.setPrefix(tabPlayer, prefix);
-                    } else {
-                        formatManager.setPrefix(tabPlayer, null);
-                    }
-                }
-
-                // Nametag prefix (above head) — TAB overrides scoreboard teams, so we must use its API
-                NameTagManager nameTagManager = api.getNameTagManager();
-                if (nameTagManager != null) {
-                    if (isVanished) {
-                        String nametagPrefix = plugin.getConfigManager().vanishNametagPrefix;
-                        nameTagManager.setPrefix(tabPlayer, nametagPrefix != null ? nametagPrefix : "");
-                    } else {
-                        nameTagManager.setPrefix(tabPlayer, null);
-                    }
-                }
-            }
+            if (tabPlayer == null) return;
+            // Only the incognito alias goes through TAB's API. The [VANISHED] and [V] prefixes are never set here:
+            // that would replace TAB's own prefixes (ranks, LuckPerms meta). Staff get them in front of TAB's
+            // prefixes in their packets instead (decor.StaffDecorations).
+            TabListFormatManager formatManager = api.getTabListFormatManager();
+            if (formatManager != null) formatManager.setName(tabPlayer, plugin.getIncognitoName(player.getUniqueId()));
         } catch (NoClassDefFoundError | Exception e) {
             // Fail silently if API is incompatible
         }

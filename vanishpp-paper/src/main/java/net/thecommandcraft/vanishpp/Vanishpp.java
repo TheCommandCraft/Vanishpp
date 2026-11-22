@@ -78,8 +78,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public final net.thecommandcraft.vanishpp.utils.MessageRecipients messageRecipients = new net.thecommandcraft.vanishpp.utils.MessageRecipients();
     private final Map<UUID, Integer> publishedVisibilityLevels = new ConcurrentHashMap<>();
     public final net.thecommandcraft.vanishpp.utils.VoiceAudience voiceAudience = new net.thecommandcraft.vanishpp.utils.VoiceAudience(this);
-    private Team vanishTeam;
-    private final net.thecommandcraft.vanishpp.utils.ViewerTeams viewerTeams = new net.thecommandcraft.vanishpp.utils.ViewerTeams(this);
+    /** The [V] nametag and tab prefix staff see, done in packets only; null where the server can't do it. */
+    private net.thecommandcraft.vanishpp.decor.StaffDecorations decorations;
     private VanishScheduler vanishScheduler;
     private VanishScoreboard vanishScoreboard;
     private YamlConfiguration scoreboardConfig;
@@ -236,11 +236,9 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         // Folia forbids scoreboard operations on the startup thread — defer to global region
-        if (isFolia) {
-            vanishScheduler.runGlobal(this::setupTeams);
-        } else {
-            setupTeams();
-        }
+        if (isFolia) vanishScheduler.runGlobal(this::removeLegacyVanishTeam);
+        else removeLegacyVanishTeam();
+        decorations = net.thecommandcraft.vanishpp.decor.StaffDecorations.start(this);
 
         // ── Optional hooks ─────────────────────────────────────────────────
         if (Bukkit.getPluginManager().getPlugin("LuckPerms") != null) {
@@ -523,8 +521,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (vanishScoreboard != null)
             vanishScoreboard.reload();
 
-        // Refresh team prefix and resync all online vanished players
-        refreshTeamPrefix();
+        // Refresh the staff prefixes and resync all online vanished players
+        refreshDecorations();
         for (UUID uuid : vanishedPlayers) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null && p.isOnline()) {
@@ -566,9 +564,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
                 if (isIncognito(player)) setIncognitoName(player, null);
             });
         }
-        shutdownStep("viewer teams", viewerTeams::close);
+        if (decorations != null) shutdownStep("staff decorations", decorations::stop);
         shutdownStep("voice audience", voiceAudience::close);
-        if (vanishTeam != null) shutdownStep("vanish team", vanishTeam::unregister);
         if (integrationManager != null) shutdownStep("integrations", integrationManager::unregister);
         if (luckPermsHook != null) shutdownStep("LuckPerms", luckPermsHook::unload);
         if (vanishScoreboard != null) shutdownStep("scoreboards", vanishScoreboard::shutdown);
@@ -1166,16 +1163,15 @@ public class Vanishpp extends JavaPlugin implements Listener {
 
     /** Cleans up per-player cached state. Call on player quit. */
     public void retireVisibility(Player player) {
-        if (vanishTeam != null && vanishTeam.hasEntry(player.getName())) vanishTeam.removeEntry(player.getName());
-        if (!hasProtocolLib) viewerTeams.retireSubject(player);
         voiceAudience.retire(player.getUniqueId());
+        refreshDecorations();
     }
 
     public void resumeVisibility(Player player) {
         if (protocolLibManager != null) protocolLibManager.cachePlayer(player);
-        viewerTeams.joined(player.getUniqueId());
         voiceAudience.joined(player.getUniqueId());
         voiceAudience.refresh();
+        refreshDecorations();
     }
 
     public void cleanupPlayerCache(UUID uuid) {
@@ -1184,7 +1180,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
         abortProxyJoin(uuid);
         stateVersions.merge(uuid, 1L, Long::sum);
         if (proxyBridge != null) proxyBridge.forgetPlayer(uuid);
-        viewerTeams.forget(uuid);
         voiceAudience.invalidate(uuid);
         publishedVisibilityLevels.remove(uuid);
         actionBarPausedUntil.remove(uuid);
@@ -1258,47 +1253,25 @@ public class Vanishpp extends JavaPlugin implements Listener {
     }
 
     // --- CORE LOGIC ---
-    private void setupTeams() {
-        if (!vanishScheduler.supportsScoreboards()) return;
+    /**
+     * Older versions put vanished players in a "Vanishpp_Vanished" team on the server's main scoreboard, which took
+     * them off their own team. That team is saved with the world; remove it so nothing is left behind.
+     */
+    private void removeLegacyVanishTeam() {
+        if (!vanishScheduler.supportsScoreboards() || Bukkit.getScoreboardManager() == null) return;
         try {
-            org.bukkit.scoreboard.ScoreboardManager sm = Bukkit.getScoreboardManager();
-            if (sm == null) {
-                getLogger().severe("ScoreboardManager is null — cannot set up vanish team. Nametag features disabled.");
-                return;
-            }
-            Scoreboard mainScoreboard = sm.getMainScoreboard();
-            this.vanishTeam = mainScoreboard.getTeam("Vanishpp_Vanished");
-            if (this.vanishTeam == null)
-                this.vanishTeam = mainScoreboard.registerNewTeam("Vanishpp_Vanished");
-
-            refreshTeamPrefix();
-            vanishTeam.setCanSeeFriendlyInvisibles(true);
-            vanishTeam.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
-        } catch (UnsupportedOperationException e) {
-            getLogger().warning("Scoreboard team setup not supported on this platform. Nametag features disabled.");
-            this.vanishTeam = null;
+            Team legacy = Bukkit.getScoreboardManager().getMainScoreboard().getTeam("Vanishpp_Vanished");
+            if (legacy == null) return;
+            legacy.unregister();
+            getLogger().info("Removed the old Vanishpp_Vanished team from the main scoreboard: vanished players now keep their own team.");
+        } catch (RuntimeException e) {
+            getLogger().warning("Could not remove the old Vanishpp_Vanished team: " + e.getMessage());
         }
     }
 
-    public void refreshTeamPrefix() {
-        if (vanishTeam == null) return;
-        String raw = configManager.vanishNametagPrefix;
-        if (raw != null && !raw.isEmpty()) {
-            vanishTeam.prefix(messageManager.parse(raw, null));
-        } else {
-            vanishTeam.prefix(Component.empty());
-        }
-    }
-
-    /** Remove and re-add a player to the vanish team to force a scoreboard update packet to all observers. */
-    public void reapplyTeamEntry(Player player) {
-        if (!hasProtocolLib) { viewerTeams.update(player, isVanished(player)); return; }
-        if (vanishTeam == null) return;
-        String name = player.getName();
-        if (vanishTeam.hasEntry(name))
-            vanishTeam.removeEntry(name);
-        vanishTeam.addEntry(name);
-        refreshTeamPrefix();
+    /** Re-applies the staff nametag and tab prefixes on the next tick (vanish, join, permission or config changes). */
+    public void refreshDecorations() {
+        if (decorations != null) decorations.requestRefresh();
     }
 
     private void startActionBarTask() {
@@ -1349,7 +1322,7 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }, 1L, HISTORY_MAINTENANCE_INTERVAL_TICKS);
         vanishScheduler.runTimerGlobal(() -> {
             voiceAudience.refresh();
-            if (!hasProtocolLib) viewerTeams.refresh();
+            if (decorations != null) decorations.refreshAll();
             for (UUID uuid : Set.copyOf(vanishedPlayers)) {
                 Player vanished = Bukkit.getPlayer(uuid);
                 if (vanished == null) continue;
@@ -1361,8 +1334,6 @@ public class Vanishpp extends JavaPlugin implements Listener {
                         Integer previous = publishedVisibilityLevels.put(uuid, level);
                         if (!java.util.Objects.equals(previous, level)) proxyBridge.sendVanishEvent(uuid, vanished.getName(), true, level);
                     }
-                    if (hasProtocolLib && vanishTeam != null && !vanishTeam.hasEntry(vanished.getName())) vanishTeam.addEntry(vanished.getName());
-                    updatePlayerListName(vanished);
                     refreshVanishFlight(vanished);
                     updateVanishVisibility(vanished);
                     if (hasProtocolLib && protocolLibManager != null) protocolLibManager.sendGlowMetadata(vanished);
@@ -1446,11 +1417,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         if (stopping) return;
         long decisionVersion = persist ? beginStateDecision(player.getUniqueId()) : stateVersion(player.getUniqueId());
         vanishedPlayers.add(player.getUniqueId());
-        if (hasProtocolLib && vanishTeam != null) vanishTeam.addEntry(player.getName());
-        else viewerTeams.update(player, true);
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
-
-        updatePlayerListName(player);
+        refreshDecorations();
 
         // Always mark the vanished player as "sleeping-ignored" so they are treated as already
         // asleep for the server's skip-night count. This is decoupled from preventSleeping:
@@ -1563,16 +1531,12 @@ public class Vanishpp extends JavaPlugin implements Listener {
         vanishedPlayers.remove(player.getUniqueId());
         messageRecipients.forget(player.getUniqueId());
         publishedVisibilityLevels.remove(player.getUniqueId());
-        if (!hasProtocolLib) viewerTeams.update(player, false);
         try {
             player.setSleepingIgnored(false);
         } catch (Throwable ignored) {
         }
         player.removeMetadata("vanished", this);
-        updatePlayerListName(player);
-
-        if (vanishTeam != null && vanishTeam.hasEntry(player.getName()))
-            vanishTeam.removeEntry(player.getName());
+        refreshDecorations();
 
         player.setCollidable(true);
 
@@ -1887,11 +1851,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
     private void resyncVanishEffectsOwned(Player player) {
         if (!isVanished(player)) return;
 
-        // Team + prefix
-        if (hasProtocolLib && vanishTeam != null) vanishTeam.addEntry(player.getName());
-        else viewerTeams.update(player, true);
-        refreshTeamPrefix();
-        updatePlayerListName(player);
+        // Staff nametag and tab prefixes (packets only)
+        refreshDecorations();
 
         // Metadata
         player.setMetadata("vanished", new FixedMetadataValue(this, true));
@@ -2073,12 +2034,14 @@ public class Vanishpp extends JavaPlugin implements Listener {
         return previous;
     }
 
+    /**
+     * Shows the incognito alias in the tab list. Only incognito changes the server's tab name; the [VANISHED] prefix
+     * staff see is added in their packets (see {@link net.thecommandcraft.vanishpp.decor.StaffDecorations}).
+     */
     public void updatePlayerListName(Player player) {
         String alias = incognitoNames.get(player.getUniqueId());
-        Component name = Component.text(alias == null ? player.getName() : alias);
-        if (isVanished(player) && configManager.vanishTabPrefix != null)
-            name = messageManager.parse(configManager.vanishTabPrefix, player).append(name);
-        player.playerListName(name);
+        if (alias != null) player.playerListName(Component.text(alias));
+        refreshDecorations();
     }
 
     public boolean isIncognito(Player player) {

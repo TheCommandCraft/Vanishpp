@@ -296,8 +296,7 @@ public class PlayerListener implements Listener {
             for (long delay : new long[]{2L, 20L, 60L}) {
                 plugin.getVanishScheduler().runLaterEntity(player, () -> {
                     if (player.isOnline() && plugin.isVanished(player)) {
-                        plugin.reapplyTeamEntry(player);
-                        plugin.updatePlayerListName(player);
+                        plugin.refreshDecorations();
                         plugin.getIntegrationManager().updateHooks(player, true);
                         if (plugin.getTabPluginHook() != null)
                             plugin.getTabPluginHook().update(player, true);
@@ -571,7 +570,6 @@ public class PlayerListener implements Listener {
         if (att != null) att.remove();
         plugin.cleanupPlayerCache(uuid);
         if (plugin.getProtocolLibManager() != null) {
-            plugin.getProtocolLibManager().clearObserverKnowledge(uuid);
             plugin.getProtocolLibManager().uncachePlayer(event.getPlayer());
         }
     }

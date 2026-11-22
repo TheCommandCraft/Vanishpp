@@ -25,22 +25,8 @@ public class ProtocolLibManager {
     private final Map<String, Long> lastFilterFailures = new HashMap<>();
     private ProtocolManager protocolManager;
 
-    /**
-     * Per-observer tracking of which {@code Vanishpp_Vanished} team member names that
-     * observer's client has actually been sent (via CREATE/ADD). See
-     * {@link VanishTeamPacketPolicy} for why this exists instead of trusting the
-     * observer's current permission at REMOVE time. Cleared on quit from
-     * {@link #clearObserverKnowledge(UUID)}, called by {@code PlayerListener#onQuit}.
-     */
-    private final Map<UUID, Set<String>> knownVanishTeamMembers = new ConcurrentHashMap<>();
-
     public ProtocolLibManager(Vanishpp plugin) {
         this.plugin = plugin;
-    }
-
-    /** Drops a quitting observer's tracked team knowledge so the map doesn't grow unbounded. */
-    public void clearObserverKnowledge(UUID observerId) {
-        knownVanishTeamMembers.remove(observerId);
     }
 
     /**
@@ -372,107 +358,7 @@ public class ProtocolLibManager {
             ProtocolLibManager.this.plugin.getLogger().warning("Failed to register ghost-proof spawning listener: " + e.getMessage());
         }
 
-        // 5. Final Stealth Fix: Scrub SCOREBOARD_TEAM packets
-        //
-        // Regression test: VanishTeamPacketPolicyTest. This fix originally scrubbed ADD/REMOVE
-        // purely by the observer's CURRENT vanishpp.see permission, which crashed clients
-        // ("Player is either on another team or not on any team") whenever an observer was
-        // granted vanishpp.see live (e.g. via LuckPerms, no relog) between a vanish and the
-        // matching unvanish — their client never received the ADD while non-staff, but the old
-        // logic let the REMOVE through unfiltered once they became staff. See
-        // VanishTeamPacketPolicy for the per-observer knowledge tracking that replaced it.
-        try {
-        protocolManager.addPacketListener(
-                new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Server.SCOREBOARD_TEAM) {
-                    @Override
-                    public void onPacketSending(PacketEvent event) {
-                        if (event.isCancelled())
-                            return;
-
-                        try {
-                            PacketContainer packet = event.getPacket();
-                            int action = packet.getIntegers().read(0);
-                            String teamName = packet.getStrings().read(0);
-
-                            if (!"Vanishpp_Vanished".equals(teamName)) {
-                                // Not our team — leave any other plugin/vanilla team packets alone
-                                // aside from the pre-existing generic per-name vanish scrub below.
-                                if (action == 0 || action == 3 || action == 4) {
-                                    scrubGenericTeamPacket(packet, action, event);
-                                }
-                                return;
-                            }
-
-                            if (action != VanishTeamPacketPolicy.ACTION_CREATE
-                                    && action != VanishTeamPacketPolicy.ACTION_ADD_PLAYERS
-                                    && action != VanishTeamPacketPolicy.ACTION_REMOVE_PLAYERS) {
-                                return;
-                            }
-
-                            Player observer = event.getPlayer();
-                            Collection<String> names = packet.getSpecificModifier(Collection.class).read(0);
-                            if (names == null || names.isEmpty())
-                                return;
-
-                            Set<String> known = ProtocolLibManager.this.knownVanishTeamMembers
-                                    .computeIfAbsent(observer.getUniqueId(), k -> ConcurrentHashMap.newKeySet());
-
-                            VanishTeamPacketPolicy.Decision decision = VanishTeamPacketPolicy.decide(
-                                    action, names, known, name -> visibleName(observer, name));
-
-                            if (decision.cancel()) {
-                                event.setCancelled(true);
-                            } else if (decision.names().size() != names.size()) {
-                                copyForObserver(event).getSpecificModifier(Collection.class).write(0, decision.names());
-                            }
-                        } catch (Exception e) {
-                            // Fail closed: if we can't verify a vanished name isn't in this
-                            // packet, don't forward it unscrubbed. Losing a legitimate team UI
-                            // update is an acceptable cost; leaking a vanished player's name
-                            // (e.g. to a third-party team plugin's own packets, handled by
-                            // scrubGenericTeamPacket below) is not.
-                            event.setCancelled(true);
-                            ProtocolLibManager.this.plugin.getLogger().warning(
-                                    "Failed to scrub SCOREBOARD_TEAM packet, cancelling for safety: " + e.getMessage());
-                        }
-                    }
-
-                    /** Pre-existing generic scrub for any OTHER (non-vanish) team's member list. */
-                    private void scrubGenericTeamPacket(PacketContainer packet, int action, PacketEvent event) {
-                        try {
-                            Collection<String> players = packet.getSpecificModifier(Collection.class).read(0);
-                            if (players == null) return;
-                            List<String> scrubbed = new ArrayList<>();
-                            boolean changed = false;
-                            for (String name : players) {
-                                Player p = Bukkit.getPlayer(name);
-                                if (p != null && !ProtocolLibManager.this.plugin.getPermissionManager().canSee(event.getPlayer(), p)) {
-                                    changed = true;
-                                } else {
-                                    scrubbed.add(name);
-                                }
-                            }
-                            if (changed) {
-                                if (scrubbed.isEmpty() && action != 0) {
-                                    event.setCancelled(true);
-                                } else {
-                                    copyForObserver(event).getSpecificModifier(Collection.class).write(0, scrubbed);
-                                }
-                            }
-                        } catch (Exception e) {
-                            // Fail closed - same reasoning as the outer catch above. This is
-                            // the path that actually applies to third-party team plugins
-                            // (e.g. BetterTeams): a packet shape this code doesn't recognize
-                            // must not be forwarded unscrubbed just because reading it failed.
-                            event.setCancelled(true);
-                            ProtocolLibManager.this.plugin.getLogger().warning(
-                                    "Failed to scrub third-party SCOREBOARD_TEAM packet, cancelling for safety: " + e.getMessage());
-                        }
-                    }
-                });
-        } catch (Exception e) {
-            ProtocolLibManager.this.plugin.getLogger().warning("Failed to register scoreboard team scrubbing listener: " + e.getMessage());
-        }
+        // 5. Teams and tab names: handled without ProtocolLib by decor.StaffDecorations, the same on every server.
 
         // 6. Server List Ping
         try {
@@ -506,7 +392,6 @@ public class ProtocolLibManager {
             ProtocolLibManager.this.plugin.getLogger().warning("Failed to register server-list-ping listener: " + e.getMessage());
         }
 
-        // Native vanishTeam.prefix() handles the nametag prefix for staff already.
     }
 
     private void registerSilentChestListeners() {

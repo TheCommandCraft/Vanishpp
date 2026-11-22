@@ -312,12 +312,9 @@ class HardeningTest {
         try { plugin.getVanishScoreboard().show(player); }
         catch (RuntimeException ignored) { /* The assertion concerns entering the unsupported API, not MockBukkit's renderer. */ }
         assertEquals(0, scoreboardAccesses, "Folia must avoid unsupported scoreboard API calls");
-        invoke(plugin, "setupTeams");
-        var overlaysField = Vanishpp.class.getDeclaredField("viewerTeams"); overlaysField.setAccessible(true);
-        ViewerTeams overlays = (ViewerTeams) overlaysField.get(plugin);
-        overlays.update(player, true);
-        overlays.refresh();
-        assertEquals(0, scoreboardAccesses, "Folia startup and private overlays must also avoid scoreboard API");
+        invoke(plugin, "removeLegacyVanishTeam");
+        plugin.applyVanishEffects(player);
+        assertEquals(0, scoreboardAccesses, "Folia startup and vanishing must also avoid the scoreboard API");
     }
 
     @Test

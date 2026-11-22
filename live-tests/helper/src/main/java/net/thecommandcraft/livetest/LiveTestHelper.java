@@ -41,6 +41,20 @@ public final class LiveTestHelper extends JavaPlugin {
                     + " sleepingIgnored=" + p.isSleepingIgnored());
             return true;
         }
+        // ltprobe listname <player> [text|reset]: sets the tab-list name like another plugin would (EssentialsX
+        // nicknames, tab plugins), or prints the server's current one.
+        if (args.length >= 2 && args[0].equals("listname")) {
+            Player p = Bukkit.getPlayerExact(args[1]);
+            if (p == null) { getLogger().info("LTPROBE listname " + args[1] + " offline"); return true; }
+            if (args.length >= 3) {
+                String text = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
+                p.playerListName(text.equals("reset") ? null
+                        : net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(text));
+            }
+            getLogger().info("LTPROBE listname " + p.getName() + " = "
+                    + net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(p.playerListName()));
+            return true;
+        }
         // ltprobe unack <player> <id>: removes a stored Vanish++ acknowledgement so a test can be repeated.
         // Reaches into Vanish++ by reflection on purpose: this is test-only and never shipped.
         if (args.length == 3 && args[0].equals("unack")) {

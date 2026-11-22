@@ -12,6 +12,9 @@ const HIDER = P + 'utils/PluginHider.java';
 const PERMS = P + 'config/PermissionManager.java';
 const VCONFIG = P + 'commands/VanishConfigCommand.java';
 const HELP = P + 'commands/VanishHelpCommand.java';
+const DECOR = P + 'decor/StaffDecorations.java';
+const DMODEL = P + 'decor/DecorationModel.java';
+const DNMS = P + 'decor/NmsPackets.java';
 const on = id => `net.thecommandcraft.vanishpp.LiveTestMutant.on("${id}")`;
 
 const mutants = [
@@ -50,12 +53,42 @@ const mutants = [
   { id: 'chat-no-prefix', what: 'the vanished prefix is missing from chat that staff see', tests: ['can_chat'] },
   { id: 'vconfig-flat-tab', what: '/vconfig tab-complete lists every dotted path at once again', tests: ['/vconfig:'] },
   { id: 'vconfig-tree-ignored', what: '/vconfig only accepts dotted paths, not one argument per level', tests: ['/vconfig:'] },
+  { id: 'team-server-change', what: 'vanishing takes the player off their own team on the server', tests: ['10-teams: /team: vanishing never changes'] },
+  { id: 'tab-server-change', what: 'vanishing overwrites the server tab name', tests: ['10-teams: tab list:'] },
+  { id: 'team-no-tag', what: 'staff never get the [V] nametag', tests: ['10-teams: /team: staff see the [V]', '10-teams: /team: staff who lose'] },
+  { id: 'team-tag-replaces-prefix', what: "the [V] nametag replaces the team's own prefix instead of going in front of it", tests: ['10-teams: /team: staff see the [V]'] },
+  { id: 'team-no-restore', what: 'clients never get the real team back after a vanished or hidden period', tests: ['10-teams: /team: staff see the [V]', '10-teams: /team: players who cannot see'] },
+  { id: 'team-leak-hidden', what: "team changes of a vanished player reach players who can't see them", tests: ['10-teams: /team: players who cannot see'] },
+  { id: 'team-unsafe-leave', what: 'leave packets reach clients that have the player on another team (a real client crashes)', tests: ['10-teams: /team: players who cannot see'] },
+  { id: 'team-tag-ignores-permission', what: 'the [V] nametag ignores who may see the vanished player', tests: ['10-teams: /team: staff who lose'] },
+  { id: 'tab-no-prefix', what: 'staff never get the [VANISHED] tab prefix', tests: ['10-teams: tab list:'] },
+  { id: 'tab-prefix-replaces-name', what: "the [VANISHED] tab prefix replaces another plugin's tab name", tests: ['10-teams: tab list:'] },
   { id: 'help-no-wiki', what: '/vhelp has no [Wiki] button', tests: ['/vhelp:'] },
   { id: 'help-wiki-root', what: "a command's /vhelp page links to the wiki home instead of its own page", tests: ['/vhelp:'] },
   { id: 'vconfig-tab-deeper', what: '/vconfig tab-complete skips a level and lists the options below it', tests: ['/vconfig:'] },
 ];
 
 const edits = [
+  { file: MAIN, find: '        player.setMetadata("vanished", new FixedMetadataValue(this, true));\n        refreshDecorations();\n',
+    replace: `        player.setMetadata("vanished", new FixedMetadataValue(this, true));\n        refreshDecorations();\n`
+      + `        if (${on('team-server-change')}) { var lt = Bukkit.getScoreboardManager().getMainScoreboard().getEntryTeam(player.getName()); if (lt != null) lt.removeEntry(player.getName()); }\n`
+      + `        if (${on('tab-server-change')}) player.playerListName(Component.text("[VANISHED] " + player.getName()));\n` },
+  { file: DECOR, find: '            return Component.empty().equals(nametag) ? DecorationModel.State.NORMAL : DecorationModel.State.TAGGED;',
+    replace: `            return ${on('team-no-tag')} || Component.empty().equals(nametag) ? DecorationModel.State.NORMAL : DecorationModel.State.TAGGED;` },
+  { file: DECOR, find: '            if (!canSee(v, subject.getUniqueId())) return DecorationModel.State.HIDDEN;',
+    replace: `            if (!${on('team-tag-ignores-permission')} && !canSee(v, subject.getUniqueId())) return DecorationModel.State.HIDDEN;` },
+  { file: DECOR, find: '            if (v == null || Component.empty().equals(tab) || !plugin.isVanished(subject)) return false;',
+    replace: `            if (${on('tab-no-prefix')} || v == null || Component.empty().equals(tab) || !plugin.isVanished(subject)) return false;` },
+  { file: DECOR, find: '                if (display != null) base = nms.adventure(display);',
+    replace: `                if (display != null && !${on('tab-prefix-replaces-name')}) base = nms.adventure(display);` },
+  { file: DNMS, find: '            if (old != null) prefix = Component.text().append(tag).append(adventure(old)).build();',
+    replace: `            if (old != null && !${on('team-tag-replaces-prefix')}) prefix = Component.text().append(tag).append(adventure(old)).build();` },
+  { file: DMODEL, find: '                    if (!Objects.equals(want, has)) {',
+    replace: `                    if (!${on('team-no-restore')} && !Objects.equals(want, has)) {` },
+  { file: DMODEL, find: '                    intended.put(entry, team);\n                    State state = env.stateOf(entry);\n',
+    replace: `                    intended.put(entry, team);\n                    State state = env.stateOf(entry);\n                    if (${on('team-leak-hidden')} && state == State.HIDDEN) state = State.NORMAL;\n` },
+  { file: DMODEL, find: '                    if (state == State.NORMAL && team.equals(actual.get(entry))) { kept.add(entry); actual.remove(entry); }',
+    replace: `                    if (state == State.NORMAL && (${on('team-unsafe-leave')} || team.equals(actual.get(entry)))) { kept.add(entry); actual.remove(entry); }` },
   { file: HELP, find: '        sender.sendMessage(Component.text(" ").append(wikiButton(null)));',
     replace: `        if (!${on('help-no-wiki')}) sender.sendMessage(Component.text(" ").append(wikiButton(null)));` },
   { file: HELP, find: '.append(wikiButton(WIKI_PAGES.get(cmdName)))',

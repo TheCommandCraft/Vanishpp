@@ -67,6 +67,14 @@ public final class VoiceAudience {
                 && (receiver == null || current.vanishedHearOthers() || canSee(sender, receiver, current.layered())));
     }
 
+    /**
+     * Whether the viewer may see the subject, from the published permission facts. Safe on any thread; used where a
+     * live permission check is not allowed (audio and network threads).
+     */
+    public boolean canSee(UUID viewer, UUID subject) {
+        return canSee(viewer, subject, plugin.getConfigManager().layeredPermsEnabled);
+    }
+
     private boolean canSee(UUID viewer, UUID subject, boolean layered) {
         if (!plugin.isVanished(subject)) return true;
         Facts observer = viewer == null ? null : players.get(viewer);

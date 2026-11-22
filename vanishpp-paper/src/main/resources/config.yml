@@ -36,11 +36,15 @@ messages:
 # --- [ APPEARANCE ] ---
 # Visual indicators for vanished players.
 vanish-appearance:
-  # Prefix shown in the Tab List (and chat for staff).
+  # Prefix staff see in front of a vanished player's tab name (and in chat for staff).
+  # It goes in front of any name or prefix other plugins set (TAB, EssentialsX, LuckPerms-based formats).
+  # Leave empty to turn it off.
   tab-prefix: "&7[VANISHED] "
 
-  # Prefix shown above the player's head (via Scoreboard Teams).
-  # Visible to players with vanishpp.see who have the vanished player shown to them.
+  # Prefix staff see above a vanished player's head, in front of their own team prefix.
+  # Only players who can see the vanished player (vanishpp.see) get it. Vanish++ never changes the
+  # server's teams or scoreboards: this is added only to what staff receive. Needs Paper (not Spigot).
+  # Leave empty to turn it off.
   nametag-prefix: "&7[V] "
 
   # Action Bar announcement while vanished.
