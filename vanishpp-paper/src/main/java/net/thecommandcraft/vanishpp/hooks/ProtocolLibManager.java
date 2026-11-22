@@ -670,7 +670,12 @@ public class ProtocolLibManager {
                                         return;
                                     if (!"sleep.players_sleeping".equals(tc.key()))
                                         return;
-                                    java.util.List<net.kyori.adventure.text.Component> args = tc.args();
+                                    // arguments() (TranslationArgument), not the older args(): newer
+                                    // Adventure builds bundled with Paper/Purpur no longer have args(),
+                                    // which threw NoSuchMethodError here on every sleep message.
+                                    java.util.List<net.kyori.adventure.text.Component> args = new java.util.ArrayList<>();
+                                    for (net.kyori.adventure.text.TranslationArgument a : tc.arguments())
+                                        args.add(a.asComponent());
                                     if (args.size() < 2)
                                         return;
                                     int numerator = 0;
@@ -691,8 +696,9 @@ public class ProtocolLibManager {
                                                     net.kyori.adventure.text.Component.text(newArgs[1])));
                                     packet.getChatComponents().write(0,
                                             com.comphenix.protocol.wrappers.AdventureComponentConverter.fromComponent(fixed));
-                                } catch (Exception e) {
-                                    // Fail open: this is a cosmetic message, never block it.
+                                } catch (Exception | LinkageError e) {
+                                    // Fail open: this is a cosmetic message, never block it. LinkageError
+                                    // (NoSuchMethodError etc.) covers Adventure API drift between servers.
                                     ProtocolLibManager.this.plugin.getLogger().fine(
                                             "Sleep-status rewrite skipped: " + e.getMessage());
                                 }
