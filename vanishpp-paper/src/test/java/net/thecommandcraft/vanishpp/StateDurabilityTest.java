@@ -1431,6 +1431,7 @@ class StateDurabilityTest {
         }
         final List<net.thecommandcraft.vanishpp.common.protocol.VppPacket.DecodedPacket> packets = new ArrayList<>();
         RecordingPlayer(ServerMock server) { super(server, "Staff"); }
+        @Override public java.util.Set<String> getListeningPluginChannels() { return java.util.Set.of("vanishpp:proxy"); }
         @Override public void sendPluginMessage(org.bukkit.plugin.Plugin source, String channel, byte[] message) {
             if (channel.equals("vanishpp:proxy")) packets.add(net.thecommandcraft.vanishpp.common.protocol.VppPacket.decode(message));
         }

@@ -100,7 +100,7 @@ class Server {
     const paperReloadRace = /Caught previously unhandled exception :$|Paper Async Command Builder Thread Pool/;
     return this.lines.slice(from).filter(l => !paperReloadRace.test(l) &&
       /(WARN|ERROR)\]/.test(l) && /exception|error|Vanishpp|ProtocolLib|LiveTestHelper/i.test(l)
-      && !/Setup Check|NOT installed|ProtocolLib NOT found|\*\*\*|UpdateChecker|offline mode|server is running in offline|has not yet been tested/i.test(l));
+      && !/Setup Check|NOT installed|ProtocolLib NOT found|\*\*\*|UpdateChecker|has an update available|\] Download: https|offline mode|server is running in offline|has not yet been tested/i.test(l));
   }
 
   async stop() {

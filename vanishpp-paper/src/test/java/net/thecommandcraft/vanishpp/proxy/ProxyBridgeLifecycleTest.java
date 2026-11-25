@@ -133,6 +133,52 @@ class ProxyBridgeLifecycleTest {
         assertEquals(List.of("in-flight"), carrier.payloads(), "the fixture must actually have queued the in-flight packet");
     }
 
+    // Ticket: behind Velocity everyone joining an empty backend was kicked with "Proxy vanish state is unavailable".
+    // Velocity registers the channel only after the backend's join, so the join query sent through the joiner
+    // itself was dropped by Paper and never answered.
+    @Test
+    void loneJoiner_queryWaitsForChannelRegistrationAndIsAnswered() {
+        server.addPlayer(carrier);
+        server.getScheduler().performOneTick();
+        receive(VppMessage.PONG, "{\"session\":\"net\"}");
+        assertTrue(bridge.isProxyDetected(), "control: the handshake must complete");
+        carrier.disconnect();
+
+        RecordingPlayer joiner = new RecordingPlayer(server, "Joiner");
+        joiner.listening = false;
+        server.addPlayer(joiner);
+        List<Boolean> answers = new ArrayList<>();
+        bridge.requestJoinState(joiner, answers::add);
+        server.getScheduler().performOneTick();
+        assertTrue(joiner.packets.isEmpty(), "nothing can reach the proxy before the channel is registered");
+
+        joiner.listening = true;
+        bridge.onChannelRegistered(joiner);
+        server.getScheduler().performOneTick();
+        var query = joiner.packets.stream().filter(p -> p.type() == VppMessage.STATE_QUERY).findFirst();
+        assertTrue(query.isPresent(), "the join query must be sent once the channel is registered: " + joiner.packets);
+        String requestId = com.google.gson.JsonParser.parseString(query.get().jsonPayload()).getAsJsonObject()
+                .get("requestId").getAsString();
+        bridge.onPluginMessageReceived(VppChannel.CHANNEL, joiner, VppPacket.encode(VppMessage.STATE_RESPONSE,
+                "{\"vanished\":[],\"visible\":[],\"session\":\"net\",\"revision\":1,\"requestId\":\"" + requestId
+                        + "\",\"joiningUuid\":\"" + joiner.getUniqueId() + "\",\"joiningVanished\":false}"));
+        server.getScheduler().performTicks(120);
+        assertEquals(List.of(false), answers, "the join must be answered by the proxy");
+        assertTrue(joiner.isOnline(), "the joiner must not be kicked");
+    }
+
+    @Test
+    void handshake_waitsForAPlayerWhoseChannelIsRegistered() {
+        carrier.listening = false;
+        server.addPlayer(carrier);
+        server.getScheduler().performTicks(5);
+        assertFalse(bridge.isProxyDetected());
+        carrier.listening = true;
+        bridge.onChannelRegistered(carrier);
+        server.getScheduler().performOneTick();
+        assertEquals(VppMessage.HELLO, carrier.packets.getFirst().type(), "HELLO must go out as soon as the channel is registered");
+    }
+
     private byte[] packet(String value) {
         return VppPacket.encode(VppMessage.STATE_QUERY, value);
     }
@@ -153,16 +199,27 @@ class ProxyBridgeLifecycleTest {
         }
     }
 
+    /** Like Paper: a plugin message only goes out once the player's connection has registered the channel. */
     private static class RecordingPlayer extends PlayerMock {
         private final List<VppPacket.DecodedPacket> packets = new ArrayList<>();
+        private boolean listening = true;
 
         private RecordingPlayer(ServerMock server) {
-            super(server, "Carrier");
+            this(server, "Carrier");
+        }
+
+        private RecordingPlayer(ServerMock server, String name) {
+            super(server, name);
+        }
+
+        @Override
+        public java.util.Set<String> getListeningPluginChannels() {
+            return listening ? java.util.Set.of(VppChannel.CHANNEL) : java.util.Set.of();
         }
 
         @Override
         public void sendPluginMessage(Plugin source, String channel, byte[] message) {
-            if (VppChannel.CHANNEL.equals(channel)) packets.add(VppPacket.decode(message));
+            if (VppChannel.CHANNEL.equals(channel) && listening) packets.add(VppPacket.decode(message));
         }
 
         private List<String> payloads() {

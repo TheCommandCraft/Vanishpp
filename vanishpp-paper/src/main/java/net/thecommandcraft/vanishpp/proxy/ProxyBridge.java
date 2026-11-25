@@ -122,9 +122,9 @@ public class ProxyBridge implements PluginMessageListener {
     private void scheduleHello(long delayTicks) {
         plugin.getVanishScheduler().runLaterGlobal(() -> {
             if (!active || handshakeComplete) return;
-            Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
+            Player carrier = carrier();
             if (carrier == null) {
-                // No players yet — retry
+                // No connection can carry the channel yet — retry (or wait for onChannelRegistered)
                 scheduleHello(HELLO_RETRY_TICKS);
                 return;
             }
@@ -158,7 +158,8 @@ public class ProxyBridge implements PluginMessageListener {
         payload.add("vanished", restored);
         byte[] packet = VppPacket.encode(VppMessage.HELLO, payload.toString());
         plugin.getVanishScheduler().runEntityNow(carrier, () -> {
-            if (!active || handshakeComplete || !carrier.isOnline() || provider != plugin.getStorageProvider()) return;
+            if (!active || handshakeComplete || !carrier.isOnline() || !canCarry(carrier)
+                    || provider != plugin.getStorageProvider()) return;
             helloSent = true;
             carrier.sendPluginMessage(plugin, VppChannel.CHANNEL, packet);
         });
@@ -481,14 +482,14 @@ public class ProxyBridge implements PluginMessageListener {
     /** Sends a raw packet via the first available online player, or queues it for later. */
     public void sendPacket(byte[] data) {
         if (!active || outboundSuspended) return;
-        Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
+        Player carrier = carrier();
         pendingPackets.addLast(data);
         if (carrier != null) flushPendingPackets(carrier);
     }
 
     /** Flushes any queued packets now that a carrier player is available. Call on PlayerJoinEvent. */
     public void flushPendingPackets(Player carrier) {
-        if (outboundSuspended || retryScheduled.get()) return;
+        if (outboundSuspended || retryScheduled.get() || !canCarry(carrier)) return;
         Runnable flush = () -> {
             if (!carrier.isOnline()) { if (active && !pendingPackets.isEmpty()) scheduleSendRetry(); return; }
             if (!active || outboundSuspended || retryScheduled.get()
@@ -539,9 +540,29 @@ public class ProxyBridge implements PluginMessageListener {
             if (generation != sendGeneration) return;
             retryScheduled.set(false);
             if (!active || outboundSuspended) return;
-            Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
+            Player carrier = carrier();
             if (carrier != null) flushPendingPackets(carrier);
         }, delayTicks);
+    }
+
+    /**
+     * Paper drops plugin messages for a player whose connection has not registered the channel yet. Velocity
+     * registers it only after the backend's join, so a player who just joined an empty server can't carry anything
+     * until {@link #onChannelRegistered} runs.
+     */
+    private static boolean canCarry(Player player) {
+        return player.getListeningPluginChannels().contains(VppChannel.CHANNEL);
+    }
+
+    private Player carrier() {
+        return Bukkit.getOnlinePlayers().stream().filter(ProxyBridge::canCarry).findFirst().orElse(null);
+    }
+
+    /** Velocity registered the channel for this player: send the handshake and anything that waited for a carrier. */
+    public void onChannelRegistered(Player player) {
+        if (!active) return;
+        if (!handshakeComplete && !helloSent) scheduleHello(0L);
+        flushPendingPackets(player);
     }
 
     private String resolveServerName() {

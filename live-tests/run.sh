@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Live bot tests for Vanish++. One Paper server and one pool of bots serve the whole run.
 #   live-tests/run.sh [path/to/vanishpp.jar] [--only <text>] [--verbose]   test the built plugin
-#   live-tests/run.sh --mutants [--only <text>]                            test the tests (see README)
+#   live-tests/run.sh --mutants [--only <text>] [--shard i/n]              test the tests (see README)
 #   add --mc <version> for another Paper version (versions.tsv), or --all-versions for every one in turn
 # Needs Java 21+ (JAVA=/path/to/java; JAVA25=... for Minecraft 26.x), Maven (MVN=/path/to/mvn) and Node 20+. Downloads are checksum-pinned.
 set -euo pipefail
@@ -38,6 +38,8 @@ while [[ $# -gt 0 ]]; do
     --mc) MC=$2; shift ;;
     --all-versions) ALL=true ;;
     --only) pass+=(--only "$2"); shift ;;
+    --shard) pass+=(--shard "$2"); shift ;;
+    --port) pass+=(--port "$2"); shift ;;
     --verbose) pass+=(--verbose) ;;
     *) PLUGIN=$1 ;;
   esac
@@ -88,9 +90,11 @@ if $MUTANTS; then
   PLUGIN=$(node mutate.js --mvn "$MVN" | tail -1)
   pass+=(--mutants)
 elif [[ -z $PLUGIN ]]; then
-  PLUGIN=$(ls ../vanishpp-paper/target/vanishpp-*.jar 2>/dev/null | grep -v '/original-' | head -1 || true)
+  # The project version from the root pom: target/ can hold jars of older builds, which must never be picked.
+  PLUGIN=../vanishpp-paper/target/vanishpp-$(sed -n 's:^    <version>\(.*\)</version>$:\1:p' ../pom.xml | head -1).jar
 fi
-[[ -f $PLUGIN ]] || { echo "Vanish++ jar not found; build it first (mvn -DskipTests package) or pass its path" >&2; exit 2; }
+[[ -f $PLUGIN ]] || { echo "Vanish++ jar $PLUGIN not found; build it first (mvn -DskipTests package) or pass its path" >&2; exit 2; }
+echo "Testing $(basename "$PLUGIN")"
 
 exec node runner.js --java "$JAVA" --mc "$PAPER_VERSION" --bot-version "$BOT_VERSION" --paper ".cache/paper-$PAPER_VERSION-$PAPER_BUILD.jar" \
   --plugin ".cache/ProtocolLib-$PL_VERSION.jar" --plugin ".cache/ViaVersion-$VIA_VERSION.jar" \

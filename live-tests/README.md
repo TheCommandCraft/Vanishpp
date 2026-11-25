@@ -15,11 +15,24 @@ mvn -DskipTests package -pl vanishpp-paper -am
 live-tests/run.sh                    # all tests against the built plugin
 live-tests/run.sh --only chest       # only tests whose file or name contains "chest"
 live-tests/run.sh --mutants          # test the tests (see below)
+live-tests/run.sh --mutants --shard 2/6   # only every 6th mutant from the 2nd (CI runs 6 shards in parallel)
 ```
 
 You need Java 21 or newer, Maven and Node 20 or newer. `JAVA=` and `MVN=` select specific binaries. Paper and
 ProtocolLib are downloaded once into `.cache/`, and their checksums are pinned in `run.sh`. Paper's patched files
 are kept in `.work/server/`, so only the first run pays for the patching.
+
+## Proxy tests
+
+`proxy.sh` starts Velocity with two Paper backends (`lobby` and `pvp`) on `127.0.0.1:30100-30102`, both Vanish++
+jars in proxy mode, and bots that join through Velocity like players do. It checks joins (also to a backend nobody
+else is on) and a vanished player switching servers. Velocity 4 needs Java 25 (`JAVA25=`).
+
+```bash
+mvn -DskipTests package -pl vanishpp-paper,vanishpp-velocity -am
+live-tests/proxy.sh                                  # the built jars
+live-tests/proxy.sh old-paper.jar old-velocity.jar   # any other pair, e.g. to confirm a bug on a release
+```
 
 ## Testing the tests: mutants
 

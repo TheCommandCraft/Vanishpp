@@ -84,6 +84,14 @@ public class PlayerListener implements Listener {
     // Covers the configuration phase (resource packs) between pre-login and join; denied or abandoned logins expire.
     private static final long ABANDONED_LOGIN_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
 
+    /** The proxy's channel only counts for a player once their connection registers it (see ProxyBridge). */
+    @EventHandler
+    public void onRegisterChannel(PlayerRegisterChannelEvent event) {
+        if (plugin.getProxyBridge() != null
+                && net.thecommandcraft.vanishpp.common.protocol.VppChannel.CHANNEL.equals(event.getChannel()))
+            plugin.getProxyBridge().onChannelRegistered(event.getPlayer());
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
         long now = System.nanoTime();

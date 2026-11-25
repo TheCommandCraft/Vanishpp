@@ -27,7 +27,10 @@ class ProxyBridgeSecurityTest {
         plugin = MockBukkit.load(Vanishpp.class);
         plugin.getConfigManager().disableBlockTriggering = false;
         plugin.getConfigManager().preventSleeping = false;
-        carrier = server.addPlayer();
+        carrier = new PlayerMock(server, "Carrier") { // connected through Velocity: the channel is registered
+            @Override public java.util.Set<String> getListeningPluginChannels() { return java.util.Set.of(VppChannel.CHANNEL); }
+        };
+        server.addPlayer(carrier);
     }
 
     @AfterEach

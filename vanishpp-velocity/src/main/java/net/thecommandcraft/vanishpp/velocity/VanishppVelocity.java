@@ -85,7 +85,8 @@ public class VanishppVelocity {
                 .build();
         proxy.getCommandManager().register(meta, new VanishReloadCommand(this, dispatcher));
 
-        logger.info("Vanish++ Velocity {} enabled. Channel: {}", proxy.getVersion().getVersion(), VppChannel.CHANNEL);
+        logger.info("Vanish++ Velocity {} enabled. Channel: {}", proxy.getPluginManager().fromInstance(this)
+                .flatMap(c -> c.getDescription().getVersion()).orElse("?"), VppChannel.CHANNEL);
     }
 
     @Subscribe

@@ -179,9 +179,14 @@ public class PaperChannelDispatcher {
     }
 
     private void sendRaw(RegisteredServer server, byte[] data) {
-        Optional<Player> carrier = server.getPlayersConnected().stream().findFirst();
+        // A player who is switching away can still be listed on the old server while their current connection is
+        // already the new one (or none), so only a player whose current connection is this server can carry.
+        Optional<com.velocitypowered.api.proxy.ServerConnection> carrier = server.getPlayersConnected().stream()
+                .map(player -> player.getCurrentServer().orElse(null))
+                .filter(conn -> conn != null && conn.getServer().equals(server))
+                .findFirst();
         if (carrier.isPresent()) {
-            carrier.get().getCurrentServer().ifPresent(conn -> conn.sendPluginMessage(channel, data));
+            carrier.get().sendPluginMessage(channel, data);
         } else {
             // Queue for later delivery
             pendingQueue

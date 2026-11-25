@@ -820,6 +820,7 @@ class HardeningTest {
         var delivered = new ArrayList<String>();
         var logs = new ArrayList<String>();
         PlayerMock carrier = new PlayerMock(server, "FailureCarrier") {
+            @Override public java.util.Set<String> getListeningPluginChannels() { return java.util.Set.of("vanishpp:proxy"); }
             @Override public void sendPluginMessage(org.bukkit.plugin.Plugin source, String channel, byte[] message) {
                 int attempt = attempts.incrementAndGet();
                 if (permanent) throw new IllegalArgumentException("invalid-packet-probe");
@@ -916,6 +917,7 @@ class HardeningTest {
 
     private PlayerMock recordingCarrier(String name, List<String> delivered) {
         return new PlayerMock(server, name) {
+            @Override public java.util.Set<String> getListeningPluginChannels() { return java.util.Set.of("vanishpp:proxy"); }
             @Override public void sendPluginMessage(org.bukkit.plugin.Plugin source, String channel, byte[] message) {
                 delivered.add(net.thecommandcraft.vanishpp.common.protocol.VppPacket.decode(message).jsonPayload());
             }

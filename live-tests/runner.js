@@ -29,6 +29,9 @@ const PORT = Number(opt('port', '25599'));
 const only = opt('only', '');
 const verbose = args.includes('--verbose');
 const mutationMode = args.includes('--mutants');
+// --shard i/n: run only every n-th mutant starting at the i-th, so CI can split the mutants over parallel jobs.
+const [SHARD, SHARDS] = (opt('shard', '1/1').match(/^(\d+)\/(\d+)$/) || [, 1, 1]).slice(1).map(Number);
+if (!(SHARD >= 1 && SHARD <= SHARDS)) { console.error('--shard must look like 2/6'); process.exit(2); }
 const POOL_SIZE = 6;
 const GROUND = -60;
 const LOBBY = { x: 0, z: 0 };
@@ -341,14 +344,14 @@ async function main() {
   if (mutationMode) {
     if (failed.length) console.log('\nSkipping mutants: the normal run must pass first.');
     else {
-      const { mutants } = require('./mutants');
+      const mutants = require('./mutants').mutants.filter((_, i) => i % SHARDS === SHARD - 1);
       // Every test must be proven able to fail by at least one mutant (guard tests excepted).
-      for (const test of all.filter(x => !x.guard)) {
-        if (!mutants.some(m => m.tests.some(x => label(test).includes(x))))
+      for (const test of SHARD === 1 ? all.filter(x => !x.guard) : []) { // checked once, in shard 1
+        if (!require('./mutants').mutants.some(m => m.tests.some(x => label(test).includes(x))))
           mutantResults.push({ m: { id: 'uncovered', what: label(test) }, verdict: 'UNCOVERED', detail: 'no mutant checks this test' });
       }
       const toggle = path.join(server.dir, 'livetest-mutant.txt');
-      console.log(`\nMutants: each one breaks one feature; its tests must fail.`);
+      console.log(`\nMutants${SHARDS > 1 ? ` (shard ${SHARD}/${SHARDS}: ${mutants.length})` : ''}: each one breaks one feature; its tests must fail.`);
       for (const m of mutants) {
         const mine = all.filter(t => m.tests.some(x => label(t).includes(x)));
         if (!mine.length) { mutantResults.push({ m, verdict: 'ERROR', detail: 'no test matches ' + JSON.stringify(m.tests) }); continue; }
