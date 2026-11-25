@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1.1] - 2026-11-25
+
+**Priority:** critical
+
+This update fixes a bug that kicked players from proxy networks. Please update both the Paper and the Velocity jar. Thanks to RFer for the report and the logs.
+
+### Fixed
+- **Players behind Velocity were kicked with "Proxy vanish state is unavailable"** when they joined or switched to a backend with nobody else on it. Paper only sends Vanish++ messages to the proxy once Velocity has registered the channel for that player, which happens just after the join. Vanish++ now waits for that registration before it asks the proxy for the player's vanish state, so the answer arrives in time.
+- **Proxy replies always go to the right backend.** Velocity could pick a player who was still listed on a server while switching away from it, and the reply was then lost.
+- **The Velocity startup message shows the Vanish++ version** instead of the Velocity version.
+
 ## [1.2.1] - 2026-11-22
 
 **Priority:** feature
