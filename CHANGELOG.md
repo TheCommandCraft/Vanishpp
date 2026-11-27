@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-11-27
+
+**Priority:** feature
+
+Fixes for networks and hub servers, from RFer's report. Thanks to RFer for the detailed feedback.
+
+### Changed
+- **Turning the vanish scoreboard off with `/vsb` is remembered.** It stays off on later vanishes, after rejoining, and on other servers with MySQL storage, until `/vsb` turns it on again. This replaces the `vanishpp.scoreboard.bypass` permission. That permission was included in `*` (for example in LuckPerms), so admins with `*` never saw the scoreboard when they vanished.
+- **The voice chat hook is set to `auto`.** It is on when Simple Voice Chat is installed and does nothing without it, so servers without Simple Voice Chat no longer get a warning to turn it off. When Simple Voice Chat is found, admins see a one-time notice with a **[Turn off]** button. `true` and `false` still work. Configs that still have the old default `true` are changed to `auto` once.
+- **Vanish++ takes back `/vanish` and its other commands** when another plugin registered them first, such as DeluxeHub, EssentialsX or CMI. The console says which plugin had them, and the other plugin's command stays reachable as `/<plugin>:<command>`. `commands.take-over-conflicts: false` turns this off.
+
+### Fixed
+- **Your own scoreboard comes back after the vanish scoreboard.** Turning `/vsb` off or unvanishing used to switch players to the server's main scoreboard, so boards from hub plugins such as DeluxeHub were gone until that plugin reloaded.
+- **Changing a setting in game no longer removes the help comments from the proxy's config.yml.** The proxy now changes only the edited values and keeps the rest of the file as written.
+- **The "Proxy Config Mismatch" warning only lists settings that really differ from the proxy.** It used to compare with the defaults, so it came back on every server even after **Apply to Proxy**.
+
 ## [1.2.1.1] - 2026-11-25
 
 **Priority:** critical
