@@ -19,7 +19,7 @@ import java.util.*;
 public class ConfigManager {
     private final Vanishpp plugin;
     private FileConfiguration config;
-    private final int LATEST_CONFIG_VERSION = 9;
+    private final int LATEST_CONFIG_VERSION = 10;
     private final LanguageManager languageManager;
 
     private boolean migratedThisBoot = false;
@@ -57,6 +57,8 @@ public class ConfigManager {
     public boolean defaultSpectatorOnVanish;
 
     // Hooks & System
+    /** hooks.simple-voice-chat.enabled is "auto": admins get a one-time notice once Simple Voice Chat is found. */
+    public boolean voiceChatAuto;
     public boolean voiceChatEnabled, voiceChatVanishedHearOthers, layeredPermsEnabled, updateCheckerEnabled;
     public boolean updateCheckerShowBeta, updateCheckerShowAlpha;
     /** Lowest update priority that is announced in game and loudly in the console. */
@@ -254,7 +256,10 @@ public class ConfigManager {
         godMode = config.getBoolean("invisibility-features.god-mode", true);
         preventPotions = config.getBoolean("invisibility-features.prevent-potion-effects", false);
         invseeShiftClick = config.getBoolean("invisibility-features.invsee-shift-click", true);
-        voiceChatEnabled = config.getBoolean("hooks.simple-voice-chat.enabled", true);
+        // auto (default) and true both mean "on when Simple Voice Chat is installed"; only false turns it off.
+        Object voiceChat = config.get("hooks.simple-voice-chat.enabled", "auto");
+        voiceChatEnabled = !"false".equalsIgnoreCase(String.valueOf(voiceChat));
+        voiceChatAuto = "auto".equalsIgnoreCase(String.valueOf(voiceChat));
         voiceChatVanishedHearOthers = config.getBoolean("hooks.simple-voice-chat.vanished-can-hear-others", false);
         simulateEssentialsMessages = config.getBoolean("hooks.essentials.simulate-join-leave", false);
         layeredPermsEnabled = config.getBoolean("permissions.layered-permissions-enabled", true);
@@ -326,6 +331,20 @@ public class ConfigManager {
                 }
             }
         } catch (Exception ignored) {}
+        return result;
+    }
+
+    /**
+     * This server's settings that differ from what the proxy uses (the "Proxy Config Mismatch" warning and
+     * /vack apply_proxy). Compared with the proxy's real config, not with the defaults: a setting that was applied
+     * to the proxy, or that the proxy doesn't manage, is not a mismatch.
+     */
+    public Map<String, String> getProxyMismatches() {
+        ProxyConfigSnapshot proxy = plugin.getProxyConfigCache() == null ? null : plugin.getProxyConfigCache().get();
+        if (proxy == null) return getNonDefaultValues(); // the proxy's config hasn't arrived yet: compare with the defaults
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> e : getNonDefaultValues().entrySet())
+            if (!proxy.agreesWith(e.getKey(), config.get(e.getKey()))) result.put(e.getKey(), e.getValue());
         return result;
     }
 

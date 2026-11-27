@@ -72,13 +72,18 @@ public class VelocityConfigManager {
      */
     public synchronized void applyRuntimePatch(Map<String, String> entries) {
         Map<String, Object> updated = castMap(new Yaml().load(new Yaml().dump(rawConfig)));
+        Map<String, Object> parsed = new LinkedHashMap<>();
         for (Map.Entry<String, String> e : entries.entrySet()) {
+            parsed.put(e.getKey(), parseValue(e.getValue()));
             setDotted(updated, e.getKey(), parseValue(e.getValue()));
         }
+        Path file = dataDirectory.resolve("config.yml");
         Path temporary = dataDirectory.resolve("config.yml.tmp");
         try {
             Files.createDirectories(dataDirectory);
-            Files.writeString(temporary, new Yaml().dump(updated), java.nio.charset.StandardCharsets.UTF_8);
+            // Edit the file as written, so its help comments, order and quoting stay.
+            String current = Files.exists(file) ? Files.readString(file, java.nio.charset.StandardCharsets.UTF_8) : "";
+            Files.writeString(temporary, CommentedYaml.set(current, parsed), java.nio.charset.StandardCharsets.UTF_8);
             try {
                 Files.move(temporary, dataDirectory.resolve("config.yml"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException e) {
@@ -178,7 +183,7 @@ public class VelocityConfigManager {
         s.disableFlyOnUnvanish = bool("flight-control.unvanish-disable-fly", true);
 
         // Hooks
-        s.voiceChatEnabled = bool("hooks.simple-voice-chat.enabled", true);
+        s.voiceChatEnabled = !"false".equalsIgnoreCase(str("hooks.simple-voice-chat.enabled", "auto")); // auto|true|false
         s.voiceChatVanishedHearOthers = bool("hooks.simple-voice-chat.vanished-can-hear-others", false);
 
         // Permissions / Layered

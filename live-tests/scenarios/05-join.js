@@ -28,6 +28,20 @@ async function expectState(t, bot, observer, vanished, what) {
 
 module.exports = [
   {
+    // RFer: the voice chat hook is on by default, and every server without Simple Voice Chat warned about it and
+    // offered to turn it off. The hook only works when SVC is installed, so there is nothing to warn about.
+    name: 'join: staff get no setup warning about the voice chat hook on a server without Simple Voice Chat',
+    guard: true, // regression check, fails on 1.2.1.1; the warning code is removed, so there is no mutant to switch on
+    async run(t) {
+      let [s] = await t.bots(1);
+      await t.op(s);
+      s = await t.rejoin(s);
+      await t.wait(3000); // the join notices come in stages
+      const lines = s.chatLog.filter(m => /voice|simple-voice-chat/i.test(m));
+      t.check(lines.length === 0, `staff were warned about the voice chat hook: ${lines.join(' | ')}`);
+    },
+  },
+  {
     name: 'a vanished player who leaves rejoins vanished',
     async run(t) {
       let [v, o] = await t.bots(2);

@@ -377,7 +377,7 @@ public class PlayerListener implements Listener {
                     && player.hasPermission("vanishpp.admin")) {
                 String notifId = "proxy_config_v" + config.getLatestVersion();
                 if (!plugin.getPlayerData().acknowledged(player.getUniqueId(), notifId)) {
-                    java.util.Map<String, String> nonDefaults = config.getNonDefaultValues();
+                    java.util.Map<String, String> nonDefaults = config.getProxyMismatches();
                     if (!nonDefaults.isEmpty()) {
                         LanguageManager lm = config.getLanguageManager();
                         player.sendMessage(Component.text(" "));
@@ -423,6 +423,21 @@ public class PlayerListener implements Listener {
                         player.sendMessage(Component.text(" "));
                     }
                 }
+            }
+
+            // 5b. The voice chat hook is on "auto" and Simple Voice Chat is installed: say once what it does, with a
+            // way to turn it off. Shown once per admin and never again (no repeats, nothing to dismiss).
+            if (config.voiceChatAuto && player.hasPermission("vanishpp.config")
+                    && (Bukkit.getPluginManager().getPlugin("voicechat") != null || Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") != null)
+                    && !plugin.getPlayerData().acknowledged(player.getUniqueId(), "voice-chat-found")) {
+                plugin.acknowledge(player.getUniqueId(), "voice-chat-found");
+                LanguageManager lm = config.getLanguageManager();
+                player.sendMessage(plugin.getMessageManager().parse(lm.getMessage("warnings.voice-chat-found"), player)
+                        .append(Component.text(" "))
+                        .append(plugin.getMessageManager().parse(lm.getMessage("warnings.button-voice-chat-off"), player)
+                                .clickEvent(ClickEvent.runCommand("/vconfig hooks simple-voice-chat enabled false"))
+                                .hoverEvent(HoverEvent.showText(plugin.getMessageManager().parse(
+                                        lm.getMessage("warnings.button-voice-chat-off-hover"), player)))));
             }
 
             // 6. Setup / Config Sanity Warnings

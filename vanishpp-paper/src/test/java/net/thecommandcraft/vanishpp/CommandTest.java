@@ -409,13 +409,13 @@ class CommandTest {
         assertTrue(hooks.contains("simple-voice-chat") && hooks.contains("essentials"), "hooks: " + hooks);
         assertEquals(java.util.List.of("enabled", "vanished-can-hear-others"),
                 tab.apply(new String[]{"hooks", "simple-voice-chat", ""}));
-        assertEquals(java.util.List.of("true", "false"),
+        assertEquals(java.util.List.of("auto", "true", "false"),
                 tab.apply(new String[]{"hooks", "simple-voice-chat", "enabled", ""}));
         assertTrue(tab.apply(new String[]{"hooks", "simple-voice-chat", "enabled", "true", ""}).isEmpty(),
                 "nothing is suggested after the value");
         assertTrue(tab.apply(new String[]{"nope", ""}).isEmpty());
         // A dotted path in one argument still works, so existing buttons keep working.
-        assertEquals(java.util.List.of("true", "false"), tab.apply(new String[]{"hooks.simple-voice-chat.enabled", ""}));
+        assertEquals(java.util.List.of("auto", "true", "false"), tab.apply(new String[]{"hooks.simple-voice-chat.enabled", ""}));
     }
 
     @Test

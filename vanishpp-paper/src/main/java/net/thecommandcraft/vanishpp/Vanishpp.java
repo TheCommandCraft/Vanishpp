@@ -366,6 +366,8 @@ public class Vanishpp extends JavaPlugin implements Listener {
         }
 
         getLogger().info("Vanish++ " + getDescription().getVersion() + " enabled.");
+        // Plugins enabled after Vanish++ can still register /vanish; check once every plugin is enabled.
+        vanishScheduler.runGlobal(this::claimCommands);
     }
 
     /**
@@ -2001,6 +2003,49 @@ public class Vanishpp extends JavaPlugin implements Listener {
     public net.thecommandcraft.vanishpp.gui.RulesGUI getRulesGUI() { return rulesGUI; }
 
     public net.thecommandcraft.vanishpp.config.PlayerDataCache getPlayerData() { return playerData; }
+
+    /**
+     * Gives Vanish++ its command names back when another plugin registered them first (DeluxeHub, EssentialsX, CMI
+     * and others register /vanish). The other plugin keeps its namespaced command, e.g. /deluxehub:vanish.
+     */
+    void claimCommands() {
+        if (!isEnabled() || !configManager.getConfig().getBoolean("commands.take-over-conflicts", true)) return;
+        java.util.Map<String, org.bukkit.command.Command> known = Bukkit.getCommandMap().getKnownCommands();
+        java.util.Map<String, java.util.List<String>> taken = new java.util.TreeMap<>();
+        for (java.util.Map.Entry<String, java.util.Map<String, Object>> entry : getDescription().getCommands().entrySet()) {
+            org.bukkit.command.PluginCommand ours = getCommand(entry.getKey());
+            if (ours == null) continue;
+            // The aliases from plugin.yml: Bukkit drops an alias from the command when another plugin already has it.
+            java.util.List<String> labels = new java.util.ArrayList<>();
+            labels.add(ours.getName());
+            Object aliases = entry.getValue().get("aliases");
+            if (aliases instanceof java.util.List<?> list) list.forEach(a -> labels.add(String.valueOf(a)));
+            else if (aliases != null) labels.add(String.valueOf(aliases));
+            for (String label : labels) {
+                label = label.toLowerCase(java.util.Locale.ROOT);
+                org.bukkit.command.Command current = known.get(label);
+                if (current == null || current == ours) continue;
+                String owner = current instanceof org.bukkit.command.PluginIdentifiableCommand p ? p.getPlugin().getName() : null;
+                if (owner == null || owner.equals(getName())) continue; // only commands another plugin owns
+                known.put(label, ours);
+                if (!label.equals(ours.getName()) && !ours.getAliases().contains(label)) {
+                    java.util.List<String> active = new java.util.ArrayList<>(ours.getAliases());
+                    active.add(label);
+                    ours.setAliases(active); // so /help and tab completion list it again
+                }
+                taken.computeIfAbsent(owner, k -> new java.util.ArrayList<>()).add("/" + label);
+            }
+        }
+        if (taken.isEmpty()) return;
+        taken.forEach((owner, labels) -> getLogger().info("Took " + String.join(", ", labels) + " from " + owner
+                + " (still available as /" + owner.toLowerCase(java.util.Locale.ROOT) + ":<command>). Set commands.take-over-conflicts to false to leave them."));
+        try { // Paper rebuilds the command tree clients get from the command map
+            getServer().getClass().getMethod("syncCommands").invoke(getServer());
+        } catch (ReflectiveOperationException e) {
+            getLogger().fine("Could not resend commands: " + e);
+        }
+        for (Player p : Bukkit.getOnlinePlayers()) p.updateCommands();
+    }
 
     public VanishZoneManager getVanishZoneManager() {
         return vanishZoneManager;

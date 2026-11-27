@@ -79,7 +79,7 @@ public class StartupChecker {
     public List<Warning> run() {
         List<Warning> warnings = new ArrayList<>();
         checkProtocolLib(warnings);
-        checkVoiceChat(warnings);
+        // No voice chat check: the hook is on by default and simply does nothing until Simple Voice Chat is installed.
         checkEssentials(warnings);
         checkPapi(warnings);
         return warnings;
@@ -111,18 +111,6 @@ public class StartupChecker {
                 "ProtocolLib is NOT installed. Several advanced vanish features are disabled.",
                 "https://github.com/dmulloy2/ProtocolLib/releases/latest",
                 PROTOCOLLIB_FEATURES));
-    }
-
-    private void checkVoiceChat(List<Warning> warnings) {
-        // Plugin registers under "voicechat" (bukkit jar name), fallback to "SimpleVoiceChat"
-        if (plugin.getConfigManager().voiceChatEnabled
-                && Bukkit.getPluginManager().getPlugin("voicechat") == null
-                && Bukkit.getPluginManager().getPlugin("SimpleVoiceChat") == null) {
-            warnings.add(Warning.configFix(
-                    "hooks.simple-voice-chat.enabled is 'true' but SimpleVoiceChat is NOT installed. "
-                    + "Voice isolation will not work. Set the option to 'false' or install the plugin.",
-                    "hooks.simple-voice-chat.enabled", "false"));
-        }
     }
 
     private void checkEssentials(List<Warning> warnings) {

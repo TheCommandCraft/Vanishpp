@@ -199,6 +199,8 @@ public class VanishConfigCommand implements CommandExecutor, TabCompleter {
         Object current = cfg.get(target.path());
         if (current instanceof Boolean)
             return StringUtil.copyPartialMatches(typed, Arrays.asList("true", "false"), new ArrayList<>());
+        if (target.path().equals("hooks.simple-voice-chat.enabled"))
+            return StringUtil.copyPartialMatches(typed, Arrays.asList("auto", "true", "false"), new ArrayList<>());
         if (current != null)
             return StringUtil.copyPartialMatches(typed, List.of(current.toString()), new ArrayList<>());
         // Do NOT suggest --confirm in tab completion

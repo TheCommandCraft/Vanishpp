@@ -111,6 +111,9 @@ warnings:
 
 # --- [ 管理员通知 ] ---
   button-apply-proxy: "&a&l[应用到代理]"
+  voice-chat-found: "&6已检测到 Simple Voice Chat。&7隐身玩家的声音只有能看到他们的玩家才能听到。"
+  button-voice-chat-off: "&c&l[关闭]"
+  button-voice-chat-off-hover: "&7将 hooks.simple-voice-chat.enabled 设为 false\n&7(之后附近所有人都能听到隐身玩家)"
   button-apply-proxy-hover: "&7将全部 %count% 个更改的设置推送到代理配置\n&7并同步到所有连接的服务器"
   button-dismiss: "&7[忽略]"
   button-dismiss-hover: "&7不再显示此警告"

@@ -312,8 +312,29 @@ class MigrationTest {
         YamlConfiguration result = YamlConfiguration.loadConfiguration(configFile);
         assertFalse(result.contains("hooks.simple-voice-chat.isolate-vanished-players"), text);
         assertFalse(text.contains("Filter actual voice packets"), "the removed setting's comment goes too:\n" + text);
-        assertTrue(result.getBoolean("hooks.simple-voice-chat.enabled"));
+        assertEquals("auto", result.getString("hooks.simple-voice-chat.enabled"), "the old default true becomes auto");
         assertTrue(result.getBoolean("hooks.essentials.simulate-join-leave"), "other settings are kept");
         assertFalse(result.getBoolean("hooks.simple-voice-chat.vanished-can-hear-others", true), "new settings are still added");
+    }
+
+    // RFer: the voice chat hook said true on servers without Simple Voice Chat. Old configs move to auto once.
+    @Test
+    void configUpdaterMovesTheOldVoiceChatDefaultToAutoOnceAndKeepsChoices(@TempDir Path tempDir) throws IOException {
+        java.util.function.BiFunction<String, String, String> update = (version, value) -> {
+            try {
+                File file = tempDir.resolve("config-" + version + "-" + value + ".yml").toFile();
+                java.nio.file.Files.writeString(file.toPath(), String.join("\n",
+                        "config-version: " + version, "hooks:", "  simple-voice-chat:",
+                        "    # help", "    enabled: " + value, "  essentials:", "    enabled: true", ""));
+                new ConfigUpdater(plugin).update(file, "config.yml");
+                String text = java.nio.file.Files.readString(file.toPath());
+                assertTrue(text.contains("    # help") && text.contains("  essentials:\n    enabled: true"), "only that value changes:\n" + text);
+                return YamlConfiguration.loadConfiguration(file).getString("hooks.simple-voice-chat.enabled");
+            } catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+        };
+        assertAll(
+                () -> assertEquals("auto", update.apply("9", "true"), "the old default true becomes auto"),
+                () -> assertEquals("false", update.apply("9", "false"), "an admin's false stays"),
+                () -> assertEquals("true", update.apply("10", "true"), "a true chosen after the change stays"));
     }
 }

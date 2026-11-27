@@ -78,7 +78,7 @@ public class VanishAckCommand implements TabExecutor {
                     plugin.getMessageManager().sendMessage(p, lm.getMessage("config.proxy-not-connected"));
                     return true;
                 }
-                java.util.Map<String, String> nonDefaults = plugin.getConfigManager().getNonDefaultValues();
+                java.util.Map<String, String> nonDefaults = plugin.getConfigManager().getProxyMismatches();
                 if (nonDefaults.isEmpty()) {
                     plugin.getMessageManager().sendMessage(p, lm.getMessage("config.proxy-nothing-to-sync"));
                     return true;

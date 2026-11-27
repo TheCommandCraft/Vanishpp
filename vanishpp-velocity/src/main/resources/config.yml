@@ -89,7 +89,8 @@ default-rules:
 # --- [ HOOKS ] ---
 hooks:
   simple-voice-chat:
-    enabled: true
+    # auto: on whenever Simple Voice Chat is installed on a backend. false: off.
+    enabled: auto
     vanished-can-hear-others: false
   essentials:
     simulate-join-leave: false

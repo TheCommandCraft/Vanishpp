@@ -51,6 +51,20 @@ public class ConfigUpdater {
                 }
             }
 
+            // 1.2.2 (config 10): the voice chat hook's old default true becomes auto, which says what it does
+            // (on only when Simple Voice Chat is installed). A false someone chose stays.
+            if (resourceName.equals("config.yml") && currentYaml.getInt("config-version") < 10
+                    && Boolean.TRUE.equals(currentYaml.get(VOICE_CHAT))) {
+                int line = findLineForKey(VOICE_CHAT, outputLines);
+                if (line >= 0) {
+                    String text = outputLines.get(line);
+                    outputLines.set(line, text.substring(0, text.indexOf(':') + 1) + " auto");
+                    modified = true;
+                    currentYaml = loadFromLines(outputLines);
+                    plugin.getLogger().info("Set " + VOICE_CHAT + " to auto: on whenever Simple Voice Chat is installed.");
+                }
+            }
+
             int targetVersion = templateYaml.getInt("config-version");
             if (currentYaml.getInt("config-version") != targetVersion) {
                 modified = updateKeyLine("config-version", String.valueOf(targetVersion), outputLines) || modified;
@@ -139,6 +153,8 @@ public class ConfigUpdater {
     }
 
     /** Settings that earlier versions wrote and nothing reads anymore; they are removed so /vconfig stops offering them. */
+    private static final String VOICE_CHAT = "hooks.simple-voice-chat.enabled";
+
     private static final List<String> REMOVED_KEYS = List.of(
             "hooks.simple-voice-chat.isolate-vanished-players"); // 1.2.1: voice filtering is always on while the hook is enabled
 

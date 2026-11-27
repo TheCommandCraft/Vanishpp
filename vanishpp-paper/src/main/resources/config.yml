@@ -7,7 +7,7 @@
 # Language settings (zh-cn, en-us, etc.)
 language: en-us
 # Configuration Version (Internal use for migrations)
-config-version: 9
+config-version: 10
 
 # --- [ MESSAGES ] ---
 # Most messages (including GUI text) have been moved to messages.yml, which you can
@@ -192,8 +192,10 @@ default-rules:
 hooks:
   simple-voice-chat:
     # Only players who can see a vanished player hear them, in proximity chat and in groups.
-    # false turns the hook off. Turning it back on needs a restart.
-    enabled: true
+    # auto: on whenever Simple Voice Chat is installed, nothing happens without it.
+    # true: the same, but you chose it (no "Simple Voice Chat found" notice). false: off.
+    # Turning it back on needs a restart.
+    enabled: auto
     # Vanished players also hear visible players near them. Visible players still can't hear vanished ones.
     vanished-can-hear-others: false
   essentials:
@@ -315,6 +317,13 @@ update-checker:
   #   critical - only critical updates, for example a fix for a broken vanish
   # Lower priorities are still noted in the console with one line.
   notify-level: "feature"
+
+# --- [ COMMANDS ] ---
+commands:
+  # Hub and essentials plugins (DeluxeHub, EssentialsX, CMI) can register /vanish or /v before Vanish++.
+  # true: Vanish++ takes its command names back once every plugin has loaded and logs which plugin had them.
+  # The other plugin's command stays reachable as /<plugin>:<command>, e.g. /deluxehub:vanish.
+  take-over-conflicts: true
 
 # --- [ PERMISSIONS ] ---
 permissions:

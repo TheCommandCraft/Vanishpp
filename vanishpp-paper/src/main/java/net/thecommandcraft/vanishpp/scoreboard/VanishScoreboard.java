@@ -27,7 +27,14 @@ public class VanishScoreboard {
 
     private final Vanishpp plugin;
     private final Map<UUID, Scoreboard> boards = new ConcurrentHashMap<>();
-    private final Set<UUID> manuallyHidden = ConcurrentHashMap.newKeySet();
+    // A player's /vsb choice (true = off). Saved as an acknowledgement so it survives rejoins and, with SQL storage,
+    // follows the player across servers. Replaces the old vanishpp.scoreboard.bypass permission, which a "*"
+    // permission (LuckPerms) granted to every admin, so they never got the board automatically.
+    static final String OFF_ID = "scoreboard-off";
+    private final Map<UUID, Boolean> offChoice = new ConcurrentHashMap<>();
+    // The scoreboard each player had before the vanish board, given back when it closes. Hub plugins (DeluxeHub and
+    // others) set a per-player board once on join and never again, so falling back to the main board would lose it.
+    private final Map<UUID, Scoreboard> previousBoards = new ConcurrentHashMap<>();
 
     // Movement-triggered update state
     private final Map<UUID, Long> movementCooldowns = new ConcurrentHashMap<>();
@@ -49,26 +56,32 @@ public class VanishScoreboard {
         if (!plugin.getConfigManager().scoreboardEnabled) return;
         if (!plugin.getConfigManager().scoreboardAutoShow) return;
         if (!player.hasPermission("vanishpp.scoreboard")) return;
-        if (player.hasPermission("vanishpp.scoreboard.bypass")) return;
-        if (manuallyHidden.contains(player.getUniqueId())) return;
+        if (isTurnedOff(player.getUniqueId())) return;
         show(player);
     }
 
     public void onUnvanish(Player player) {
-        manuallyHidden.remove(player.getUniqueId());
         hide(player);
     }
 
     public boolean toggle(Player player) {
-        if (boards.containsKey(player.getUniqueId())) {
-            manuallyHidden.add(player.getUniqueId());
-            hide(player);
-            return false;
-        } else {
-            manuallyHidden.remove(player.getUniqueId());
-            show(player);
-            return true;
-        }
+        boolean off = boards.containsKey(player.getUniqueId());
+        rememberChoice(player.getUniqueId(), off);
+        if (off) hide(player); else show(player);
+        return !off;
+    }
+
+    private boolean isTurnedOff(UUID uuid) {
+        Boolean off = offChoice.get(uuid);
+        return off != null ? off : plugin.getPlayerData().acknowledged(uuid, OFF_ID);
+    }
+
+    private void rememberChoice(UUID uuid, boolean off) {
+        offChoice.put(uuid, off);
+        plugin.submitStorageWork(() -> {
+            if (off) plugin.getStorageProvider().addAcknowledgement(uuid, OFF_ID);
+            else plugin.getStorageProvider().removeAcknowledgement(uuid, OFF_ID);
+        });
     }
 
     public boolean isVisible(Player player) {
@@ -93,6 +106,8 @@ public class VanishScoreboard {
             team.addEntry(entry);
         }
 
+        Scoreboard current = player.getScoreboard();
+        if (current.getObjective("vanishpp") == null) previousBoards.put(player.getUniqueId(), current); // not ours (forceReshow)
         boards.put(player.getUniqueId(), sb);
         update(player, sb, obj);
         player.setScoreboard(sb);
@@ -108,24 +123,31 @@ public class VanishScoreboard {
     public void forceReshow(Player player) {
         if (!plugin.getConfigManager().scoreboardEnabled) return;
         if (!plugin.isVanished(player)) return;
-        if (manuallyHidden.contains(player.getUniqueId())) return;
+        if (isTurnedOff(player.getUniqueId())) return;
         if (!player.hasPermission("vanishpp.scoreboard")) return;
-        if (player.hasPermission("vanishpp.scoreboard.bypass")) return;
         boards.remove(player.getUniqueId());
         show(player);
     }
 
     public void hide(Player player) {
         if (!boards.containsKey(player.getUniqueId())) return;
-        boards.remove(player.getUniqueId());
+        Scoreboard ours = boards.remove(player.getUniqueId());
         movementCooldowns.remove(player.getUniqueId());
-        player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+        restorePrevious(player, ours);
         if (boards.isEmpty()) { cancelTimer.run(); taskEpoch++; timerRunning = false; }
     }
 
+    /** Gives the player the board they had before, unless something else replaced the vanish board meanwhile. */
+    private void restorePrevious(Player player, Scoreboard ours) {
+        Scoreboard previous = previousBoards.remove(player.getUniqueId());
+        if (ours != null && player.getScoreboard() != ours) return;
+        player.setScoreboard(previous != null ? previous : Bukkit.getScoreboardManager().getMainScoreboard());
+    }
+
     public void cleanup(UUID uuid) {
+        previousBoards.remove(uuid);
         boards.remove(uuid);
-        manuallyHidden.remove(uuid);
+        offChoice.remove(uuid); // stored; read again on the next join
         movementCooldowns.remove(uuid);
         if (boards.isEmpty()) { cancelTimer.run(); taskEpoch++; timerRunning = false; }
     }
@@ -179,11 +201,11 @@ public class VanishScoreboard {
         }
         for (UUID uuid : new ArrayList<>(boards.keySet())) {
             Player p = Bukkit.getPlayer(uuid);
-            if (p != null && p.isOnline())
-                p.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+            if (p != null && p.isOnline()) restorePrevious(p, boards.get(uuid));
         }
         boards.clear();
-        manuallyHidden.clear();
+        previousBoards.clear();
+        offChoice.clear();
         movementCooldowns.clear();
     }
 

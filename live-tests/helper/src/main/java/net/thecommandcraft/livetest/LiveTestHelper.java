@@ -64,6 +64,29 @@ public final class LiveTestHelper extends JavaPlugin {
                     + net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(p.playerListName()));
             return true;
         }
+        // ltprobe board <player>: gives the player their own scoreboard with a sidebar, like DeluxeHub or other
+        // hub plugins do (a per-player Bukkit scoreboard, set once on join).
+        if (args.length == 2 && args[0].equals("board")) {
+            Player p = Bukkit.getPlayerExact(args[1]);
+            if (p == null) { getLogger().info("LTPROBE board " + args[1] + " offline"); return true; }
+            org.bukkit.scoreboard.Scoreboard board = Bukkit.getScoreboardManager().getNewScoreboard();
+            org.bukkit.scoreboard.Objective objective = board.registerNewObjective("ltboard",
+                    org.bukkit.scoreboard.Criteria.DUMMY, net.kyori.adventure.text.Component.text("Hub board"));
+            objective.setDisplaySlot(org.bukkit.scoreboard.DisplaySlot.SIDEBAR);
+            objective.getScore("hub line").setScore(1);
+            p.setScoreboard(board);
+            getLogger().info("LTPROBE board " + p.getName() + " set");
+            return true;
+        }
+        // ltprobe perm <player> <node> <true|false>: sets a permission like a permissions plugin would.
+        if (args.length == 4 && args[0].equals("perm")) {
+            Player p = Bukkit.getPlayerExact(args[1]);
+            if (p == null) { getLogger().info("LTPROBE perm " + args[1] + " offline"); return true; }
+            p.addAttachment(this, args[2], Boolean.parseBoolean(args[3]));
+            p.recalculatePermissions();
+            getLogger().info("LTPROBE perm " + p.getName() + " " + args[2] + "=" + p.hasPermission(args[2]));
+            return true;
+        }
         // ltprobe unack <player> <id>: removes a stored Vanish++ acknowledgement so a test can be repeated.
         // Reaches into Vanish++ by reflection on purpose: this is test-only and never shipped.
         if (args.length == 3 && args[0].equals("unack")) {

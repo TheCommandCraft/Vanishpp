@@ -45,6 +45,7 @@ login-ratelimit = 0
       log.write(chunk);
       for (const l of chunk.toString().split('\n')) {
         lines.push(l);
+        velocityWaiters = velocityWaiters.filter(w => !(w.re.test(l) && (w.resolve(l), true)));
         if (verbose && l) console.log('[velocity]', l);
         if (/Done \(/.test(l)) { clearTimeout(t); resolve({ proc, lines, log }); }
       }
@@ -55,10 +56,22 @@ login-ratelimit = 0
   });
 }
 
+let velocityWaiters = [];
+/** Resolves with the first Velocity console line matching re that appears after this call. */
+function velocityLine(re, ms) {
+  return new Promise((resolve, reject) => {
+    const w = { re, resolve };
+    velocityWaiters.push(w);
+    setTimeout(() => { velocityWaiters = velocityWaiters.filter(x => x !== w); reject(new Error(`no Velocity line ${re}`)); }, ms);
+  });
+}
+
+const started = [];
 async function startBackend(name, port) {
   const dir = path.join(work, name);
   const server = new Server({ dir, java: opt('--java'), paperJar: opt('--paper'), plugins: [opt('--plugin')], port,
     log: verbose ? l => console.log(`[${name}]`, l) : null });
+  started.push(server); // stopped at the end even if the setup below fails
   fs.mkdirSync(path.join(dir, 'config'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'config', 'paper-global.yml'),
     `proxies:\n  velocity:\n    enabled: true\n    online-mode: false\n    secret: ${SECRET}\n`);
@@ -67,7 +80,10 @@ async function startBackend(name, port) {
   const configFile = path.join(dir, 'plugins', 'Vanishpp', 'config.yml');
   const config = fs.readFileSync(configFile, 'utf8')
     .replace(/^(proxy:[\s\S]*?\n  enabled:) false/m, '$1 true')
-    .replace(/^(proxy:[\s\S]*?\n  server-name:) ""/m, `$1 "${name}"`);
+    .replace(/^(proxy:[\s\S]*?\n  server-name:) ""/m, `$1 "${name}"`)
+    // RFer's setup: both backends turned the voice chat hook off, the proxy still has the default
+    .replace(/^(  simple-voice-chat:\n(?:    #.*\n)*    enabled:) (true|auto)/m, '$1 false');
+  if (!/^  simple-voice-chat:\n(?:    #.*\n)*    enabled: false/m.test(config)) throw new Error('could not turn off the voice chat hook in ' + configFile);
   if (!/^proxy:[\s\S]*?\n  enabled: true/m.test(config)) throw new Error('could not enable proxy mode in ' + configFile);
   await server.restart({ files: { 'plugins/Vanishpp/config.yml': config } });
   return server;
@@ -80,6 +96,8 @@ async function join(username) {
   bot.on('kicked', reason => { bot.kicked = typeof reason === 'string' ? reason : JSON.stringify(reason); });
   bot.on('error', () => {});
   bot.once('end', () => { bot.ended = true; });
+  bot.chatText = [];
+  bot.on('message', m => bot.chatText.push(m.toString()));
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${username} did not spawn`)), 30000);
     bot.once('spawn', () => { clearTimeout(t); resolve(); });
@@ -132,6 +150,9 @@ const tests = [
       await vanished;
       await switchTo(staff, 'pvp', pvp);
       await staysOnline(staff);
+      // RFer: arriving vanished on another backend showed no vanish scoreboard (auto-show-on-vanish is on)
+      await until(() => staff.scoreboard?.sidebar?.name === 'vanishpp', 5000,
+        `the vanish scoreboard after arriving vanished (shows ${staff.scoreboard?.sidebar?.name ?? 'none'})`);
       viewer = await join('LtViewer');
       await switchTo(viewer, 'pvp', pvp);
       await sleep(2000);
@@ -143,6 +164,46 @@ const tests = [
       await quit(staff);
       if (viewer) await quit(viewer);
     }
+  }],
+  // RFer: after "Apply to Proxy" on the lobby, the mismatch warning still came on the other server, which has the
+  // same setting. The warning must list only settings that differ from the proxy's.
+  ['the config mismatch warning lists only real differences and is gone everywhere after "Apply to Proxy"', async ({ lobby, pvp }) => {
+    lobby.cmd('op LtOwner'); pvp.cmd('op LtOwner');
+    const owner = await join('LtOwner');
+    const warned = () => owner.chatText.some(l => /Mismatch/i.test(l));
+    try {
+      await until(warned, 8000, 'control: the warning on the lobby (voice chat hook off here, on at the proxy)');
+      if (!owner.chatText.some(l => /simple-voice-chat\.enabled=false/.test(l))) throw new Error('control: the warning should list the voice chat setting');
+      if (owner.chatText.some(l => /proxy\.|server-name/.test(l))) throw new Error('the warning lists server-local proxy settings');
+      const applied = velocityLine(/CONFIG_SYNC from lobby/, 10000);
+      owner.chat('/vack apply_proxy');
+      await applied;
+      await sleep(1000);
+      owner.chatText.length = 0;
+      await switchTo(owner, 'pvp', pvp);
+      await sleep(6000);
+      if (warned()) throw new Error('pvp warned again, although its setting now matches the proxy: ' + owner.chatText.filter(l => /=/.test(l)).join(' | '));
+    } finally { await quit(owner); }
+  }],
+  // RFer: every config change made in game wiped the help comments from the config file.
+  ['changing a setting in game keeps the help comments in the proxy and backend config files', async ({ lobby }) => {
+    const files = { velocity: path.join(work, 'velocity', 'plugins', 'vanishpp-velocity', 'config.yml'), lobby: path.join(work, 'lobby', 'plugins', 'Vanishpp', 'config.yml') };
+    const comments = f => fs.readFileSync(f, 'utf8').split('\n').filter(l => /^\s*#/.test(l)).length;
+    const before = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, comments(f)]));
+    if (!(before.velocity > 10 && before.lobby > 10)) throw new Error(`control: both files start with help comments ${JSON.stringify(before)}`);
+    lobby.cmd('op LtAdmin');
+    const admin = await join('LtAdmin');
+    try {
+      await staysOnline(admin, 6000);
+      const applied = velocityLine(/CONFIG_SYNC from lobby/, 10000);
+      admin.chat('/vconfig scoreboard auto-show-on-vanish false');
+      await applied;
+      await sleep(1000);
+      const after = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, comments(f)]));
+      if (!/auto-show-on-vanish: false/.test(fs.readFileSync(files.velocity, 'utf8'))) throw new Error('control: the proxy did not save the change');
+      for (const k of Object.keys(files))
+        if (after[k] < before[k]) throw new Error(`${k} config.yml lost its comments: ${before[k]} before, ${after[k]} after`);
+    } finally { await quit(admin); }
   }],
 ];
 
@@ -169,7 +230,7 @@ const tests = [
     console.log(`  ERROR ${e.stack}`);
   } finally {
     if (velocity) velocity.proc.kill();
-    await Promise.all([lobby?.stop(), pvp?.stop()]);
+    await Promise.all(started.map(s => s.stop().catch(() => {})));
   }
   console.log(failed ? `${failed} proxy test(s) failed` : `all ${tests.length} proxy tests passed`);
   process.exit(failed ? 1 : 0);

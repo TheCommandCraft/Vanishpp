@@ -5,6 +5,7 @@
 #   add --mc <version> for another Paper version (versions.tsv), or --all-versions for every one in turn
 # Needs Java 21+ (JAVA=/path/to/java; JAVA25=... for Minecraft 26.x), Maven (MVN=/path/to/mvn) and Node 20+. Downloads are checksum-pinned.
 set -euo pipefail
+CALLER=$PWD # a jar path given on the command line is relative to where run.sh was called from
 cd "$(dirname "$0")"
 
 # Paper versions: see versions.tsv. --mc <version> picks one (default below), --all-versions runs them all in turn.
@@ -41,7 +42,7 @@ while [[ $# -gt 0 ]]; do
     --shard) pass+=(--shard "$2"); shift ;;
     --port) pass+=(--port "$2"); shift ;;
     --verbose) pass+=(--verbose) ;;
-    *) PLUGIN=$1 ;;
+    *) PLUGIN=$(cd "$CALLER" && realpath "$1") ;;
   esac
   shift
 done
@@ -85,6 +86,7 @@ HELPER=helper/target/vanishpp-livetest-helper-1.jar
 PAPER_HELPER=helper-paper/target/vanishpp-livetest-paper-plugin-1.jar
 build_helper helper "$HELPER"
 build_helper helper-paper "$PAPER_HELPER"
+build_helper helper-conflict helper-conflict/target/vanishpp-livetest-conflict-1.jar # only loaded by 15-command-conflict
 
 if $MUTANTS; then
   PLUGIN=$(node mutate.js --mvn "$MVN" | tail -1)

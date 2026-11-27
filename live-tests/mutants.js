@@ -15,9 +15,14 @@ const HELP = P + 'commands/VanishHelpCommand.java';
 const DECOR = P + 'decor/StaffDecorations.java';
 const DMODEL = P + 'decor/DecorationModel.java';
 const DNMS = P + 'decor/NmsPackets.java';
+const VSB = P + 'scoreboard/VanishScoreboard.java';
 const on = id => `net.thecommandcraft.vanishpp.LiveTestMutant.on("${id}")`;
 
 const mutants = [
+  { id: 'command-not-claimed', what: "another plugin's /vanish stays in charge", tests: ['command conflict: /vanish runs Vanish++'] },
+  { id: 'scoreboard-bypass-perm', what: 'the old opt-out permission (which "*" grants) stops the board again', tests: ['scoreboard: a player with every permission'] },
+  { id: 'scoreboard-forget-off', what: 'the /vsb off choice is forgotten', tests: ['scoreboard: turning it off'] },
+  { id: 'scoreboard-main-board', what: "closing the vanish scoreboard switches to the server's main board instead of the player's own", tests: ['scoreboard:'] },
   { id: 'everyone-sees', what: 'every player is allowed to see vanished players', tests: ['disappears from the world', 'does not see a vanished player'] },
   { id: 'staff-blind', what: 'staff can no longer see vanished players', tests: ['staff with vanishpp.see'] },
   { id: 'fake-messages', what: 'fake join/quit messages are never sent', tests: ['fake quit and fake join'] },
@@ -73,6 +78,13 @@ const mutants = [
 ];
 
 const edits = [
+  { file: MAIN, find: '                known.put(label, ours);', replace: `                if (!${on('command-not-claimed')}) known.put(label, ours);` },
+  { file: VSB, find: '        if (isTurnedOff(player.getUniqueId())) return;\n        show(player);',
+    replace: `        if (isTurnedOff(player.getUniqueId())) return;\n        if (${on('scoreboard-bypass-perm')} && player.hasPermission("vanishpp.scoreboard.bypass")) return;\n        show(player);` },
+  { file: VSB, find: '        return off != null ? off : plugin.getPlayerData().acknowledged(uuid, OFF_ID);',
+    replace: `        if (${on('scoreboard-forget-off')}) return false;\n        return off != null ? off : plugin.getPlayerData().acknowledged(uuid, OFF_ID);` },
+  { file: VSB, find: '        player.setScoreboard(previous != null ? previous : Bukkit.getScoreboardManager().getMainScoreboard());',
+    replace: `        player.setScoreboard(previous != null && !${on('scoreboard-main-board')} ? previous : Bukkit.getScoreboardManager().getMainScoreboard());` },
   { file: DECOR, find: '                        handler.model.seedTeam(team.getName(), nms.paramsOf(team), team.getEntries());',
     replace: `                        if (!${on('reload-forgets-teams')}) handler.model.seedTeam(team.getName(), nms.paramsOf(team), team.getEntries());` },
   { file: DECOR, find: '            h.send(h.model.clear());',

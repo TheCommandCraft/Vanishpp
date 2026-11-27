@@ -114,6 +114,16 @@ public class ProxyConfigSnapshot {
         return GSON.toJson(this);
     }
 
+    /**
+     * True if this snapshot already has {@code value} for the config key, or doesn't manage that key at all (it is
+     * then a server-local setting). Used to show only real differences between a backend and the proxy.
+     */
+    public boolean agreesWith(String key, Object value) {
+        ProxyConfigSnapshot copy = fromJson(toJson());
+        try { applyField(copy, key, value); } catch (RuntimeException e) { return false; }
+        return copy.toJson().equals(toJson());
+    }
+
     public static ProxyConfigSnapshot fromJson(String json) {
         return GSON.fromJson(json, ProxyConfigSnapshot.class);
     }
@@ -209,7 +219,7 @@ public class ProxyConfigSnapshot {
             case "messages.fake-quit"                               -> s.fakeQuitMessage = str(val);
             case "messages.staff-notify.enabled"                    -> s.staffNotifyEnabled = bool(val);
             // Hooks
-            case "hooks.simple-voice-chat.enabled"                  -> s.voiceChatEnabled = bool(val);
+            case "hooks.simple-voice-chat.enabled"                  -> s.voiceChatEnabled = !"false".equalsIgnoreCase(String.valueOf(val)); // auto|true|false
             case "hooks.simple-voice-chat.vanished-can-hear-others" -> s.voiceChatVanishedHearOthers = bool(val);
             case "hooks.essentials.simulate-join-leave"             -> s.simulateEssentialsMessages = bool(val);
             // Permissions

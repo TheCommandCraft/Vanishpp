@@ -1,0 +1,6 @@
+name: LiveTestConflict
+version: '1'
+main: net.thecommandcraft.livetest.conflict.LiveTestConflict
+api-version: '1.20.6'
+loadbefore: [Vanishpp]
+description: Test-only. Registers its own /vanish and /v before Vanish++ does, as hub and essentials plugins can.

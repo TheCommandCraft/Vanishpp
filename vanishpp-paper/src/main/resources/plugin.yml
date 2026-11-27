@@ -201,9 +201,6 @@ permissions:
   vanishpp.scoreboard:
     description: Allows using the vanish info scoreboard (/vsb).
     default: op
-  vanishpp.scoreboard.bypass:
-    description: Prevents auto-showing the scoreboard on vanish (for players with their own scoreboard plugin).
-    default: false
   vanishpp.history:
     description: Allows viewing the vanish audit log (/vhistory).
     default: op

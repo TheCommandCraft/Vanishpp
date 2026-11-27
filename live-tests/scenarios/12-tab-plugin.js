@@ -53,6 +53,36 @@ module.exports = [
     },
   },
   {
+    // RFer: with TAB as the scoreboard plugin, vanishing did not show the vanish scoreboard (/vsb did).
+    name: 'TAB plugin: with TAB\'s own sidebar on, vanishing shows the vanish board and unvanishing gives TAB\'s back',
+    guard: true, // integration check (it passed before the fix too); the board rules are mutation-tested in 14-scoreboard
+    async run(t) {
+      needsTab(t);
+      const file = require('path').join(t.server.dir, 'plugins', 'TAB', 'config.yml');
+      const config = fs.readFileSync(file, 'utf8');
+      const on = config.replace(/^(scoreboard:\r?\n  enabled:) false/m, '$1 true'); // TAB writes CRLF
+      t.check(on !== config, 'could not turn on TAB\'s scoreboard in ' + file);
+      fs.writeFileSync(file, on);
+      try {
+        await t.ask('tab reload', /reload/i, 15000);
+        const [v] = await t.bots(1);
+        await t.op(v);
+        const sidebar = () => v.scoreboard?.sidebar?.name ?? 'none';
+        await t.until(() => sidebar() !== 'none' && sidebar() !== 'vanishpp', 10000, `control: TAB's sidebar (shows ${sidebar()})`);
+        const tabBoard = sidebar();
+        await t.vanish(v);
+        await t.until(() => sidebar() === 'vanishpp', 5000, `the vanish scoreboard after vanishing (shows ${sidebar()})`);
+        await t.wait(4000); // TAB refreshes the player after the vanish (Vanish++ asks it to); the board must stay
+        t.check(sidebar() === 'vanishpp', `the vanish scoreboard must stay while vanished (shows ${sidebar()})`);
+        await t.vanish(v, false);
+        await t.until(() => sidebar() === tabBoard, 10000, `TAB's sidebar after unvanishing (shows ${sidebar()})`);
+      } finally {
+        fs.writeFileSync(file, config);
+        t.cmd('tab reload');
+      }
+    },
+  },
+  {
     name: 'TAB plugin: the server restarts without TAB',
     guard: true,
     timeout: 300000,

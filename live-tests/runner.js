@@ -348,7 +348,8 @@ async function main() {
       // Every test must be proven able to fail by at least one mutant (guard tests excepted).
       for (const test of SHARD === 1 ? all.filter(x => !x.guard) : []) { // checked once, in shard 1
         if (!require('./mutants').mutants.some(m => m.tests.some(x => label(test).includes(x))))
-          mutantResults.push({ m: { id: 'uncovered', what: label(test) }, verdict: 'UNCOVERED', detail: 'no mutant checks this test' });
+          mutantResults.push({ m: { id: 'uncovered', what: label(test) }, verdict: 'UNCOVERED', detail: 'no mutant checks this test' }),
+          console.log(`UNCOVERED ${label(test)}: no mutant checks this test (add one, or mark it guard)`);
       }
       const toggle = path.join(server.dir, 'livetest-mutant.txt');
       console.log(`\nMutants${SHARDS > 1 ? ` (shard ${SHARD}/${SHARDS}: ${mutants.length})` : ''}: each one breaks one feature; its tests must fail.`);
